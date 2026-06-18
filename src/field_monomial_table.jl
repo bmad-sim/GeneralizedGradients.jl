@@ -21,7 +21,7 @@ for n in 0:13
     end
 end
 
-@variable h  # h is taken to be constant (independent of s)
+@variables h  # h is taken to be constant (independent of s)
 
 avars = [eval(Symbol("a$n")) for n in 0:13]
 bvars = [eval(Symbol("b$n")) for n in 1:13]

@@ -186,7 +186,7 @@ end
 # Write out a markdown table
 # ---------------------------------------------------------------------------
 
-open(joinpath(@__DIR__, "..", "papers", "field_monomial_table_with_finite_h.jl"), "w") do io
+open(joinpath(@__DIR__, "..", "tables", "field_monomial_table_with_finite_h.jl"), "w") do io
     println(io, "# Extended Table 1: Taylor expansion of the magnetic field (constant h)")
     println(io, "")
     println(io, "# Coefficients of the monomials x^p y^q in B_x, B_y, B_s, for total")

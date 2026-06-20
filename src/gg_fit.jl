@@ -8,7 +8,7 @@
 # Usage:
 #   julia src/gg_fit.jl [input_file]
 # where input_file defaults to example/fit_params.jl.  The input file defines
-# the field grid `g`, the bending strength `h`, the transverse `origin`, and
+# the field grid `field`, the bending strength `h`, the transverse `origin`, and
 # the fit-control parameters `n_planes_add`, `core_weight`, `outer_plane_weight`
 # (see example/fit_params.jl for full documentation).
 #
@@ -17,7 +17,7 @@
 #
 # How the fit works
 # -----------------
-# The field expansion (papers/field_function_table.jl) is linear in the GG
+# The field expansion (tables/field_function_table.jl) is linear in the GG
 # functions and their s-derivatives:
 #
 #   B_c(x,y,z) = Σ_{(n,m)}  CS_c,b(n,m; x,y) · b(n,m)(z)
@@ -49,9 +49,9 @@ using JLD2, OffsetArrays, LinearAlgebra, Printf
 
 const INPUT_FILE = length(ARGS) >= 1 ? ARGS[1] :
                    joinpath(@__DIR__, "..", "example", "fit_params.jl")
-const TABLE_FILE = joinpath(@__DIR__, "..", "papers", "field_function_table.jl")
+const TABLE_FILE = joinpath(@__DIR__, "..", "tables", "field_function_table.jl")
 
-include(INPUT_FILE)   # defines: g, h, origin, n_planes_add, core_weight, outer_plane_weight
+include(INPUT_FILE)   # defines: field, h, origin, n_planes_add, core_weight, outer_plane_weight
 include(TABLE_FILE)   # defines: Bx_a By_a Bs_a  Bx_b By_b Bs_b  Bx_bs By_bs Bs_bs
 
 # ---------------------------------------------------------------------------
@@ -199,9 +199,9 @@ end
 # Run
 # ---------------------------------------------------------------------------
 
-pt = g["pt"]
-r0 = g["r0_grid"]
-dr = g["dr_grid"]
+pt = field["pt"]
+r0 = field["r0_grid"]
+dr = field["dr_grid"]
 
 a_dicts  = (Bx_a, By_a, Bs_a)
 b_dicts  = (Bx_b, By_b, Bs_b)

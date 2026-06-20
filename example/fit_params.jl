@@ -5,14 +5,14 @@ using OffsetArrays
 # Field grid
 
 # When the field grid is loaded, the following is defined:
-#   g["r0_grid"]           Grid origin 3-vector
-#   g["dr_grid"]           Grid spacing 3-vector
-#   g["pt"][ix, iy, iz]    Field Grid points [Bx, By, Bz]
-# A point g["pt"][ix, iy, iz] has a (x, y, z) position of r0_grid + dr_grid * [ix, iy, iz]
-# Note: It may be that g["pt"] is not indexed from 1.
+#   field["r0_grid"]           Grid origin 3-vector
+#   field["dr_grid"]           Grid spacing 3-vector
+#   field["pt"][ix, iy, iz]    Field Grid points [Bx, By, Bz]
+# A point field["pt"][ix, iy, iz] has a (x, y, z) position of r0_grid + dr_grid * [ix, iy, iz]
+# Note: It may be that field["pt"] is not indexed from 1.
 
 grid_file = joinpath(@__DIR__, "wsnk_fieldmap_reduced.jld2")
-g = load(grid_file)
+field = load(grid_file)
 
 #---------------------------------------------------------------------------------------------------
 # Other parameters

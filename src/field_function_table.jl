@@ -217,7 +217,7 @@ const MAX_H = MAXTOT + 2
 # Collect contributions and write output
 # ---------------------------------------------------------------------------
 
-outfile = joinpath(@__DIR__, "..", "papers", "field_function_table.jl")
+outfile = joinpath(@__DIR__, "..", "tables", "field_function_table.jl")
 open(outfile, "w") do io
     println(io, "# Inverse field coefficient table (full h dependence)")
     println(io, "#")

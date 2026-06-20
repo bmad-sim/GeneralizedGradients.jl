@@ -7,9 +7,9 @@ using OffsetArrays
 # When the field grid is loaded, the following is defined:
 #   g["r0_grid"]           Grid origin 3-vector
 #   g["dr_grid"]           Grid spacing 3-vector
-#   g["pt"]                [ix, iy, iz]  Grid points
+#   g["pt"][ix, iy, iz]    Field Grid points [Bx, By, Bz]
 # A point g["pt"][ix, iy, iz] has a (x, y, z) position of r0_grid + dr_grid * [ix, iy, iz]
-# Note: g["pt"] may not be indexed from 1.
+# Note: It may be that g["pt"] is not indexed from 1.
 
 grid_file = joinpath(@__DIR__, "wsnk_fieldmap_reduced.jld2")
 g = load(grid_file)

@@ -1,13 +1,22 @@
 using Symbolics
 
 # ---------------------------------------------------------------------------
-# Inverted form of field_monomial_table.jl:
-# For each function b(n,m) = d^m b_n/ds^m, a(n,m) = d^m a_n/ds^m,
-# bs(m) = d^{m+1} a_0/ds^{m+1}, output which monomials x^p*y^q it
-# contributes to in Bx, By, Bs at h=0.
+# Create a file field_gg_coef_table.jl 
+# Similar to field_taylor_coef_table.jl:
+# For each field component (Bx, By, Bs), and for each function a, b, bs and derivatives,
+# output a vector of coefficients that contribute.
 #
-# Output format: By_b[(n,m)] = [(coeff, p, q), ...]
-#   means  By += coeff * x^p * y^q * b(n,m)
+# Notation:
+#  b(n,m) = (d/ds)^m (b_n), a(n,m) = (d/ds)^m a_n, and bs(m) = (d/ds)^m bs
+#
+# Output: There are 9 Dicts labeled:
+#   Bx_a[(n,m)], Bx_b[(n,m)], Bx_bs[(n,m)], 
+#   By_a[(n,m)], By_b[(n,m)], By_bs[(n,m)],
+#   Bs_a[(n,m)], Bs_b[(n,m)], Bs_bs[(n,m)]
+#
+# Example: By_b[(n,m)] = [(coef, p, q, r), ...]
+# means contribution by b(n,m) is:
+#   By += coef * h^r * x^p * y^q * b(n,m)
 # ---------------------------------------------------------------------------
 
 const MAXTOT = parse(Int, get(ENV, "MAXTOT", "12"))
@@ -217,7 +226,7 @@ const MAX_H = MAXTOT + 2
 # Collect contributions and write output
 # ---------------------------------------------------------------------------
 
-outfile = joinpath(@__DIR__, "..", "tables", "field_function_table.jl")
+outfile = joinpath(@__DIR__, "..", "tables", "field_gg_coef_table.jl")
 open(outfile, "w") do io
     println(io, "# Inverse field coefficient table (full h dependence)")
     println(io, "#")

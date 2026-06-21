@@ -1,0 +1,9 @@
+## Data file: wsnk_fieldmap_reduced.jld2 Produced 
+
+Basic data file is ags-snakes/wsnk_fieldmap.jl.
+
+using JLD2, OffsetArrays
+include("ags-snakes/wsnk_fieldmap.jl")
+pt = OffsetArray(pt[:,:,0:11], 0, 0, -1)    # Truncate for test
+save("this_file.jld2", Dict("r0_grid" => r0_grid, "dr_grid" =>  dr_grid, "pt" => pt))
+

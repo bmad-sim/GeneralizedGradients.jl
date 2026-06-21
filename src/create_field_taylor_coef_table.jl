@@ -1,7 +1,7 @@
 using Symbolics
 
 # ---------------------------------------------------------------------------
-# Reproduces and extends Table 1 of TUPS09 (Van der Schueren et al., IPAC'24):
+# Reproduces and extends Table 1 of Van der Schueren et al., IPAC'24):
 # Taylor expansion coefficients of B_x, B_y, B_s in x and y, up to total
 # monomial degree MAXTOT, expressed in terms of a_n(s), b_n(s), b_s(s), h
 # and their s-derivatives.
@@ -186,7 +186,7 @@ end
 # Write out a markdown table
 # ---------------------------------------------------------------------------
 
-open(joinpath(@__DIR__, "..", "tables", "field_monomial_table_with_finite_h.jl"), "w") do io
+open(joinpath(@__DIR__, "..", "tables", "field_taylor_coef_table.jl"), "w") do io
     println(io, "# Extended Table 1: Taylor expansion of the magnetic field (constant h)")
     println(io, "")
     println(io, "# Coefficients of the monomials x^p y^q in B_x, B_y, B_s, for total")

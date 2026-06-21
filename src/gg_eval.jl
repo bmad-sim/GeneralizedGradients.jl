@@ -6,7 +6,7 @@
 # (x, y, s) -- at a chosen base plane and transverse position, given the
 # generalized-gradient (GG) coefficients produced by src/gg_fit.jl.
 #
-# Field expansion (tables/field_function_table.jl):
+# Field expansion (tables/field_gg_coef_table.jl):
 #   B_c(x,y,s) = Σ_{(n,m)} CS_c,a(n,m;x,y)·a(n,m)
 #              + Σ_{(n,m)} CS_c,b(n,m;x,y)·b(n,m)
 #              + Σ_{m}     CS_c,bs(m;x,y)·bs(m)
@@ -37,7 +37,7 @@
 
 using JLD2
 
-const _TABLE_FILE = joinpath(@__DIR__, "..", "tables", "field_function_table.jl")
+const _TABLE_FILE = joinpath(@__DIR__, "..", "tables", "field_gg_coef_table.jl")
 include(_TABLE_FILE)   # Bx_a By_a Bs_a  Bx_b By_b Bs_b  Bx_bs By_bs Bs_bs
 
 # Working size for the truncated (x,y) coefficient arrays.  The table is built

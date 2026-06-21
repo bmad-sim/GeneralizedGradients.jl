@@ -22,7 +22,7 @@ origin = [-0.001, 0.0]      # (x, y) origin about which the generalized gradient
 n_planes_add = 1            # Number of z-planes added.
 core_weight = 1             # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
 outer_plane_weight = 1      # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).
-
+output_file = "gg_fit_result.jld2"
 # Parameter Documentation
 
 """
@@ -50,6 +50,10 @@ merit function.
 Merit function weight for z-planes away from the base z-plane when n_planes_add
 is non-zero. See the "How the GG Calculation Works" section below for documentation on the optimizer
 merit function.
+
+  output_file
+
+Name of the output file.
 
 """
 

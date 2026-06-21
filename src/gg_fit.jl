@@ -1,55 +1,117 @@
 #!/usr/bin/env julia
-# ---------------------------------------------------------------------------
-# gg_fit.jl
-#
-# Fit a 3D magnetic field table to generalized-gradient (GG) coefficients
-# a_n(z), b_n(z), b_s(z) and their z-derivatives, plane by plane.
-#
-# Usage:
-#   julia src/gg_fit.jl [input_file]
-# where input_file defaults to example/fit_params.jl.  The input file defines
-# the field grid `field`, the bending strength `h`, the transverse `origin`, and
-# the fit-control parameters `n_planes_add`, `core_weight`, `outer_plane_weight`
-# (see example/fit_params.jl for full documentation).
-#
-# The z-axis and the s-axis (used in the TUPS09 field expansion) are identical;
-# z is just the field-map notation for s.
-#
-# How the fit works
-# -----------------
-# The field expansion (tables/field_function_table.jl) is linear in the GG
-# functions and their s-derivatives:
-#
-#   B_c(x,y,z) = Σ_{(n,m)}  CS_c,b(n,m; x,y) · b(n,m)(z)
-#              + Σ_{(n,m)}  CS_c,a(n,m; x,y) · a(n,m)(z)
-#              + Σ_{m}      CS_c,bs(m; x,y)  · bs(m)(z)
-#
-# for each field component c ∈ {Bx, By, Bs}, where
-#   CS_c,f(n,m; x,y) = Σ (coeff · h^k · x^p · y^q)
-# is the sum of the table entries c_f[(n,m)] = [(coeff,p,q,k), ...], and
-#   b(n,m) = dᵐb_n/dzᵐ,  a(n,m) = dᵐa_n/dzᵐ,  bs(m) = dᵐ⁺¹a_0/dzᵐ⁺¹.
-#
-# The unknowns at a base plane z0 are the function values and their derivatives
-# f(n,m)(z0), m = 0 … m_max.  The field on a neighbouring plane at offset
-# dz = z - z0 is obtained by Taylor-extrapolating each derivative:
-#   f(n,m)(z0+dz) = Σ_{j≥m} dz^(j-m)/(j-m)! · f(n,j)(z0).
-# Substituting makes the model linear in the base-plane unknowns f(n,j)(z0):
-#   design entry for unknown f(n,j) =
-#       Σ_{m=0}^{j} CS_c,f(n,m; x,y) · dz^(j-m)/(j-m)!.
-#
-# Each base plane is then solved by weighted linear least squares over all
-# field points lying within `n_planes_add` planes of the base plane.
-# ---------------------------------------------------------------------------
+
+"""
+    gg_fit.jl
+
+Fit a 3D magnetic field table to generalized-gradient (GG) coefficients
+a_n(z), b_n(z), b_s(z) and their z-derivatives, plane by plane.
+
+## Usage
+
+Run with command:
+  julia src/gg_fit.jl [parameter_input_file]
+The parameter input file defines the field grid `field`, the bending strength `h`, the transverse 
+`origin`, and the fit-control parameters `n_planes_add`, `core_weight`, `outer_plane_weight`. See below.
+
+Besides the input file, this function will open the file (relative to this directory)
+"../tables/field_gg_coef_table.jl" (this relative to this gg_fit.jl file) which contains 
+coefficients needed for the fit.
+
+## How the fit works
+
+The field expansion (tables/field_gg_coef_table.jl) is linear in the GG
+functions and their s-derivatives:
+
+  B_c(x,y,z) = Σ_{(n,m)}  CS_c,b(n,m; x,y) · b(n,m)(z)
+             + Σ_{(n,m)}  CS_c,a(n,m; x,y) · a(n,m)(z)
+             + Σ_{m}      CS_c,bs(m; x,y)  · bs(m)(z)
+
+for each field component c ∈ {Bx, By, Bs}, where
+  CS_c,f(n,m; x,y) = Σ (coeff · h^k · x^p · y^q)
+is the sum of the table entries c_f[(n,m)] = [(coeff,p,q,k), ...], and
+  b(n,m) = dᵐb_n/dzᵐ,  a(n,m) = dᵐa_n/dzᵐ,  bs(m) = dᵐ⁺¹a_0/dzᵐ⁺¹.
+
+The unknowns at a base plane z0 are the function values and their derivatives
+f(n,m)(z0), m = 0 … m_max.  The field on a neighbouring plane at offset
+dz = z - z0 is obtained by Taylor-extrapolating each derivative:
+  f(n,m)(z0+dz) = Σ_{j≥m} dz^(j-m)/(j-m)! · f(n,j)(z0).
+Substituting makes the model linear in the base-plane unknowns f(n,j)(z0):
+  design entry for unknown f(n,j) =
+      Σ_{m=0}^{j} CS_c,f(n,m; x,y) · dz^(j-m)/(j-m)!.
+
+Each base plane is then solved by weighted linear least squares over all
+field points lying within `n_planes_add` planes of the base plane.
+
+## Input parameter file
+
+The input parameter file defines a number of parameters. 
+Example parameter file is at "example/fit_params.jl".
+
+### Example input file
+
+using JLD2, OffsetArrays
+
+field = load("wsnk_field.jld2")     # Field table dict.
+h = 0                       # Bending strength
+origin = [-0.001, 0.0]      # (x, y) origin about which the generalized gradients coefs are computed
+n_planes_add = 1            # Number of z-planes added.
+core_weight = 1             # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
+outer_plane_weight = 1      # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).
+output_file = "gg_fit_result.jld2"
+
+### origin = [x0, y0]
+
+Defines the line [x0, y0, z] about which the generalized gradient coefficients are computed.
+If h is non-zero, origin must be [0, 0].
+
+### n_planes_add = Int
+
+This parameter sets the number of z-planes added to either side of the base z-plane to
+be used in the analysis of the derivatives at any given base z-plane (see "How the GG Calculation
+Works" section). For example, for n_planes_add = 2, two planes would be added to either side of the
+base plane making the total number of planes used in the analysis equal to five.
+
+### core_weight = Float
+
+Merit function weight for "core" points (field table points whose transverse (x,y)
+position is near (0,0)). Default is 1.0 which gives an equal weight for all points of a given
+z-plane. See the "How the GG Calculation Works" section below for documentation on the optimizer
+merit function.
+
+### outer_plane_weight = Float
+
+Merit function weight for z-planes away from the base z-plane when n_planes_add
+is non-zero. See the "How the GG Calculation Works" section below for documentation on the optimizer
+merit function.
+
+### output_file
+
+Name of the output file.
+
+### field
+
+Dict containing the field table and associated parameters.
+field must define the following:
+  field["r0_grid"]           Grid origin 3-vector
+  field["dr_grid"]           Grid spacing 3-vector
+  field["pt"][ix, iy, iz]    Field Grid points [Bx, By, Bz]
+A point field["pt"][ix, iy, iz] has a (x, y, z) position of r0_grid + dr_grid * [ix, iy, iz]
+Note: It may be that field["pt"] is not indexed from 1.
+
+Note: To construct a field file to be read in use following:
+  using JLD2, OffsetArrays
+  save("this_file.jld2", Dict("r0_grid" => r0_grid, "dr_grid" =>  dr_grid, "pt" => pt))
+This assumes that `r0_grid`, `dr_grid`, and `pt` have been set.
+""" gg_fit
 
 using JLD2, OffsetArrays, LinearAlgebra, Printf
 
-# ---------------------------------------------------------------------------
-# Load input parameters and the GG coefficient table
-# ---------------------------------------------------------------------------
+---------------------------------------------------------------------------
+Load input parameters and the GG coefficient table
+---------------------------------------------------------------------------
 
-const INPUT_FILE = length(ARGS) >= 1 ? ARGS[1] :
-                   joinpath(@__DIR__, "..", "example", "fit_params.jl")
-const TABLE_FILE = joinpath(@__DIR__, "..", "tables", "field_function_table.jl")
+const INPUT_FILE = ARGS[1]
+const TABLE_FILE = joinpath(@__DIR__, "..", "tables", "field_gg_coef_table.jl")
 
 include(INPUT_FILE)   # defines: field, h, origin, n_planes_add, core_weight, outer_plane_weight
 include(TABLE_FILE)   # defines: Bx_a By_a Bs_a  Bx_b By_b Bs_b  Bx_bs By_bs Bs_bs
@@ -246,7 +308,7 @@ end
 println("="^72)
 
 # ---- Save ----------------------------------------------------------------
-outfile = joinpath(dirname(INPUT_FILE), "gg_fit_result.jld2")
+outfile = joinpath(dirname(INPUT_FILE), output_file)
 jldsave(outfile;
         z_base    = result.z_base,
         a         = result.res_a,

@@ -91,7 +91,8 @@ Name of the output file.
 ### field
 
 Dict containing the field table and associated parameters.
-field must define the following:
+The (x, y, z) curvilinear coordinate system is used here.
+The field Dict must define the following:
   field["r0_grid"]           Grid origin 3-vector
   field["dr_grid"]           Grid spacing 3-vector
   field["pt"][ix, iy, iz]    Field Grid points [Bx, By, Bz]

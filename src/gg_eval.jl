@@ -6,43 +6,33 @@
 # (x, y, s) -- at a chosen base plane and transverse position, given the
 # generalized-gradient (GG) coefficients produced by src/gg_fit.jl.
 #
-# Field expansion (tables/gg_coef_table.jl):
-#   B_c(x,y,s) = Σ_{(n,m)} CS_c,a(n,m;x,y)·a(n,m)
-#              + Σ_{(n,m)} CS_c,b(n,m;x,y)·b(n,m)
-#              + Σ_{m}     CS_c,bs(m;x,y)·bs(m)
+# Both the field and the vector potential are evaluated the same way: as the
+# monomial expansions whose coefficients are tabulated in tables/gg_coef_table.jl.
+#
+#   B_c(x,y,s) = Σ_{(n,m)} CS^B_c,a(n,m;x,y)·a(n,m)
+#              + Σ_{(n,m)} CS^B_c,b(n,m;x,y)·b(n,m)
+#              + Σ_{m}     CS^B_c,bs(m;x,y)·bs(m)
+#   A_c(x,y,s) = Σ_{(n,m)} CS^A_c,a(n,m;x,y)·a(n,m)
+#              + Σ_{(n,m)} CS^A_c,b(n,m;x,y)·b(n,m)
+#              + Σ_{m}     CS^A_c,bs(m;x,y)·bs(m)
+#
 # with a(n,m)=dᵐa_n/dsᵐ, b(n,m)=dᵐb_n/dsᵐ, bs(m)=dᵐ⁺¹a_0/dsᵐ⁺¹ = dᵐb_s/dsᵐ,
-# and CS_c,f = Σ (coeff·hᵏ·xᵖ·yᵠ) the sum of that function's table entries.
+# and CS_c,f = Σ (coeff·hᵏ·xᵖ·yᵠ) the sum of that function's table entries.  The
+# A tables (Ax_a, …, As_bs) are precomputed in tables/gg_coef_table.jl from the
+# α/β/γ construction of papers/vector-potential and satisfy B = ∇×A exactly.
 #
-# Vector potential (papers/vector_potential.tex).  The field is split linearly
-# into an a_n part (α), a b_n part (β), and a b_s part (γ); each gets its own
-# gauge and the results are summed:
-#
-#   α (gauge A_y=0):
-#     Ax = -Σ 1/(j+1) α_{s,i,j} xⁱ y^{j+1}
-#     As =  Σ 1/(j+1) α_{x,i,j} xⁱ y^{j+1}
-#   β (gauge A_y=0, + midplane-B_y term):
-#     Ax = -Σ 1/(j+1) β_{s,i,j} xⁱ y^{j+1}
-#     As =  Σ 1/(j+1) β_{x,i,j} xⁱ y^{j+1}
-#          - 1/(1+hx) Σ_i β_{y,i,0} ( x^{i+1}/(i+1) + h x^{i+2}/(i+2) )
-#   γ (gauge A_s=0):
-#     Ax =  (1+hx) Σ [∫ds γ_{y,i,j}] xⁱ yʲ
-#     Ay = -(1+hx) Σ [∫ds γ_{x,i,j}] xⁱ yʲ
-#
-# where α_{c,i,j}, β_{c,i,j}, γ_{c,i,j} are the a/b/bs parts of the field
-# coefficient of xⁱ yʲ in B_c at the plane, and ∫ds γ lowers the b_s derivative
-# order by one ( ∫ds bs(m) = bs(m-1) ).  s-derivatives of A are obtained by
-# bumping the GG derivative order (a(n,m)→a(n,m+1), etc.) and, for the γ piece,
-# by ∂_s∫ds γ = γ.
+# Because A is linear in the GG functions, its (x,y) derivatives are the
+# monomial partials and its s-derivative is obtained by bumping the GG
+# derivative order ( ∂_s a(n,m) = a(n,m+1), etc. ) — exactly as for the field.
 # ---------------------------------------------------------------------------
 
 using JLD2
 
 const _TABLE_FILE = joinpath(@__DIR__, "..", "tables", "gg_coef_table.jl")
-include(_TABLE_FILE)   # Bx_a By_a Bs_a  Bx_b By_b Bs_b  Bx_bs By_bs Bs_bs
+include(_TABLE_FILE)   # Bx_a … Bs_bs (field) and Ax_a … As_bs (vector potential)
 
 # Working size for the truncated (x,y) coefficient arrays.  The table is built
-# to total monomial degree MAXTOT (12); the A construction shifts powers by at
-# most +2, so a little headroom is enough.
+# to total monomial degree MAXTOT (12), so 20 leaves ample headroom.
 const _NMAX = 20
 
 _newK() = zeros(Float64, _NMAX, _NMAX)
@@ -75,28 +65,12 @@ function _accum(tdict, valfun, h)
     return K
 end
 
-# y-integration:  Σ K_{i,q} xⁱ yᵠ  ->  Σ K_{i,q}/(q+1) xⁱ y^{q+1}
-function _yint(K)
-    Y = _newK()
-    for i in 1:_NMAX, j in 1:_NMAX-1
-        K[i, j] == 0.0 && continue
-        Y[i, j+1] += K[i, j] / j        # j == q+1
-    end
-    return Y
-end
-
-# midplane x-antiderivative used by the β A_s term, acting on the j=0 column:
-#   Σ_i K_{i,0} ( x^{i+1}/(i+1) + h x^{i+2}/(i+2) )
-function _midpoly(K, h)
-    P = _newK()
-    for i in 1:_NMAX
-        c = K[i, 1]                      # β_{y,i-1,0}
-        c == 0.0 && continue
-        ip = i - 1
-        ip + 1 <= _NMAX - 1 && (P[ip+2, 1] += c / (ip + 1))
-        ip + 2 <= _NMAX - 1 && (P[ip+3, 1] += h * c / (ip + 2))
-    end
-    return P
+# Combined coefficient array of a component: sum of its a, b and bs parts.
+# `Ta`/`Tb` are keyed by (n,m) and `Tbs` by m.
+function _comp_array(Ta, Tb, Tbs, aval, bval, bsval, h)
+    return _accum(Ta, k -> aval(k...), h) .+
+           _accum(Tb, k -> bval(k...), h) .+
+           _accum(Tbs, m -> bsval(m), h)
 end
 
 # Value and (x,y) partials of the plain polynomial Σ K_{i,j} xⁱ yʲ.
@@ -111,25 +85,6 @@ function _polyval(K, x, y)
         j > 0 && (dvy += c * j * xi * y^(j-1))
     end
     return val, dvx, dvy
-end
-
-# Evaluate a sum of terms, each tagged with its (1+hx) prefactor:
-#   :plain -> P,   :mul -> (1+hx)·P,   :div -> P/(1+hx).
-# Returns (value, ∂/∂x, ∂/∂y).
-function _eval_terms(terms, x, y, h)
-    val = 0.0; vx = 0.0; vy = 0.0
-    g = 1 + h * x
-    for (gtype, K) in terms
-        p, px, py = _polyval(K, x, y)
-        if gtype === :plain
-            val += p;        vx += px;                vy += py
-        elseif gtype === :mul
-            val += g * p;    vx += h * p + g * px;    vy += g * py
-        else # :div
-            val += p / g;    vx += (px * g - p * h) / g^2; vy += py / g
-        end
-    end
-    return val, vx, vy
 end
 
 # ---------------------------------------------------------------------------
@@ -159,44 +114,25 @@ function gg_evaluate(res, ip::Integer, x::Real, y::Real)
     bval(n, m)  = (m >= 0 && haskey(res.b, (n, m)))  ? res.b[(n, m)][ip]  : 0.0
     bsval(m)    = (m >= 0 && haskey(res.bs, m))      ? res.bs[m][ip]      : 0.0
 
-    # --- field coefficient arrays, split into α (a), β (b), γ (bs) parts ---
-    ax = _accum(Bx_a, k -> aval(k...), h); ay = _accum(By_a, k -> aval(k...), h); as = _accum(Bs_a, k -> aval(k...), h)
-    bx = _accum(Bx_b, k -> bval(k...), h); by = _accum(By_b, k -> bval(k...), h); bs = _accum(Bs_b, k -> bval(k...), h)
-    gx = _accum(Bx_bs, m -> bsval(m), h);  gy = _accum(By_bs, m -> bsval(m), h);  gs = _accum(Bs_bs, m -> bsval(m), h)
-
-    # s-derivatives of the α and β parts (bump derivative order).
-    dax = _accum(Bx_a, k -> aval(k[1], k[2]+1), h); das = _accum(Bs_a, k -> aval(k[1], k[2]+1), h)
-    dbx = _accum(Bx_b, k -> bval(k[1], k[2]+1), h); dbs = _accum(Bs_b, k -> bval(k[1], k[2]+1), h)
-    dby = _accum(By_b, k -> bval(k[1], k[2]+1), h)
-
-    # γ s-integrals:  ∫ds bs(m) = bs(m-1).
-    igx = _accum(Bx_bs, m -> bsval(m-1), h)
-    igy = _accum(By_bs, m -> bsval(m-1), h)
+    # Bumped (s-derivative) getters:  ∂_s a(n,m) = a(n,m+1), etc.
+    avalp(n, m) = aval(n, m + 1)
+    bvalp(n, m) = bval(n, m + 1)
+    bsvalp(m)   = bsval(m + 1)
 
     # --- field ---
-    Bx = _polyval(ax .+ bx .+ gx, x, y)[1]
-    By = _polyval(ay .+ by .+ gy, x, y)[1]
-    Bs = _polyval(as .+ bs .+ gs, x, y)[1]
+    Bx = _polyval(_comp_array(Bx_a, Bx_b, Bx_bs, aval, bval, bsval, h), x, y)[1]
+    By = _polyval(_comp_array(By_a, By_b, By_bs, aval, bval, bsval, h), x, y)[1]
+    Bs = _polyval(_comp_array(Bs_a, Bs_b, Bs_bs, aval, bval, bsval, h), x, y)[1]
 
-    # --- vector potential terms ---
-    # A_x = -[int_y (α_s+β_s)]        + (1+hx)·int_s γ_y
-    Ax_terms  = [(:plain, .-_yint(as .+ bs)), (:mul, igy)]
-    # A_y =                              -(1+hx)·int_s γ_x
-    Ay_terms  = [(:mul, .-igx)]
-    # A_s =  [int_y (α_x+β_x)]        - (1/(1+hx))·midpoly(β_y)
-    As_terms  = [(:plain,  _yint(ax .+ bx)), (:div, .-_midpoly(by, h))]
+    # --- vector potential: value and (x,y) partials straight from the tables ---
+    Axv, Axx, Axy = _polyval(_comp_array(Ax_a, Ax_b, Ax_bs, aval, bval, bsval, h), x, y)
+    Ayv, Ayx, Ayy = _polyval(_comp_array(Ay_a, Ay_b, Ay_bs, aval, bval, bsval, h), x, y)
+    Asv, Asx, Asy = _polyval(_comp_array(As_a, As_b, As_bs, aval, bval, bsval, h), x, y)
 
-    # ∂_s of each (bumped orders; ∂_s ∫ds γ = γ)
-    dAx_terms = [(:plain, .-_yint(das .+ dbs)), (:mul, gy)]
-    dAy_terms = [(:mul, .-gx)]
-    dAs_terms = [(:plain,  _yint(dax .+ dbx)), (:div, .-_midpoly(dby, h))]
-
-    Axv, Axx, Axy = _eval_terms(Ax_terms, x, y, h)
-    Ayv, Ayx, Ayy = _eval_terms(Ay_terms, x, y, h)
-    Asv, Asx, Asy = _eval_terms(As_terms, x, y, h)
-    dAxv = _eval_terms(dAx_terms, x, y, h)[1]
-    dAyv = _eval_terms(dAy_terms, x, y, h)[1]
-    dAsv = _eval_terms(dAs_terms, x, y, h)[1]
+    # ∂A/∂s: same tables evaluated with bumped GG derivative orders.
+    dAxv = _polyval(_comp_array(Ax_a, Ax_b, Ax_bs, avalp, bvalp, bsvalp, h), x, y)[1]
+    dAyv = _polyval(_comp_array(Ay_a, Ay_b, Ay_bs, avalp, bvalp, bsvalp, h), x, y)[1]
+    dAsv = _polyval(_comp_array(As_a, As_b, As_bs, avalp, bvalp, bsvalp, h), x, y)[1]
 
     B  = [Bx, By, Bs]
     A  = [Axv, Ayv, Asv]

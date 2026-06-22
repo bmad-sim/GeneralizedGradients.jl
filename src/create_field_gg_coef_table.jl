@@ -2,7 +2,7 @@ using Symbolics
 
 # ---------------------------------------------------------------------------
 # Create a file field_gg_coef_table.jl 
-# Similar to field_taylor_coef_table.jl:
+# Similar to field_monomial_functions.jl:
 # For each field component (Bx, By, Bs), and for each function a, b, bs and derivatives,
 # output a vector of coefficients that contribute.
 #

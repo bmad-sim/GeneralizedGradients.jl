@@ -1,0 +1,8 @@
+* Coefficient tables
+
+The table tables/field_gg_coef_table.jl is created from src/create_field_gg_coef_table.jl
+The table tables/field_monomial_functions.jl is created from src/field_monomial_functions.jl
+
+These tables are used by various programs. These tables do not have to be recreated unless
+you want to extend the derivative range. Currently derivatives up to order 12 are tabulated.
+

@@ -145,57 +145,188 @@ end
 # ---------------------------------------------------------------------------
 # Evaluate at an arbitrary (x, y, s) point.
 #
-# The GG coefficients are stored only at the grid planes res.z_base.  For an
-# s that falls between planes, each stored quantity a(n,m), b(n,m), bs(m) is
-# interpolated as a function of s with a Lagrange polynomial through the
-# `order+1` grid planes straddling s (a symmetric stencil "to either side",
-# shifted inward near the ends of the table).  The interpolated values define
-# a single virtual plane at s, which is then handed to gg_evaluate.
+# The GG coefficients are stored only at the grid planes res.z_base, but the
+# fit gives, at each plane, the whole derivative tower of every GG function:
+# a(n,0..N), b(n,0..N), bs(0..N) with a(n,m)=dᵐaₙ/dsᵐ and N the maximum order.
+# So for an s between two planes z_L, z_R we have, for each function f, the
+# value and its first N s-derivatives at both ends — 2(N+1) data — which fix a
+# unique two-point Hermite polynomial H(s) of degree 2N+1.  Each interpolated
+# derivative is taken from the SAME polynomial, a(n,m)(s) = H_aₙ⁽ᵐ⁾(s), so the
+# tower stays self-consistent: the interpolated a(n,1) is exactly d/ds of the
+# interpolated a(n,0), etc.
 #
-# Because ∂A/∂s is still formed from the field-expansion derivative structure
-# (a(n,m) → a(n,m+1)) of the interpolated coefficients, the curl identity
-# B = ∇×A continues to hold exactly at the interpolated point.
+# This is more accurate than independent per-order interpolation (error
+# O(h^{2N+2}) for the base coefficient, using only the two straddling planes)
+# and, because the orders are mutually consistent, the ∂A/∂s that gg_evaluate
+# forms by bumping a(n,m)→a(n,m+1) equals the true s-derivative of the
+# interpolated field.  The curl identity B = ∇×A holds at s as before.
 #
 #   res    : NamedTuple from gg_load_result (or gg_fit.jl's `result`)
 #   x, y   : absolute transverse coordinates (res.origin subtracted internally)
 #   s      : absolute longitudinal coordinate
-#   order  : interpolation polynomial degree (default 3 = cubic, 2 planes each
-#            side).  Reduced automatically when fewer planes are available.
 #
 # Returns (B, A, dA) exactly as gg_evaluate.
 # ---------------------------------------------------------------------------
-# Interpolate every stored GG quantity onto a single virtual plane at s,
-# using a Lagrange polynomial of the given order through the grid planes
-# straddling s (symmetric stencil, shifted inward near the table ends).
-function _interp_res(res, s::Real, order::Integer)
-    z = res.z_base
-    P = length(z)
-    npts = clamp(order + 1, 1, P)
 
-    i0    = searchsortedlast(z, s)                       # z[i0] <= s < z[i0+1]
-    start = clamp(i0 - (npts ÷ 2) + 1, 1, P - npts + 1)
-    idx   = start:(start + npts - 1)
-    nodes = @view z[idx]
+# Float factorial (orders are small but keep it overflow-proof).
+_fct(k::Integer) = (f = 1.0; for i in 2:k; f *= i; end; f)
 
-    L = ones(Float64, npts)                              # Lagrange weights at s
-    for k in 1:npts, j in 1:npts
-        j == k && continue
-        L[k] *= (s - nodes[j]) / (nodes[k] - nodes[j])
+# Single-point Taylor tower: from f and its derivatives at z0, return
+# [P⁽ᵐ⁾(sq) for m=0..N] with P the Taylor series, i.e. f extrapolated to sq.
+function _taylor_derivs(z0, f0, sq)
+    N = length(f0) - 1
+    u = sq - z0
+    out = zeros(Float64, N + 1)
+    for m in 0:N
+        acc = 0.0
+        for j in m:N
+            acc += f0[j+1] * u^(j-m) / _fct(j-m)
+        end
+        out[m+1] = acc
     end
-    interp(vec) = sum(L[k] * vec[idx[k]] for k in 1:npts)
+    return out
+end
 
-    a2  = Dict(key => [interp(v)] for (key, v) in res.a)
-    b2  = Dict(key => [interp(v)] for (key, v) in res.b)
-    bs2 = Dict(key => [interp(v)] for (key, v) in res.bs)
+# Two-point Hermite tower: fL[j+1]=f⁽ʲ⁾(zL), fR[j+1]=f⁽ʲ⁾(zR), j=0..N.  Returns
+# [H⁽ᵐ⁾(sq) for m=0..N] where H is the degree-(2N+1) Hermite interpolant.
+# Built via confluent Newton divided differences in the local coordinate
+# u = s - zL (nodes: 0 with multiplicity N+1, hstep with multiplicity N+1).
+function _hermite_derivs(zL, zR, fL, fR, sq)
+    N = length(fL) - 1
+    K = 2N + 1                       # polynomial degree = (#nodes) - 1
+    hstep = zR - zL
+    fval(i, j) = (i <= N ? fL : fR)[j+1]    # j-th derivative at node i's plane
+    isR(i) = i > N                          # node i (0-based) in the R block?
 
-    return (; z_base = [float(s)], a = a2, b = b2, bs = bs2,
+    memo = Dict{Tuple{Int,Int},Float64}()
+    function dd(i, k)                # divided difference f[t_i, …, t_{i+k}]
+        haskey(memo, (i, k)) && return memo[(i, k)]
+        v = isR(i) == isR(i + k) ? fval(i, k) / _fct(k) :       # one block: f⁽ᵏ⁾/k!
+            (dd(i + 1, k - 1) - dd(i, k - 1)) / hstep           # spans both blocks
+        memo[(i, k)] = v
+        return v
+    end
+
+    c = [dd(0, k) for k in 0:K]                 # Newton coefficients
+    tnode(i) = i <= N ? 0.0 : hstep             # node positions in u
+
+    # Accumulate the Newton form into monomial coefficients in u.
+    poly  = zeros(Float64, K + 1)               # poly[d+1] = coeff of u^d
+    basis = [1.0]                               # current ∏ (u - t_j)
+    for k in 0:K
+        @inbounds for d in 1:length(basis)
+            poly[d] += c[k+1] * basis[d]
+        end
+        if k < K                                # multiply basis by (u - t_k)
+            tk = tnode(k)
+            nb = zeros(Float64, length(basis) + 1)
+            @inbounds for d in 1:length(basis)
+                nb[d+1] += basis[d]
+                nb[d]   -= tk * basis[d]
+            end
+            basis = nb
+        end
+    end
+
+    # Evaluate H and its derivatives at uq.
+    uq = sq - zL
+    out = zeros(Float64, N + 1)
+    for m in 0:N
+        acc = 0.0
+        for d in m:K
+            ff = 1.0                            # falling factorial d·(d-1)···(d-m+1)
+            for r in 0:m-1
+                ff *= (d - r)
+            end
+            acc += poly[d+1] * ff * uq^(d-m)
+        end
+        out[m+1] = acc
+    end
+    return out
+end
+
+# Interpolate one GG function's tower onto sq (Hermite, or Taylor if single).
+_interp_tower(fL, fR, zL, zR, sq, single) =
+    single ? _taylor_derivs(zL, fL, sq) : _hermite_derivs(zL, zR, fL, fR, sq)
+
+# Largest N such that orders 0,1,…,N are all present in `orders` (sorted).
+function _contiguous_order(orders)
+    N = -1
+    for (idx, m) in enumerate(orders)
+        m == idx - 1 ? (N = m) : break
+    end
+    return N
+end
+
+# Interpolate an (n,m)-keyed dict (a, b): build one Hermite per multipole n.
+function _interp_nm_dict(d, iL, iR, zL, zR, sq, single)
+    out = Dict{Tuple{Int,Int},Vector{Float64}}()
+    byn = Dict{Int,Vector{Int}}()
+    for (n, m) in keys(d)
+        push!(get!(byn, n, Int[]), m)
+    end
+    for (n, ms) in byn
+        sort!(ms)
+        N  = _contiguous_order(ms)
+        fL = [d[(n, j)][iL] for j in 0:N]
+        fR = [d[(n, j)][iR] for j in 0:N]
+        vals = _interp_tower(fL, fR, zL, zR, sq, single)
+        for j in 0:N
+            out[(n, j)] = [vals[j+1]]
+        end
+        for m in ms                              # any non-contiguous order: nearest plane
+            m > N && (out[(n, m)] = [d[(n, m)][iL]])
+        end
+    end
+    return out
+end
+
+# Interpolate an m-keyed dict (bs): a single Hermite tower.
+function _interp_m_dict(d, iL, iR, zL, zR, sq, single)
+    out = Dict{Int,Vector{Float64}}()
+    ms  = sort(collect(keys(d)))
+    N   = _contiguous_order(ms)
+    fL  = [d[j][iL] for j in 0:N]
+    fR  = [d[j][iR] for j in 0:N]
+    vals = _interp_tower(fL, fR, zL, zR, sq, single)
+    for j in 0:N
+        out[j] = [vals[j+1]]
+    end
+    for m in ms
+        m > N && (out[m] = [d[m][iL]])
+    end
+    return out
+end
+
+# Build a single virtual plane at s by Hermite-interpolating every GG tower
+# from the two straddling grid planes (one-plane Taylor if only one plane).
+function _interp_res(res, s::Real)
+    z  = res.z_base
+    P  = length(z)
+    sq = float(s)
+
+    if P == 1
+        iL = iR = 1
+    else
+        i0 = searchsortedlast(z, sq)             # z[i0] <= s < z[i0+1]
+        iL = clamp(i0, 1, P - 1)                 # straddling pair (extrapolates at ends)
+        iR = iL + 1
+    end
+    single = iL == iR
+    zL = z[iL]; zR = z[iR]
+
+    a2  = _interp_nm_dict(res.a,  iL, iR, zL, zR, sq, single)
+    b2  = _interp_nm_dict(res.b,  iL, iR, zL, zR, sq, single)
+    bs2 = _interp_m_dict(res.bs, iL, iR, zL, zR, sq, single)
+
+    return (; z_base = [sq], a = a2, b = b2, bs = bs2,
               h = res.h, origin = res.origin,
               r0_grid = res.r0_grid, dz_grid = res.dz_grid,
               m_max = res.m_max, rms_plane = [NaN])
 end
 
-function gg_evaluate_at(res, x::Real, y::Real, s::Real; order::Integer=3)
-    return gg_evaluate(_interp_res(res, s, order), 1, x, y)
+function gg_evaluate_at(res, x::Real, y::Real, s::Real)
+    return gg_evaluate(_interp_res(res, s), 1, x, y)
 end
 
 # ---------------------------------------------------------------------------
@@ -239,9 +370,9 @@ function gg_coefficients(res, ip::Integer)
 end
 
 # ---------------------------------------------------------------------------
-# C coefficients at an arbitrary s, via the same Lagrange interpolation of the
+# C coefficients at an arbitrary s, via the same Hermite interpolation of the
 # GG quantities used by gg_evaluate_at.  Returns (Cx, Cy, Cs) as above.
 # ---------------------------------------------------------------------------
-function gg_coefficients_at(res, s::Real; order::Integer=3)
-    return _trim3(_field_C(_interp_res(res, s, order), 1)...)
+function gg_coefficients_at(res, s::Real)
+    return _trim3(_field_C(_interp_res(res, s), 1)...)
 end

@@ -18,7 +18,7 @@ field = load(grid_file)
 # Other parameters
 
 h = 0                       # Bending strength
-origin = [-0.001, 0.0]      # (x, y) origin about which the generalized gradients coefs are computed
+origin = [-0.0, 0.0]      # (x, y) origin about which the generalized gradients coefs are computed
 n_planes_add = 1            # Number of z-planes added.
 core_weight = 1             # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
 outer_plane_weight = 1      # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).

@@ -107,11 +107,11 @@ This assumes that `r0_grid`, `dr_grid`, and `pt` have been set.
 
 using JLD2, OffsetArrays, LinearAlgebra, Printf
 
----------------------------------------------------------------------------
-Load input parameters and the GG coefficient table
----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Load input parameters and the GG coefficient table
+# ---------------------------------------------------------------------------
 
-const INPUT_FILE = ARGS[1]
+const INPUT_FILE = joinpath(pwd(), ARGS[1])
 const TABLE_FILE = joinpath(@__DIR__, "..", "tables", "gg_coef_table.jl")
 
 include(INPUT_FILE)   # defines: field, h, origin, n_planes_add, core_weight, outer_plane_weight

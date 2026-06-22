@@ -1,8 +1,23 @@
-* Coefficient tables
+# Generalized Gradients Overview
 
-The table tables/field_gg_coef_table.jl is created from src/create_field_gg_coef_table.jl
-The table tables/field_monomial_functions.jl is created from src/field_monomial_functions.jl
+The notation follows that of S. Van der Schueren et al. “Magnetic Field Modelling and Symplectic Integration of Magnetic Fields on Curved Reference Frames for Improved Synchrotron Design: First Steps”
+A copy of this paper is in the `papers` directory.
+
+Equations for the vector potential are described in papers/vector-potential/vector-potential.tex
+Here "the gg functions" refer to the functions `a(s)`, `b(s)`, and `bs(s)` and their derivatives.
+
+# Field tables
 
 These tables are used by various programs. These tables do not have to be recreated unless
 you want to extend the derivative range. Currently derivatives up to order 12 are tabulated.
 
+##  gg_coef_table.jl
+
+The file tables/gg_coef_table.jl is created from src/create_gg_coef_table.jl.
+This table contains the functions needed to calculate the coefficients for the taylor map of the magnetic field and the vector potential from the gg functions. This table is equivalent to Table 1 of Van der Schueren
+
+## monomial_functions.jl
+
+The table tables/monomial_functions.jl is created from src/create_monomial_functions.jl
+This table contains the coefficients needed to calculate the coefficients for the taylor map of the magnetic field and vector potential from the gg functions. 
+The information in this file is the same as gg_coef_table.jl except in a form that is useful for optimization and other calculations.

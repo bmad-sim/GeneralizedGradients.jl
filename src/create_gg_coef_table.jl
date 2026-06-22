@@ -1,8 +1,8 @@
 using Symbolics
 
 # ---------------------------------------------------------------------------
-# Create a file field_gg_coef_table.jl 
-# Similar to field_monomial_functions.jl:
+# Create a file gg_coef_table.jl 
+# Similar to monomial_functions.jl:
 # For each field component (Bx, By, Bs), and for each function a, b, bs and derivatives,
 # output a vector of coefficients that contribute.
 #
@@ -152,6 +152,90 @@ function nth_ds_deriv(v, m)
     return result
 end
 
+# ---------------------------------------------------------------------------
+# Vector potential coefficients T_{p,q} of x^p y^q in A_x, A_y, A_s
+# (B = curl A in Frenet coordinates).  See papers/vector-potential.
+#
+# C is split by GG family: alpha (a_n, n>=1), beta (b_n), gamma (b_s = a_0
+# derivatives).  Gauge A_y = 0 for alpha/beta, A_s = 0 for gamma:
+#
+#   A_x = - sum 1/(j+1) (alpha+beta)_{s,i,j} x^i y^{j+1}
+#         + (1+hx) sum [int ds gamma_{y,i,j}] x^i y^j
+#   A_y = - (1+hx) sum [int ds gamma_{x,i,j}] x^i y^j
+#   A_s =   sum 1/(j+1) (alpha+beta)_{x,i,j} x^i y^{j+1}
+#         - 1/(1+hx) sum_i beta_{y,i,0} ( x^{i+1}/(i+1) + h x^{i+2}/(i+2) )
+# ---------------------------------------------------------------------------
+
+println("computing vector potential coefficients ...")
+
+const MDER = MAXTOT + 4
+
+# Project an expression onto one GG family by zeroing the others (the field
+# coefficients are linear in the GG functions); int ds lowers a b_s order.
+zero_a0    = Dict{Num,Num}()   # zero a_0 and its s-derivatives
+zero_apos  = Dict{Num,Num}()   # zero a_1 .. a_13 and derivatives
+zero_b     = Dict{Num,Num}()   # zero b_1 .. b_13 and derivatives
+zero_a_all = Dict{Num,Num}()   # zero a_0 .. a_13 and derivatives
+for m in 0:MDER
+    zero_a0[nth_ds_deriv(avars[1], m)] = Num(0)
+end
+for n in 1:13, m in 0:MDER
+    zero_apos[nth_ds_deriv(avars[n+1], m)] = Num(0)
+    zero_b[nth_ds_deriv(bvars[n], m)]      = Num(0)
+end
+for n in 0:13, m in 0:MDER
+    zero_a_all[nth_ds_deriv(avars[n+1], m)] = Num(0)
+end
+zero_not_a0 = merge(zero_apos, zero_b)        # keep only a_0  (the b_s family)
+
+intds_a0 = Dict{Num,Num}()                    # int ds: D^k(a_0) -> D^{k-1}(a_0)
+for k in 1:MDER
+    intds_a0[nth_ds_deriv(avars[1], k)] = nth_ds_deriv(avars[1], k - 1)
+end
+
+ab_part(e) = substitute(e, zero_a0)       # a_n (n>=1) + b_n  part of C
+b_part(e)  = substitute(e, zero_a_all)    # b_n               part of C
+bs_part(e) = substitute(e, zero_not_a0)   # b_s               part of C
+intds(e)   = substitute(e, intds_a0)
+
+TBx_ab = Dict{Tuple{Int,Int},Num}()   # (alpha+beta)_x
+TBs_ab = Dict{Tuple{Int,Int},Num}()   # (alpha+beta)_s
+Igy    = Dict{Tuple{Int,Int},Num}()   # int ds gamma_y  (b_s part of B_y)
+Igx    = Dict{Tuple{Int,Int},Num}()   # int ds gamma_x  (b_s part of B_x)
+for q in 0:MAXTOT, p in 0:(MAXTOT-q)
+    TBx_ab[(p,q)] = ab_part(TBx[(p,q)])
+    TBs_ab[(p,q)] = ab_part(TBs[(p,q)])
+    Igy[(p,q)]    = intds(bs_part(TBy[(p,q)]))
+    Igx[(p,q)]    = intds(bs_part(TBx[(p,q)]))
+end
+getD(D, p, q) = (p >= 0 && q >= 0 && haskey(D, (p,q))) ? D[(p,q)] : Num(0)
+
+# Midplane-correction polynomial P(x); As_corr = -P/(1+hx) (length-N x-vector).
+Pvec = fill(Num(0), N)
+for i in 0:MAXTOT
+    byi0 = b_part(TBy[(i,0)])
+    i + 2 <= N && (Pvec[i+2] += byi0 * (1 // (i + 1)))       # x^{i+1}
+    i + 3 <= N && (Pvec[i+3] += byi0 * h * (1 // (i + 2)))   # x^{i+2}
+end
+As_corr = (-1) .* mulinv1phx(Pvec)
+
+TAx = Dict{Tuple{Int,Int},Num}()
+TAy = Dict{Tuple{Int,Int},Num}()
+TAs = Dict{Tuple{Int,Int},Num}()
+for q in 0:MAXTOT, p in 0:(MAXTOT-q)
+    ax = getD(Igy, p, q) + h * getD(Igy, p - 1, q)
+    q >= 1 && (ax += -(1 // q) * getD(TBs_ab, p, q - 1))
+    TAx[(p,q)] = expand(ax)
+
+    ay = -(getD(Igx, p, q) + h * getD(Igx, p - 1, q))
+    TAy[(p,q)] = expand(ay)
+
+    as = q == 0 ? As_corr[p+1] : (1 // q) * getD(TBx_ab, p, q - 1)
+    TAs[(p,q)] = expand(as)
+end
+
+println("vector potential coefficients computed")
+
 Dh = Differential(h)
 
 # Build the zero-substitution dictionary once: every symbolic function and
@@ -226,33 +310,30 @@ const MAX_H = MAXTOT + 2
 # Collect contributions and write output
 # ---------------------------------------------------------------------------
 
-outfile = joinpath(@__DIR__, "..", "tables", "field_gg_coef_table.jl")
+outfile = joinpath(@__DIR__, "..", "tables", "gg_coef_table.jl")
 open(outfile, "w") do io
-    println(io, "# Inverse field coefficient table (full h dependence)")
+    println(io, "# Inverse field and vector-potential coefficient table (full h dependence)")
     println(io, "#")
     println(io, "# By_b[(n,m)] = [(c, p, q, k), ...]  means  By += c * h^k * x^p * y^q * b(n,m)")
-    println(io, "# Similarly for Bx_b, Bs_b, By_a, Bx_a, Bs_a, By_bs, Bx_bs, Bs_bs.")
+    println(io, "# Similarly for Bx_b, Bs_b, By_a, Bx_a, Bs_a, By_bs, Bx_bs, Bs_bs and for")
+    println(io, "# the vector potential A (B = curl A):  Ax_a, Ax_b, Ax_bs, Ay_a, Ay_b,")
+    println(io, "# Ay_bs, As_a, As_b, As_bs (same meaning, e.g. Ax_b[(n,m)] -> Ax += ...).")
     println(io, "# Notation: b(n,m) = d^m b_n/ds^m,  a(n,m) = d^m a_n/ds^m,")
     println(io, "#           bs(m)  = d^{m+1} a_0/ds^{m+1}")
     println(io)
 
-    println(io, "Bx_a  = Dict{Tuple{Int64, Int64}, Vector{Tuple{Real, Int64, Int64, Int64}}}()")
-    println(io, "Bx_b  = Dict{Tuple{Int64, Int64}, Vector{Tuple{Real, Int64, Int64, Int64}}}()")
-    println(io, "Bx_bs = Dict{Int64, Vector{Tuple{Real, Int64, Int64, Int64}}}()")
-
-    println(io, "By_a  = Dict{Tuple{Int64, Int64}, Vector{Tuple{Real, Int64, Int64, Int64}}}()")
-    println(io, "By_b  = Dict{Tuple{Int64, Int64}, Vector{Tuple{Real, Int64, Int64, Int64}}}()")
-    println(io, "By_bs = Dict{Int64, Vector{Tuple{Real, Int64, Int64, Int64}}}()")
-
-    println(io, "Bs_a  = Dict{Tuple{Int64, Int64}, Vector{Tuple{Real, Int64, Int64, Int64}}}()")
-    println(io, "Bs_b  = Dict{Tuple{Int64, Int64}, Vector{Tuple{Real, Int64, Int64, Int64}}}()")
-    println(io, "Bs_bs = Dict{Int64, Vector{Tuple{Real, Int64, Int64, Int64}}}()")
+    for comp in ("Bx", "By", "Bs", "Ax", "Ay", "As")
+        println(io, "$(comp)_a  = Dict{Tuple{Int64, Int64}, Vector{Tuple{Real, Int64, Int64, Int64}}}()")
+        println(io, "$(comp)_b  = Dict{Tuple{Int64, Int64}, Vector{Tuple{Real, Int64, Int64, Int64}}}()")
+        println(io, "$(comp)_bs = Dict{Int64, Vector{Tuple{Real, Int64, Int64, Int64}}}()")
+    end
     println(io)
 
     # --- b_n(s) functions, n = 1..13, m = 0..MAXTOT ---
     println(io, "# --- b(n,m) contributions ---")
     println(io)
-    for (T, prefix) in [(TBy, "By_b"), (TBx, "Bx_b"), (TBs, "Bs_b")]
+    for (T, prefix) in [(TBy, "By_b"), (TBx, "Bx_b"), (TBs, "Bs_b"),
+                        (TAy, "Ay_b"), (TAx, "Ax_b"), (TAs, "As_b")]
         print("Processing $(prefix) ...")
         for n in 1:13, m in 0:MAXTOT
             sym   = nth_ds_deriv(bvars[n], m)
@@ -272,7 +353,8 @@ open(outfile, "w") do io
     # --- a_n(s) functions, n = 1..13, m = 0..MAXTOT ---
     println(io, "# --- a(n,m) contributions ---")
     println(io)
-    for (T, prefix) in [(TBy, "By_a"), (TBx, "Bx_a"), (TBs, "Bs_a")]
+    for (T, prefix) in [(TBy, "By_a"), (TBx, "Bx_a"), (TBs, "Bs_a"),
+                        (TAy, "Ay_a"), (TAx, "Ax_a"), (TAs, "As_a")]
         print("Processing $(prefix) ...")
         for n in 1:13, m in 0:MAXTOT
             sym   = nth_ds_deriv(avars[n+1], m)   # avars[n+1] = a_n(s)
@@ -292,7 +374,8 @@ open(outfile, "w") do io
     # --- bs(m) = d^{m+1} a_0/ds^{m+1}, m = 0..MAXTOT ---
     println(io, "# --- bs(m) contributions ---")
     println(io)
-    for (T, prefix) in [(TBy, "By_bs"), (TBx, "Bx_bs"), (TBs, "Bs_bs")]
+    for (T, prefix) in [(TBy, "By_bs"), (TBx, "Bx_bs"), (TBs, "Bs_bs"),
+                        (TAy, "Ay_bs"), (TAx, "Ax_bs"), (TAs, "As_bs")]
         print("Processing $(prefix) ...")
         for m in 0:MAXTOT
             sym   = nth_ds_deriv(avars[1], m + 1)  # (m+1)-th deriv of a_0 = bs(m)

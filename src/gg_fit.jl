@@ -14,12 +14,12 @@ The parameter input file defines the field grid `field`, the bending strength `h
 `origin`, and the fit-control parameters `n_planes_add`, `core_weight`, `outer_plane_weight`. See below.
 
 Besides the input file, this function will open the file (relative to this directory)
-"../tables/field_gg_coef_table.jl" (this relative to this gg_fit.jl file) which contains 
+"../tables/gg_coef_table.jl" (this relative to this gg_fit.jl file) which contains 
 coefficients needed for the fit.
 
 ## How the fit works
 
-The field expansion (tables/field_gg_coef_table.jl) is linear in the GG
+The field expansion (tables/gg_coef_table.jl) is linear in the GG
 functions and their s-derivatives:
 
   B_c(x,y,z) = Σ_{(n,m)}  CS_c,b(n,m; x,y) · b(n,m)(z)
@@ -111,7 +111,7 @@ Load input parameters and the GG coefficient table
 ---------------------------------------------------------------------------
 
 const INPUT_FILE = ARGS[1]
-const TABLE_FILE = joinpath(@__DIR__, "..", "tables", "field_gg_coef_table.jl")
+const TABLE_FILE = joinpath(@__DIR__, "..", "tables", "gg_coef_table.jl")
 
 include(INPUT_FILE)   # defines: field, h, origin, n_planes_add, core_weight, outer_plane_weight
 include(TABLE_FILE)   # defines: Bx_a By_a Bs_a  Bx_b By_b Bs_b  Bx_bs By_bs Bs_bs

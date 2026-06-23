@@ -65,6 +65,13 @@ julia> fit = gg_load_fit("gg_fit_result.jld2");
 julia> fit.dz_grid              # Returns 0.005
 ```
 
-gg function values at a given plane:
+field-expansion coefficients at a given s-position:
 ```
-julia> gg_coefficients_at(fit, 0.0)
+julia> gg_coefficients_at_s(fit, 0.0)
+```
+
+generalized-gradient coefficients (a, b, bs) at a grid plane index or at a given s-position:
+```
+julia> gg_coefficients_at_plane(fit, 1)      # at grid plane 1
+julia> gg_coefficients_at_s(fit, 0.0) # at s = 0.0
+```

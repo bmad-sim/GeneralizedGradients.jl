@@ -9,22 +9,26 @@
 # Both the field and the vector potential are evaluated the same way: as the
 # monomial expansions whose coefficients are tabulated in tables/gg_coef_table.jl.
 #
-#   B_c(x,y,s) = Σ_{(n,m)} CS^B_c,a(n,m;x,y)·a(n,m)
-#              + Σ_{(n,m)} CS^B_c,b(n,m;x,y)·b(n,m)
-#              + Σ_{m}     CS^B_c,bs(m;x,y)·bs(m)
-#   A_c(x,y,s) = Σ_{(n,m)} CS^A_c,a(n,m;x,y)·a(n,m)
-#              + Σ_{(n,m)} CS^A_c,b(n,m;x,y)·b(n,m)
-#              + Σ_{m}     CS^A_c,bs(m;x,y)·bs(m)
+#   B_c(x,y,s) = Σ_{n,m} CS(Bc_a, n,m; x,y)·a(n,m)
+#              + Σ_{n,m} CS(Bc_b, n,m; x,y)·b(n,m)
+#              + Σ_{m}   CS(Bc_bs, m; x,y)·bs(m)
+#   A_c(x,y,s) = Σ_{n,m} CS(Ac_a, n,m; x,y)·a(n,m)
+#              + Σ_{n,m} CS(Ac_b, n,m; x,y)·b(n,m)
+#              + Σ_{m}   CS(Ac_bs, m; x,y)·bs(m)
 #
-# with a(n,m)=dᵐa_n/dsᵐ, b(n,m)=dᵐb_n/dsᵐ, bs(m)=dᵐ⁺¹a_0/dsᵐ⁺¹ = dᵐb_s/dsᵐ,
-# and CS_c,f = Σ (coeff·hᵏ·xᵖ·yᵠ) the sum of that function's table entries.  The
-# A tables (Ax_a, …, As_bs) are precomputed in tables/gg_coef_table.jl from the
-# α/β/γ construction of papers/vector-potential and satisfy B = ∇×A exactly.
+# with a(n,m)=dᵐa_n/dsᵐ, b(n,m)=dᵐb_n/dsᵐ, bs(m)=dᵐ⁺¹a_0/dsᵐ⁺¹ = dᵐb_s/dsᵐ.
+# Here c ∈ {x,y,s} is the component; Bc_a denotes the table Bx_a/By_a/Bs_a (and
+# likewise Bc_b, Bc_bs and the potential tables Ac_a, Ac_b, Ac_bs); and the
+# coefficient sum CS(T, n,m; x,y) = Σ coeff·hᵏ·xᵖ·yᵠ runs over the entries
+# (coeff,p,q,k) stored under key (n,m) of table T.  The A tables (Ax_a, …,
+# As_bs) are precomputed in tables/gg_coef_table.jl from the α/β/γ construction
+# of papers/vector-potential and satisfy B = ∇×A exactly.
 #
 # Because A is linear in the GG functions, its (x,y) derivatives are the
 # monomial partials and its s-derivative is obtained by bumping the GG
 # derivative order ( ∂_s a(n,m) = a(n,m+1), etc. ) — exactly as for the field.
-# ---------------------------------------------------------------------------
+
+#---------------------------------------------------------------------------------------------------
 
 using JLD2
 
@@ -37,12 +41,12 @@ const _NMAX = 20
 
 _newK() = zeros(Float64, _NMAX, _NMAX)
 
-# ---------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------
 
 """
     gg_load_fit(path::AbstractString) -> NamedTuple
 
-Load a gg_fit.jl result file into a NamedTuple.
+Load a `gg_fit.jl` result file into a NamedTuple.
 """
 function gg_load_fit(path::AbstractString)
     d = load(path)
@@ -57,9 +61,8 @@ function gg_load_fit(path::AbstractString)
               input_file         = get(d, "input_file", missing))
 end
 
-# ---------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------
 # Coefficient-array builders.  K[p+1,q+1] = coefficient of xᵖ yᵠ.
-# ---------------------------------------------------------------------------
 
 """
     _accum(tdict, valfun, h) -> K
@@ -79,6 +82,8 @@ function _accum(tdict, valfun, h)
     return K
 end
 
+#---------------------------------------------------------------------------------------------------
+
 """
     _comp_array(Ta, Tb, Tbs, aval, bval, bsval, h) -> K
 
@@ -90,6 +95,8 @@ function _comp_array(Ta, Tb, Tbs, aval, bval, bsval, h)
            _accum(Tb, k -> bval(k...), h) .+
            _accum(Tbs, m -> bsval(m), h)
 end
+
+#---------------------------------------------------------------------------------------------------
 
 """
     _polyval(K, x, y) -> (val, dvx, dvy)
@@ -109,8 +116,10 @@ function _polyval(K, x, y)
     return val, dvx, dvy
 end
 
+#---------------------------------------------------------------------------------------------------
+
 """
-    gg_evaluate(res, ip::Integer, x::Real, y::Real) -> (B, A, dA)
+    field_and_potential_evaluate(res, ip::Integer, x::Real, y::Real) -> (B, A, dA)
 
 Main entry point.  Evaluate the field, vector potential and the Jacobian of A
 at grid plane `ip` and transverse position `(x, y)`.
@@ -128,7 +137,7 @@ Returns (B, A, dA) where
   dA = 3x3 matrix, dA[i,j] = ∂A_i/∂u_j  with  (A_1,A_2,A_3)=(Ax,Ay,As)
        and (u_1,u_2,u_3)=(x,y,s).
 """
-function gg_evaluate(res, ip::Integer, x::Real, y::Real)
+function field_and_potential_evaluate(res, ip::Integer, x::Real, y::Real)
     h = res.h
     # Shift absolute coordinates onto the GG expansion axis.
     x = float(x) - res.origin[1]
@@ -169,8 +178,10 @@ end
 
 # ---------------------------------------------------------------------------
 # Hermite interpolation of the GG towers between grid planes (see
-# gg_evaluate_at for the method and rationale).
+# field_and_potential_evaluate_at for the method and rationale).
 # ---------------------------------------------------------------------------
+
+#---------------------------------------------------------------------------------------------------
 
 """
     _fct(k::Integer) -> Float64
@@ -198,6 +209,8 @@ function _taylor_derivs(z0, f0, sq)
     end
     return out
 end
+
+#---------------------------------------------------------------------------------------------------
 
 """
     _hermite_derivs(zL, zR, fL, fR, sq) -> Vector
@@ -261,6 +274,8 @@ function _hermite_derivs(zL, zR, fL, fR, sq)
     return out
 end
 
+#---------------------------------------------------------------------------------------------------
+
 """
     _interp_tower(fL, fR, zL, zR, sq, single) -> Vector
 
@@ -268,6 +283,8 @@ Interpolate one GG function's tower onto sq (Hermite, or Taylor if single).
 """
 _interp_tower(fL, fR, zL, zR, sq, single) =
     single ? _taylor_derivs(zL, fL, sq) : _hermite_derivs(zL, zR, fL, fR, sq)
+
+#---------------------------------------------------------------------------------------------------
 
 """
     _contiguous_order(orders) -> N
@@ -281,6 +298,8 @@ function _contiguous_order(orders)
     end
     return N
 end
+
+#---------------------------------------------------------------------------------------------------
 
 """
     _interp_nm_dict(d, iL, iR, zL, zR, sq, single) -> Dict
@@ -309,6 +328,8 @@ function _interp_nm_dict(d, iL, iR, zL, zR, sq, single)
     return out
 end
 
+#---------------------------------------------------------------------------------------------------
+
 """
     _interp_m_dict(d, iL, iR, zL, zR, sq, single) -> Dict
 
@@ -330,10 +351,16 @@ function _interp_m_dict(d, iL, iR, zL, zR, sq, single)
     return out
 end
 
+#---------------------------------------------------------------------------------------------------
+
 """
     _interp_res(res, s::Real) -> NamedTuple
 
-Build a single virtual plane at s by Hermite-interpolating every GG tower
+## Input:
+
+- res       # GG coefficients for all planes.
+
+Build a single virtual plane at s by Hermite-interpolating every GG derivative tower
 from the two straddling grid planes (one-plane Taylor if only one plane).
 """
 function _interp_res(res, s::Real)
@@ -360,8 +387,10 @@ function _interp_res(res, s::Real)
               m_max = res.m_max, rms_plane = [NaN])
 end
 
+#---------------------------------------------------------------------------------------------------
+
 """
-    gg_evaluate_at(res, x::Real, y::Real, s::Real) -> (B, A, dA)
+    field_and_potential_evaluate_at(res, x::Real, y::Real, s::Real) -> (B, A, dA)
 
 Evaluate at an arbitrary (x, y, s) point.
 
@@ -377,7 +406,7 @@ interpolated a(n,0), etc.
 
 This is more accurate than independent per-order interpolation (error
 O(h^{2N+2}) for the base coefficient, using only the two straddling planes)
-and, because the orders are mutually consistent, the ∂A/∂s that gg_evaluate
+and, because the orders are mutually consistent, the ∂A/∂s that field_and_potential_evaluate
 forms by bumping a(n,m)→a(n,m+1) equals the true s-derivative of the
 interpolated field.  The curl identity B = ∇×A holds at s as before.
 
@@ -385,66 +414,104 @@ interpolated field.  The curl identity B = ∇×A holds at s as before.
   x, y   : absolute transverse coordinates (res.origin subtracted internally)
   s      : absolute longitudinal coordinate
 
-Returns (B, A, dA) exactly as gg_evaluate.
+Returns (B, A, dA) exactly as field_and_potential_evaluate.
 """
-function gg_evaluate_at(res, x::Real, y::Real, s::Real)
-    return gg_evaluate(_interp_res(res, s), 1, x, y)
+function field_and_potential_evaluate_at(res, x::Real, y::Real, s::Real)
+    return field_and_potential_evaluate(_interp_res(res, s), 1, x, y)
 end
 
+#---------------------------------------------------------------------------------------------------
 """
-    _field_C(res, ip::Integer) -> (Cx, Cy, Cs)
+    _field_CB(res, ip::Integer) -> (CBx, CBy, CBs)
 
-Field-expansion coefficients  B_c(x,y,s) = Σ_{i,j} C_{c,i,j}(s) xⁱ yʲ.
+Field-expansion coefficients  B_c(x,y,s) = Σ_{i,j} CB_{c,i,j}(s) xⁱ yʲ.
 Returns full _NMAX×_NMAX arrays summed over the a, b, bs parts.
 """
-function _field_C(res, ip::Integer)
+function _field_CB(res, ip::Integer)
     h = res.h
     aval(n, m) = (m >= 0 && haskey(res.a, (n, m))) ? res.a[(n, m)][ip] : 0.0
     bval(n, m) = (m >= 0 && haskey(res.b, (n, m))) ? res.b[(n, m)][ip] : 0.0
     bsval(m)   = (m >= 0 && haskey(res.bs, m))     ? res.bs[m][ip]     : 0.0
-    Cx = _accum(Bx_a, k -> aval(k...), h) .+ _accum(Bx_b, k -> bval(k...), h) .+ _accum(Bx_bs, m -> bsval(m), h)
-    Cy = _accum(By_a, k -> aval(k...), h) .+ _accum(By_b, k -> bval(k...), h) .+ _accum(By_bs, m -> bsval(m), h)
-    Cs = _accum(Bs_a, k -> aval(k...), h) .+ _accum(Bs_b, k -> bval(k...), h) .+ _accum(Bs_bs, m -> bsval(m), h)
-    return Cx, Cy, Cs
+    CBx = _accum(Bx_a, k -> aval(k...), h) .+ _accum(Bx_b, k -> bval(k...), h) .+ _accum(Bx_bs, m -> bsval(m), h)
+    CBy = _accum(By_a, k -> aval(k...), h) .+ _accum(By_b, k -> bval(k...), h) .+ _accum(By_bs, m -> bsval(m), h)
+    CBs = _accum(Bs_a, k -> aval(k...), h) .+ _accum(Bs_b, k -> bval(k...), h) .+ _accum(Bs_bs, m -> bsval(m), h)
+    return CBx, CBy, CBs
 end
 
+#---------------------------------------------------------------------------------------------------
 """
-    _trim3(Cx, Cy, Cs) -> (Cx, Cy, Cs)
+    _trim3(CBx, CBy, CBs) -> (CBx, CBy, CBs)
 
 Trim three coefficient arrays to the smallest (x,y) extent holding every
-nonzero entry, so the returned matrices are indexed C[i+1, j+1] = C_{c,i,j}.
+nonzero entry, so the returned matrices are indexed CB[i+1, j+1] = CB_{c,i,j}.
 """
-function _trim3(Cx, Cy, Cs)
+function _trim3(CBx, CBy, CBs)
     pmax = 1; qmax = 1
-    for K in (Cx, Cy, Cs), j in 1:_NMAX, i in 1:_NMAX
+    for K in (CBx, CBy, CBs), j in 1:_NMAX, i in 1:_NMAX
         if K[i, j] != 0.0
             pmax = max(pmax, i); qmax = max(qmax, j)
         end
     end
-    return Cx[1:pmax, 1:qmax], Cy[1:pmax, 1:qmax], Cs[1:pmax, 1:qmax]
+    return CBx[1:pmax, 1:qmax], CBy[1:pmax, 1:qmax], CBs[1:pmax, 1:qmax]
 end
 
+#---------------------------------------------------------------------------------------------------
 """
-    gg_coefficients(res, ip::Integer) -> (Cx, Cy, Cs)
+    field_coefficients_at_plane(res, ip::Integer) -> (CBx, CBy, CBs)
 
-C coefficients at a grid plane.
+Field-expansion coefficients at a grid plane.
 
   res : NamedTuple from gg_load_fit (loaded gg_fit.jl output file)
   ip  : 1-based plane index into res.z_base
 
-Returns (Cx, Cy, Cs); each is a matrix with C[i+1, j+1] = C_{c,i,j}, the
+Returns (CBx, CBy, CBs); each is a matrix with CB[i+1, j+1] = CB_{c,i,j}, the
 coefficient of xⁱ yʲ in that field component at the plane.
 """
-function gg_coefficients(res, ip::Integer)
-    return _trim3(_field_C(res, ip)...)
+function field_coefficients_at_plane(res, ip::Integer)
+    return _trim3(_field_CB(res, ip)...)
 end
 
+#---------------------------------------------------------------------------------------------------
 """
-    gg_coefficients_at(res, s::Real) -> (Cx, Cy, Cs)
+    field_coefficients_at_s(res, s::Real) -> (CBx, CBy, CBs)
 
-C coefficients at an arbitrary s, via the same Hermite interpolation of the
-GG quantities used by `gg_evaluate_at`.  Returns `(Cx, Cy, Cs)` as above.
+Field-expansion coefficients at an arbitrary s, via the same Hermite
+interpolation of the GG quantities used by `field_and_potential_evaluate_at`.  Returns
+`(CBx, CBy, CBs)` where each `CB` is a matrix with CB[i+1, j+1] = CB_{c,i,j}, the
+coefficient of xⁱ yʲ in that field component at the plane.
 """
-function gg_coefficients_at(res, s::Real)
-    return _trim3(_field_C(_interp_res(res, s), 1)...)
+function field_coefficients_at_s(res, s::Real)
+    return _trim3(_field_CB(_interp_res(res, s), 1)...)
+end
+
+#---------------------------------------------------------------------------------------------------
+"""
+    gg_coefficients_at_plane(res, ip::Integer) -> (a, b, bs)
+
+Generalized-gradient coefficients at a grid plane.
+
+  res : NamedTuple from gg_load_fit (loaded gg_fit.jl output file)
+  ip  : 1-based plane index into res.z_base
+
+Returns the three GG-function dicts of scalar values at the plane: `a` and `b`
+keyed by (n,m) with a(n,m)=dᵐaₙ/dsᵐ, b(n,m)=dᵐbₙ/dsᵐ; and `bs` keyed by m with
+bs(m)=dᵐ⁺¹a_0/dsᵐ⁺¹ = dᵐb_s/dsᵐ.
+"""
+function gg_coefficients_at_plane(res, ip::Integer)
+    a  = Dict{Tuple{Int,Int},Float64}((nm => v[ip]) for (nm, v) in res.a)
+    b  = Dict{Tuple{Int,Int},Float64}((nm => v[ip]) for (nm, v) in res.b)
+    bs = Dict{Int,Float64}((m => v[ip]) for (m, v) in res.bs)
+    return a, b, bs
+end
+
+#---------------------------------------------------------------------------------------------------
+"""
+    gg_coefficients_at_s(res, s::Real) -> (a, b, bs)
+
+Generalized-gradient coefficients at an arbitrary s, Hermite-interpolated from
+the straddling grid planes (the same interpolation used by `field_and_potential_evaluate_at`).
+Returns the three GG-function dicts of scalar values, as in `gg_coefficients_at_plane`.
+"""
+function gg_coefficients_at_s(res, s::Real)
+    return gg_coefficients_at_plane(_interp_res(res, s), 1)
 end

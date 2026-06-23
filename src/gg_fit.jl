@@ -121,7 +121,8 @@ include(TABLE_FILE)   # defines: Bx_a By_a Bs_a  Bx_b By_b Bs_b  Bx_bs By_bs Bs_
 # Helpers
 # ---------------------------------------------------------------------------
 
-# CoefSum: Σ coeff·h^k·x^p·y^q over the table entries for one (component,function).
+# CB coefficient sum: Σ coeff·h^k·x^p·y^q over the table entries for one
+# (component, function) — one entry of the CB grids built in run_fit.
 function coefsum(terms, x::Float64, y::Float64, h)
     s = 0.0
     for (c, p, q, k) in terms
@@ -171,20 +172,20 @@ function run_fit(pt, r0, dr, h, origin, n_planes_add, core_weight, outer_plane_w
     params = sort!(collect(pset))
     ncols  = length(params)
 
-    # ---- Precompute CoefSum grids: (comp,type,n,m) => matrix over (ix,iy) --
+    # ---- Precompute CB (field-coefficient) grids: (comp,type,n,m) => matrix over (ix,iy) --
     # comp: 1=Bx, 2=By, 3=Bs.   type: :a,:b,:bs.
     comp_dicts = Dict(
         (1, :a) => a_dicts[1], (2, :a) => a_dicts[2], (3, :a) => a_dicts[3],
         (1, :b) => b_dicts[1], (2, :b) => b_dicts[2], (3, :b) => b_dicts[3],
         (1, :bs) => bs_dicts[1], (2, :bs) => bs_dicts[2], (3, :bs) => bs_dicts[3],
     )
-    CS = Dict{Tuple{Int,Symbol,Int,Int},Matrix{Float64}}()
+    CB = Dict{Tuple{Int,Symbol,Int,Int},Matrix{Float64}}()
     for ((comp, typ), d) in comp_dicts
         for (key, terms) in d
             n, m = typ == :bs ? (0, key) : (key[1], key[2])
             m <= m_max || continue
             grid = [coefsum(terms, xs[i], ys[j], h) for i in eachindex(xs), j in eachindex(ys)]
-            CS[(comp, typ, n, m)] = grid
+            CB[(comp, typ, n, m)] = grid
         end
     end
 
@@ -231,7 +232,7 @@ function run_fit(pt, r0, dr, h, origin, n_planes_add, core_weight, outer_plane_w
                     for (col, (typ, n, j)) in enumerate(params)
                         val = 0.0
                         for mm in 0:j
-                            grid = get(CS, (comp, typ, n, mm), nothing)
+                            grid = get(CB, (comp, typ, n, mm), nothing)
                             grid === nothing && continue
                             val += grid[iix, iiy] * dz^(j - mm) / ffact(j - mm)
                         end

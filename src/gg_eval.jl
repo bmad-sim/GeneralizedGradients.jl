@@ -38,21 +38,35 @@ const _NMAX = 20
 _newK() = zeros(Float64, _NMAX, _NMAX)
 
 # ---------------------------------------------------------------------------
-# Load a gg_fit.jl result file into a NamedTuple.
-# ---------------------------------------------------------------------------
-function gg_load_result(path::AbstractString)
+
+"""
+    gg_load_fit(path::AbstractString) -> NamedTuple
+
+Load a gg_fit.jl result file into a NamedTuple.
+"""
+function gg_load_fit(path::AbstractString)
     d = load(path)
     return (; z_base   = d["z_base"],
               a        = d["a"],   b  = d["b"],  bs = d["bs"],
-              h        = d["h"],   origin = d["origin"],
-              r0_grid  = d["r0_grid"], dz_grid = d["dz_grid"],
-              m_max    = d["m_max"],   rms_plane = d["rms_plane"])
+              h        = d["h"],   origin = d["origin"], dz_grid = d["dz_grid"],
+              m_max    = d["m_max"],   rms_plane = d["rms_plane"],
+              # Fit-control metadata (absent in older files → default values).
+              n_planes_add       = get(d, "n_planes_add", missing),
+              core_weight        = get(d, "core_weight", missing),
+              outer_plane_weight = get(d, "outer_plane_weight", missing),
+              input_file         = get(d, "input_file", missing))
 end
 
 # ---------------------------------------------------------------------------
 # Coefficient-array builders.  K[p+1,q+1] = coefficient of xᵖ yᵠ.
-# `valfun(key)` returns the GG function value multiplying that table entry.
 # ---------------------------------------------------------------------------
+
+"""
+    _accum(tdict, valfun, h) -> K
+
+Coefficient-array builder.  `K[p+1,q+1]` = coefficient of xᵖ yᵠ.
+`valfun(key)` returns the GG function value multiplying that table entry.
+"""
 function _accum(tdict, valfun, h)
     K = _newK()
     for (key, terms) in tdict
@@ -65,15 +79,23 @@ function _accum(tdict, valfun, h)
     return K
 end
 
-# Combined coefficient array of a component: sum of its a, b and bs parts.
-# `Ta`/`Tb` are keyed by (n,m) and `Tbs` by m.
+"""
+    _comp_array(Ta, Tb, Tbs, aval, bval, bsval, h) -> K
+
+Combined coefficient array of a component: sum of its a, b and bs parts.
+`Ta`/`Tb` are keyed by (n,m) and `Tbs` by m.
+"""
 function _comp_array(Ta, Tb, Tbs, aval, bval, bsval, h)
     return _accum(Ta, k -> aval(k...), h) .+
            _accum(Tb, k -> bval(k...), h) .+
            _accum(Tbs, m -> bsval(m), h)
 end
 
-# Value and (x,y) partials of the plain polynomial Σ K_{i,j} xⁱ yʲ.
+"""
+    _polyval(K, x, y) -> (val, dvx, dvy)
+
+Value and (x,y) partials of the plain polynomial Σ K_{i,j} xⁱ yʲ.
+"""
 function _polyval(K, x, y)
     val = 0.0; dvx = 0.0; dvy = 0.0
     for i in 0:_NMAX-1, j in 0:_NMAX-1
@@ -87,22 +109,25 @@ function _polyval(K, x, y)
     return val, dvx, dvy
 end
 
-# ---------------------------------------------------------------------------
-# Main entry point.
-#
-#   res   : NamedTuple from gg_load_result (or gg_fit.jl's `result`)
-#   ip    : 1-based plane index into res.z_base
-#   x, y  : absolute transverse coordinates.  res.origin is subtracted
-#           internally to obtain the position relative to the GG expansion
-#           axis (the coordinate the expansion is written in).  Pass an
-#           origin of (0,0) — or use the default — for axis-relative input.
-#
-# Returns (B, A, dA) where
-#   B  = [Bx, By, Bs]
-#   A  = [Ax, Ay, As]
-#   dA = 3x3 matrix, dA[i,j] = ∂A_i/∂u_j  with  (A_1,A_2,A_3)=(Ax,Ay,As)
-#        and (u_1,u_2,u_3)=(x,y,s).
-# ---------------------------------------------------------------------------
+"""
+    gg_evaluate(res, ip::Integer, x::Real, y::Real) -> (B, A, dA)
+
+Main entry point.  Evaluate the field, vector potential and the Jacobian of A
+at grid plane `ip` and transverse position `(x, y)`.
+
+  res   : NamedTuple from gg_load_fit (loaded gg_fit.jl output file)
+  ip    : 1-based plane index into res.z_base
+  x, y  : absolute transverse coordinates.  res.origin is subtracted
+          internally to obtain the position relative to the GG expansion
+          axis (the coordinate the expansion is written in).  Pass an
+          origin of (0,0) — or use the default — for axis-relative input.
+
+Returns (B, A, dA) where
+  B  = [Bx, By, Bs]
+  A  = [Ax, Ay, As]
+  dA = 3x3 matrix, dA[i,j] = ∂A_i/∂u_j  with  (A_1,A_2,A_3)=(Ax,Ay,As)
+       and (u_1,u_2,u_3)=(x,y,s).
+"""
 function gg_evaluate(res, ip::Integer, x::Real, y::Real)
     h = res.h
     # Shift absolute coordinates onto the GG expansion axis.
@@ -143,36 +168,23 @@ function gg_evaluate(res, ip::Integer, x::Real, y::Real)
 end
 
 # ---------------------------------------------------------------------------
-# Evaluate at an arbitrary (x, y, s) point.
-#
-# The GG coefficients are stored only at the grid planes res.z_base, but the
-# fit gives, at each plane, the whole derivative tower of every GG function:
-# a(n,0..N), b(n,0..N), bs(0..N) with a(n,m)=dᵐaₙ/dsᵐ and N the maximum order.
-# So for an s between two planes z_L, z_R we have, for each function f, the
-# value and its first N s-derivatives at both ends — 2(N+1) data — which fix a
-# unique two-point Hermite polynomial H(s) of degree 2N+1.  Each interpolated
-# derivative is taken from the SAME polynomial, a(n,m)(s) = H_aₙ⁽ᵐ⁾(s), so the
-# tower stays self-consistent: the interpolated a(n,1) is exactly d/ds of the
-# interpolated a(n,0), etc.
-#
-# This is more accurate than independent per-order interpolation (error
-# O(h^{2N+2}) for the base coefficient, using only the two straddling planes)
-# and, because the orders are mutually consistent, the ∂A/∂s that gg_evaluate
-# forms by bumping a(n,m)→a(n,m+1) equals the true s-derivative of the
-# interpolated field.  The curl identity B = ∇×A holds at s as before.
-#
-#   res    : NamedTuple from gg_load_result (or gg_fit.jl's `result`)
-#   x, y   : absolute transverse coordinates (res.origin subtracted internally)
-#   s      : absolute longitudinal coordinate
-#
-# Returns (B, A, dA) exactly as gg_evaluate.
+# Hermite interpolation of the GG towers between grid planes (see
+# gg_evaluate_at for the method and rationale).
 # ---------------------------------------------------------------------------
 
-# Float factorial (orders are small but keep it overflow-proof).
+"""
+    _fct(k::Integer) -> Float64
+
+Float factorial (orders are small but keep it overflow-proof).
+"""
 _fct(k::Integer) = (f = 1.0; for i in 2:k; f *= i; end; f)
 
-# Single-point Taylor tower: from f and its derivatives at z0, return
-# [P⁽ᵐ⁾(sq) for m=0..N] with P the Taylor series, i.e. f extrapolated to sq.
+"""
+    _taylor_derivs(z0, f0, sq) -> Vector
+
+Single-point Taylor tower: from f and its derivatives at z0, return
+[P⁽ᵐ⁾(sq) for m=0..N] with P the Taylor series, i.e. f extrapolated to sq.
+"""
 function _taylor_derivs(z0, f0, sq)
     N = length(f0) - 1
     u = sq - z0
@@ -187,10 +199,14 @@ function _taylor_derivs(z0, f0, sq)
     return out
 end
 
-# Two-point Hermite tower: fL[j+1]=f⁽ʲ⁾(zL), fR[j+1]=f⁽ʲ⁾(zR), j=0..N.  Returns
-# [H⁽ᵐ⁾(sq) for m=0..N] where H is the degree-(2N+1) Hermite interpolant.
-# Built via confluent Newton divided differences in the local coordinate
-# u = s - zL (nodes: 0 with multiplicity N+1, hstep with multiplicity N+1).
+"""
+    _hermite_derivs(zL, zR, fL, fR, sq) -> Vector
+
+Two-point Hermite tower: fL[j+1]=f⁽ʲ⁾(zL), fR[j+1]=f⁽ʲ⁾(zR), j=0..N.  Returns
+[H⁽ᵐ⁾(sq) for m=0..N] where H is the degree-(2N+1) Hermite interpolant.
+Built via confluent Newton divided differences in the local coordinate
+u = s - zL (nodes: 0 with multiplicity N+1, hstep with multiplicity N+1).
+"""
 function _hermite_derivs(zL, zR, fL, fR, sq)
     N = length(fL) - 1
     K = 2N + 1                       # polynomial degree = (#nodes) - 1
@@ -245,11 +261,19 @@ function _hermite_derivs(zL, zR, fL, fR, sq)
     return out
 end
 
-# Interpolate one GG function's tower onto sq (Hermite, or Taylor if single).
+"""
+    _interp_tower(fL, fR, zL, zR, sq, single) -> Vector
+
+Interpolate one GG function's tower onto sq (Hermite, or Taylor if single).
+"""
 _interp_tower(fL, fR, zL, zR, sq, single) =
     single ? _taylor_derivs(zL, fL, sq) : _hermite_derivs(zL, zR, fL, fR, sq)
 
-# Largest N such that orders 0,1,…,N are all present in `orders` (sorted).
+"""
+    _contiguous_order(orders) -> N
+
+Largest N such that orders 0,1,…,N are all present in `orders` (sorted).
+"""
 function _contiguous_order(orders)
     N = -1
     for (idx, m) in enumerate(orders)
@@ -258,7 +282,11 @@ function _contiguous_order(orders)
     return N
 end
 
-# Interpolate an (n,m)-keyed dict (a, b): build one Hermite per multipole n.
+"""
+    _interp_nm_dict(d, iL, iR, zL, zR, sq, single) -> Dict
+
+Interpolate an (n,m)-keyed dict (a, b): build one Hermite per multipole n.
+"""
 function _interp_nm_dict(d, iL, iR, zL, zR, sq, single)
     out = Dict{Tuple{Int,Int},Vector{Float64}}()
     byn = Dict{Int,Vector{Int}}()
@@ -281,7 +309,11 @@ function _interp_nm_dict(d, iL, iR, zL, zR, sq, single)
     return out
 end
 
-# Interpolate an m-keyed dict (bs): a single Hermite tower.
+"""
+    _interp_m_dict(d, iL, iR, zL, zR, sq, single) -> Dict
+
+Interpolate an m-keyed dict (bs): a single Hermite tower.
+"""
 function _interp_m_dict(d, iL, iR, zL, zR, sq, single)
     out = Dict{Int,Vector{Float64}}()
     ms  = sort(collect(keys(d)))
@@ -298,8 +330,12 @@ function _interp_m_dict(d, iL, iR, zL, zR, sq, single)
     return out
 end
 
-# Build a single virtual plane at s by Hermite-interpolating every GG tower
-# from the two straddling grid planes (one-plane Taylor if only one plane).
+"""
+    _interp_res(res, s::Real) -> NamedTuple
+
+Build a single virtual plane at s by Hermite-interpolating every GG tower
+from the two straddling grid planes (one-plane Taylor if only one plane).
+"""
 function _interp_res(res, s::Real)
     z  = res.z_base
     P  = length(z)
@@ -320,19 +356,47 @@ function _interp_res(res, s::Real)
     bs2 = _interp_m_dict(res.bs, iL, iR, zL, zR, sq, single)
 
     return (; z_base = [sq], a = a2, b = b2, bs = bs2,
-              h = res.h, origin = res.origin,
-              r0_grid = res.r0_grid, dz_grid = res.dz_grid,
+              h = res.h, origin = res.origin, dz_grid = res.dz_grid,
               m_max = res.m_max, rms_plane = [NaN])
 end
 
+"""
+    gg_evaluate_at(res, x::Real, y::Real, s::Real) -> (B, A, dA)
+
+Evaluate at an arbitrary (x, y, s) point.
+
+The GG coefficients are stored only at the grid planes res.z_base, but the
+fit gives, at each plane, the whole derivative tower of every GG function:
+a(n,0..N), b(n,0..N), bs(0..N) with a(n,m)=dᵐaₙ/dsᵐ and N the maximum order.
+So for an s between two planes z_L, z_R we have, for each function f, the
+value and its first N s-derivatives at both ends — 2(N+1) data — which fix a
+unique two-point Hermite polynomial H(s) of degree 2N+1.  Each interpolated
+derivative is taken from the SAME polynomial, a(n,m)(s) = H_aₙ⁽ᵐ⁾(s), so the
+tower stays self-consistent: the interpolated a(n,1) is exactly d/ds of the
+interpolated a(n,0), etc.
+
+This is more accurate than independent per-order interpolation (error
+O(h^{2N+2}) for the base coefficient, using only the two straddling planes)
+and, because the orders are mutually consistent, the ∂A/∂s that gg_evaluate
+forms by bumping a(n,m)→a(n,m+1) equals the true s-derivative of the
+interpolated field.  The curl identity B = ∇×A holds at s as before.
+
+  res    : NamedTuple from gg_load_fit (loaded gg_fit.jl output file)
+  x, y   : absolute transverse coordinates (res.origin subtracted internally)
+  s      : absolute longitudinal coordinate
+
+Returns (B, A, dA) exactly as gg_evaluate.
+"""
 function gg_evaluate_at(res, x::Real, y::Real, s::Real)
     return gg_evaluate(_interp_res(res, s), 1, x, y)
 end
 
-# ---------------------------------------------------------------------------
-# Field-expansion coefficients  B_c(x,y,s) = Σ_{i,j} C_{c,i,j}(s) xⁱ yʲ.
-# Returns full _NMAX×_NMAX arrays summed over the a, b, bs parts.
-# ---------------------------------------------------------------------------
+"""
+    _field_C(res, ip::Integer) -> (Cx, Cy, Cs)
+
+Field-expansion coefficients  B_c(x,y,s) = Σ_{i,j} C_{c,i,j}(s) xⁱ yʲ.
+Returns full _NMAX×_NMAX arrays summed over the a, b, bs parts.
+"""
 function _field_C(res, ip::Integer)
     h = res.h
     aval(n, m) = (m >= 0 && haskey(res.a, (n, m))) ? res.a[(n, m)][ip] : 0.0
@@ -344,8 +408,12 @@ function _field_C(res, ip::Integer)
     return Cx, Cy, Cs
 end
 
-# Trim three coefficient arrays to the smallest (x,y) extent holding every
-# nonzero entry, so the returned matrices are indexed C[i+1, j+1] = C_{c,i,j}.
+"""
+    _trim3(Cx, Cy, Cs) -> (Cx, Cy, Cs)
+
+Trim three coefficient arrays to the smallest (x,y) extent holding every
+nonzero entry, so the returned matrices are indexed C[i+1, j+1] = C_{c,i,j}.
+"""
 function _trim3(Cx, Cy, Cs)
     pmax = 1; qmax = 1
     for K in (Cx, Cy, Cs), j in 1:_NMAX, i in 1:_NMAX
@@ -356,23 +424,27 @@ function _trim3(Cx, Cy, Cs)
     return Cx[1:pmax, 1:qmax], Cy[1:pmax, 1:qmax], Cs[1:pmax, 1:qmax]
 end
 
-# ---------------------------------------------------------------------------
-# C coefficients at a grid plane.
-#
-#   res : NamedTuple from gg_load_result (or gg_fit.jl's `result`)
-#   ip  : 1-based plane index into res.z_base
-#
-# Returns (Cx, Cy, Cs); each is a matrix with C[i+1, j+1] = C_{c,i,j}, the
-# coefficient of xⁱ yʲ in that field component at the plane.
-# ---------------------------------------------------------------------------
+"""
+    gg_coefficients(res, ip::Integer) -> (Cx, Cy, Cs)
+
+C coefficients at a grid plane.
+
+  res : NamedTuple from gg_load_fit (loaded gg_fit.jl output file)
+  ip  : 1-based plane index into res.z_base
+
+Returns (Cx, Cy, Cs); each is a matrix with C[i+1, j+1] = C_{c,i,j}, the
+coefficient of xⁱ yʲ in that field component at the plane.
+"""
 function gg_coefficients(res, ip::Integer)
     return _trim3(_field_C(res, ip)...)
 end
 
-# ---------------------------------------------------------------------------
-# C coefficients at an arbitrary s, via the same Hermite interpolation of the
-# GG quantities used by gg_evaluate_at.  Returns (Cx, Cy, Cs) as above.
-# ---------------------------------------------------------------------------
+"""
+    gg_coefficients_at(res, s::Real) -> (Cx, Cy, Cs)
+
+C coefficients at an arbitrary s, via the same Hermite interpolation of the
+GG quantities used by `gg_evaluate_at`.  Returns `(Cx, Cy, Cs)` as above.
+"""
 function gg_coefficients_at(res, s::Real)
     return _trim3(_field_C(_interp_res(res, s), 1)...)
 end

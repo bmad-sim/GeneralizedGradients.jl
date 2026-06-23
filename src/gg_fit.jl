@@ -309,16 +309,23 @@ end
 println("="^72)
 
 # ---- Save ----------------------------------------------------------------
+# Stores the fitted GG coefficients plus enough metadata to reproduce and
+# interpret the fit later.  The (large) input field table is deliberately NOT
+# stored; only its grid geometry (r0_grid, dz_grid) is kept.
 outfile = joinpath(dirname(INPUT_FILE), output_file)
 jldsave(outfile;
-        z_base    = result.z_base,
-        a         = result.res_a,
-        b         = result.res_b,
-        bs        = result.res_bs,
-        rms_plane = result.rms_plane,
-        m_max     = result.m_max,
-        h         = h,
-        origin    = origin,
-        r0_grid   = r0,
-        dz_grid   = dr[3])
+        z_base             = result.z_base,
+        a                  = result.res_a,
+        b                  = result.res_b,
+        bs                 = result.res_bs,
+        rms_plane          = result.rms_plane,
+        m_max              = result.m_max,
+        h                  = h,
+        origin             = origin,
+        dz_grid            = dr[3],
+        # Fit-control parameters, retained for later reference / reproducibility.
+        n_planes_add       = n_planes_add,
+        core_weight        = core_weight,
+        outer_plane_weight = outer_plane_weight,
+        input_file         = INPUT_FILE)
 println("Results written to ", outfile)

@@ -49,7 +49,9 @@ fundamental requirement. In fact, it may be advantageous to have unequal spacing
 the field of a magnet body is fairly uniform, so that a coarse spacing is adequate, but the fringe
 regions need a fine spacing.
 
-## gg_evaluate_at(res, x::Real, y::Real, s::Real)
+# Functions
+
+## gg_evaluate_at(res, x::Real, y::Real, s::Real) ->
 
 Function in `src/gg_eval.jl`.
 Function to evaluate the field, vector potential, and vector potential derivative matrix for a

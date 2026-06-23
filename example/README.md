@@ -29,7 +29,7 @@ julia> field = load("wsnk_fieldmap_reduced.jld2")
 
 ## Create a GG fit file.
 
-Fitting parameters are in:
+Fitting parameters for this example are in:
 ```
 example/fit_params.jl
 ```
@@ -37,14 +37,34 @@ Fit:
 ```
 julia ../src/gg_fit.jl fit_params.jl
 ```
-
-Read in fit parameters:
+The data file produced is `fit_params.jl`. This file will have the following parameters:
 ```
-julia> using JLD2, OffsetArrays
-julia> fit = load("gg_fit_result.jld2")
+Dict{String, Any} with 14 entries:
+  "outer_plane_weight" => 1                                          # Fit input parameter
+  "rms_plane"          => [4.17469e-6, 6.421e-6,  …                  # Per plaine fit RMS  
+  "b"                  => Dict((1, 2)=>[-0.00317784, -0.00341029, …  # b function fit values
+  "m_max"              => 2                                          # max order
+  "input_file"         => "/Users/dcs16/.julia/dev/GeneralizedGradients/example/fit_params.jl"
+  "a"                  => Dict((1, 2)=>[-0.0046122, -0.00615161, …   # a function fit values
+  "h"                  => 0                                          # Curvilinear curvature
+  "core_weight"        => 1                                          # Fit input parameter
+  "bs"                 => Dict(0=>[-2.23633e-7, -2.31509e-7, …       # bs function fit values
+  "dz_grid"            => 0.005                                      # Fit values plane spacing
+  "origin"             => [-0.0, 0.0]                                # Fit (x, y) origin
+  "n_planes_add"       => 1                                          # Fit input parameter.
+  "z_base"             => [0.0, 0.005, ...]                          # Fit plane values.
+```
+
+## Read in fit parameters.
+
+The fit parameters are stored in a Dict with string keys. For faster evaluation, these parameters
+are transfered to a Struct. This struct has the same components as the Dict (see above).
+```
+julia> include("../src/gg_eval.jl")
+julia> fit = gg_load_fit("gg_fit_result.jld2");
+julia> fit.dz_grid              # Returns 0.005
 ```
 
 gg function values at a given plane:
 ```
-julia> include("../src/gg_eval.jl")
 julia> gg_coefficients_at(fit, 0.0)

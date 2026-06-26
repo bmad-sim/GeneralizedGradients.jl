@@ -49,14 +49,14 @@ Example parameter file is at "example/fit_params.jl".
 
 ### Example input file
 
-using JLD2, OffsetArrays
+using GeneralizedGradients
 
-field = load("wsnk_field.jld2")     # Field table dict.
+field = read_field_grid("wsnk_field.h5")   # Field table dict (HDF5).
 origin = [-0.001, 0.0]      # (x, y) origin about which the generalized gradients coefs are computed
 n_planes_add = 1            # Number of z-planes added.
 core_weight = 1             # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
 outer_plane_weight = 1      # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).
-output_file = "gg_fit_result.jld2"
+output_file = "gg_fit_result.h5"
 
 ### origin = [x0, y0]
 
@@ -99,12 +99,12 @@ A point field["pt"][ix, iy, iz] has a (x, y, z) position of r0_grid + dr_grid * 
 Note: It may be that field["pt"] is not indexed from 1.
 
 Note: To construct a field file to be read in use following:
-  using JLD2, OffsetArrays
-  save("this_file.jld2", Dict("r0_grid" => r0_grid, "dr_grid" =>  dr_grid, "pt" => pt))
-This assumes that `r0_grid`, `dr_grid`, and `pt` have been set.
+  using GeneralizedGradients
+  write_field_grid("this_file.h5"; r0_grid = r0_grid, dr_grid = dr_grid, pt = pt, g_ref = g_ref)
+This assumes that `r0_grid`, `dr_grid`, `pt`, and `g_ref` have been set.
 """ gg_fit
 
-using JLD2, OffsetArrays, LinearAlgebra, Printf
+using OffsetArrays, LinearAlgebra, Printf, GeneralizedGradients
 
 # ---------------------------------------------------------------------------
 # Load input parameters and the GG coefficient table
@@ -314,7 +314,7 @@ println("="^72)
 # interpret the fit later.  The (large) input field table is deliberately NOT
 # stored; only its grid geometry (r0_grid, dz_grid) is kept.
 outfile = joinpath(dirname(INPUT_FILE), output_file)
-jldsave(outfile;
+gg_save_fit(outfile;
         z_base             = result.z_base,
         a                  = result.res_a,
         b                  = result.res_b,

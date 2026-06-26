@@ -8,9 +8,9 @@ Convert generalized-gradient (GG) coefficients produced by `gg_fit.jl` into Bmad
 
 ## Usage
 
-  julia programs/gg_to_bmad.jl <gg_fit_result.jld2> [output_base] [cutoff]
+  julia programs/gg_to_bmad.jl <gg_fit_result.h5> [output_base] [cutoff]
 
-  <gg_fit_result.jld2>  Input GG-fit file (output of gg_fit.jl).
+  <gg_fit_result.h5>  Input GG-fit file (output of gg_fit.jl).
   [output_base]         Base name for the output files. Default: input name
                         without extension. Two files are written:
                           <output_base>.bmad      -- the lattice element
@@ -70,7 +70,7 @@ expansion axis (`origin`). For a curved reference (g_ref ≠ 0) the element is a
 `sbend` with `g = g_ref` and `curved_ref_frame = T`; otherwise it is an `em_field`.
 """ gg_to_bmad
 
-using JLD2, Printf
+using Printf
 using GeneralizedGradients: gg_load_fit
 
 # ---------------------------------------------------------------------------
@@ -280,7 +280,7 @@ end
 # ---------------------------------------------------------------------------
 
 function main(args)
-    isempty(args) && error("Usage: julia gg_to_bmad.jl <gg_fit_result.jld2> [output_base] [cutoff]")
+    isempty(args) && error("Usage: julia gg_to_bmad.jl <gg_fit_result.h5> [output_base] [cutoff]")
     input = args[1]
     output_base = length(args) >= 2 ? args[2] :
                   joinpath(dirname(input), first(splitext(basename(input))))

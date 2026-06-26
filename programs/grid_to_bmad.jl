@@ -8,9 +8,9 @@ Bmad lattice element with the field grid attached.
 
 ## Usage
 
-  julia programs/grid_to_bmad.jl <field_grid.jld2> [output_base] [g_ref] [--hdf5]
+  julia programs/grid_to_bmad.jl <field_grid.h5> [output_base] [g_ref] [--hdf5]
 
-  <field_grid.jld2>  Input field-grid file (see "Input field grid" below).
+  <field_grid.h5>    Input field-grid file (HDF5; see "Input field grid" below).
   [output_base]      Base name for the output files. Default: input name without
                      extension. Two files are written:
                        <output_base>.bmad        -- the lattice element
@@ -29,8 +29,8 @@ The program may also be `include`d to use `read_field_grid` and
 
 ## Input field grid
 
-The input is a JLD2 file holding a field-grid Dict with the same layout used by
-`gg_fit.jl` (curvilinear (x, y, z) coordinates):
+The input is an HDF5 field-grid file (see `read_field_grid`) holding the same
+data used by `gg_fit.jl` (curvilinear (x, y, z) coordinates):
 
   field["r0_grid"]         Grid origin, 3-vector  (x0, y0, z0)        [m]
   field["dr_grid"]         Grid spacing, 3-vector (dx, dy, dz)        [m]
@@ -57,31 +57,10 @@ field grid is expressed in the bend's curvilinear frame, so `curved_ref_frame = 
 is set. For a straight reference curve (g_ref == 0) the element is an `em_field`.
 """ grid_to_bmad
 
-using JLD2, OffsetArrays, Printf
+using OffsetArrays, Printf, GeneralizedGradients
 
-# HDF5 grid_field reading/writing lives in the package source.
-include(joinpath(@__DIR__, "..", "src", "hdf5_grid_field.jl"))
-
-# ---------------------------------------------------------------------------
-# Read a field grid
-# ---------------------------------------------------------------------------
-
-"""
-    read_field_grid(path) -> Dict
-
-Load a field-grid file and sanity check it. Returns the loaded Dict with keys
-"r0_grid", "dr_grid", "pt", and (optionally) "g_ref".
-"""
-function read_field_grid(path::AbstractString)
-    field = load(path)
-    for key in ("r0_grid", "dr_grid", "pt")
-        haskey(field, key) || error("Field grid file is missing the \"$key\" entry: $path")
-    end
-    length(field["r0_grid"]) == 3 || error("\"r0_grid\" must be a 3-vector.")
-    length(field["dr_grid"]) == 3 || error("\"dr_grid\" must be a 3-vector.")
-    ndims(field["pt"]) == 3 || error("\"pt\" must be a 3-dimensional array (indexed by ix, iy, iz).")
-    return field
-end
+# `read_field_grid` (HDF5 field-grid reader) and `write_grid_field_hdf5` come
+# from the GeneralizedGradients package.
 
 # ---------------------------------------------------------------------------
 # Write the Bmad grid_field
@@ -203,7 +182,7 @@ end
 function main(args)
     hdf5 = "--hdf5" in args
     args = filter(!startswith("--"), args)
-    isempty(args) && error("Usage: julia grid_to_bmad.jl <field_grid.jld2> [output_base] [g_ref] [--hdf5]")
+    isempty(args) && error("Usage: julia grid_to_bmad.jl <field_grid.h5> [output_base] [g_ref] [--hdf5]")
     input = args[1]
     output_base = length(args) >= 2 ? args[2] :
                   joinpath(dirname(input), first(splitext(basename(input))))

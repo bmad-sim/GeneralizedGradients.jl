@@ -30,8 +30,6 @@
 
 #---------------------------------------------------------------------------------------------------
 
-using JLD2
-
 const _TABLE_FILE = joinpath(@__DIR__, "..", "tables", "gg_coef_table.jl")
 include(_TABLE_FILE)   # Bx_a … Bs_bs (field) and Ax_a … As_bs (vector potential)
 
@@ -41,25 +39,7 @@ const _NMAX = 20
 
 _newK() = zeros(Float64, _NMAX, _NMAX)
 
-#---------------------------------------------------------------------------------------------------
-
-"""
-    gg_load_fit(path::AbstractString) -> NamedTuple
-
-Load a `gg_fit.jl` result file into a NamedTuple.
-"""
-function gg_load_fit(path::AbstractString)
-    d = load(path)
-    return (; z_base   = d["z_base"],
-              a        = d["a"],   b  = d["b"],  bs = d["bs"],
-              g_ref        = d["g_ref"],   origin = d["origin"], dz_grid = d["dz_grid"],
-              m_max    = d["m_max"],   rms_plane = d["rms_plane"],
-              # Fit-control metadata (absent in older files → default values).
-              n_planes_add       = get(d, "n_planes_add", missing),
-              core_weight        = get(d, "core_weight", missing),
-              outer_plane_weight = get(d, "outer_plane_weight", missing),
-              input_file         = get(d, "input_file", missing))
-end
+# gg_load_fit / gg_save_fit live in field_io.jl (HDF5 storage).
 
 #---------------------------------------------------------------------------------------------------
 # Coefficient-array builders.  K[p+1,q+1] = coefficient of xᵖ yᵠ.

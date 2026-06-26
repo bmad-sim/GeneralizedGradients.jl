@@ -1,8 +1,8 @@
 using GeneralizedGradients
 using Test
 
-# Self-contained test fixture (a copy of example/gg_fit_result.jld2).
-const EXAMPLE = joinpath(@__DIR__, "data", "gg_fit_result.jld2")
+# Self-contained test fixture (HDF5 gg_fit result).
+const EXAMPLE = joinpath(@__DIR__, "data", "gg_fit_result.h5")
 
 # Frenet–Serret curl of the vector potential.  Given A and its Jacobian
 # dA[i,j] = ∂A_i/∂u_j with u = (x, y, s), reconstruct B; this must equal the

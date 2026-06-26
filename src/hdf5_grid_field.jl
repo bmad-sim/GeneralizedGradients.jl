@@ -13,8 +13,6 @@
 # first (overriding axisLabels).  The reader here honors it the same way.
 # ---------------------------------------------------------------------------
 
-using HDF5, Dates, OffsetArrays
-
 # openPMD complex field samples are a compound type with real ("r") and
 # imaginary ("i") double members -- identical to Bmad's pmd_init_compound_complex.
 struct ComplexPMD
@@ -80,7 +78,7 @@ function write_grid_field_hdf5(path, pt, lb, gf_r0, dr, g_ref, field_scale)
         a["gridLowerBound"]      = Int32[ix_lo, iy_lo, iz_lo]
         a["gridSize"]            = Int32[nx, ny, nz]
         g_ref == 0 ? a["gridCurvatureRadius"] = [0.0] :  a["gridCurvatureRadius"] = Float64[1/g_ref]
-        e
+        
         b = create_group(g1, "magneticField")
         for (i, name) in enumerate(("x", "y", "z"))
             b[name] = comp(i)
@@ -132,7 +130,7 @@ Read a Bmad/openPMD `grid_field` HDF5 file (as written by
   geometry          "rectangular" (only xyz is supported).
   field_type        :magnetic or :electric.
   ele_anchor_pt     "beginning" / "center" / "end".
-  curved_ref_frame  Bool (gridCurvatureRadius != 0).
+  g_ref             Real. Curvilinear coordinates bending strength = 1/bend_radius
   field_scale       Real.
   r0                gridOriginOffset, 3-vector.
   dr                gridSpacing, 3-vector.
@@ -181,7 +179,8 @@ function read_grid_field_hdf5(path::AbstractString; index::Integer = 1)
                            for a in 1:nx, b in 1:ny, c in 1:nz ],
                          lb[1]:lb[1]+nx-1, lb[2]:lb[2]+ny-1, lb[3]:lb[3]+nz-1)
 
+        rho == 0 ? g_ref = 0.0 : g_ref = 1/rho
         return (; geometry, field_type = ftype, ele_anchor_pt = anchor,
-                  curved_ref_frame = rho != 0, field_scale, r0, dr, lb, pt)
+                  g_ref, field_scale, r0, dr, lb, pt)
     end
 end

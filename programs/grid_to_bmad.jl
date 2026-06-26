@@ -57,10 +57,7 @@ field grid is expressed in the bend's curvilinear frame, so `curved_ref_frame = 
 is set. For a straight reference curve (g_ref == 0) the element is an `em_field`.
 """ grid_to_bmad
 
-using JLD2, OffsetArrays, Printf
-
-# HDF5 grid_field reading/writing lives in the package source.
-include(joinpath(@__DIR__, "..", "src", "hdf5_grid_field.jl"))
+using JLD2, OffsetArrays, Printf, generalized_gradients
 
 # ---------------------------------------------------------------------------
 # Read a field grid

@@ -70,7 +70,7 @@ expansion axis (`origin`). For a curved reference (g_ref ≠ 0) the element is a
 `sbend` with `g = g_ref` and `curved_ref_frame = T`; otherwise it is an `em_field`.
 """ gg_to_bmad
 
-using JLD2, Printf
+using JLD2
 using GeneralizedGradients: gg_load_fit
 
 # ---------------------------------------------------------------------------

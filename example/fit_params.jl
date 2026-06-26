@@ -7,6 +7,7 @@ using OffsetArrays
 # When the field grid is loaded, the following is defined:
 #   field["r0_grid"]           Grid origin 3-vector
 #   field["dr_grid"]           Grid spacing 3-vector
+#   field["g_ref"]             Curvilinear coordinate system bending strength = 1 / bending_radius.
 #   field["pt"][ix, iy, iz]    Field Grid points [Bx, By, Bz]
 # A point field["pt"][ix, iy, iz] has a (x, y, z) position of r0_grid + dr_grid * [ix, iy, iz]
 # Note: It may be that field["pt"] is not indexed from 1.
@@ -17,7 +18,6 @@ field = load(grid_file)
 #---------------------------------------------------------------------------------------------------
 # Other parameters
 
-h = 0                       # Bending strength
 origin = [-0.0, 0.0]      # (x, y) origin about which the generalized gradients coefs are computed
 n_planes_add = 1            # Number of z-planes added.
 core_weight = 1             # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.

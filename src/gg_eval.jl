@@ -19,7 +19,7 @@
 # with a(n,m)=dᵐa_n/dsᵐ, b(n,m)=dᵐb_n/dsᵐ, bs(m)=dᵐ⁺¹a_0/dsᵐ⁺¹ = dᵐb_s/dsᵐ.
 # Here c ∈ {x,y,s} is the component; Bc_a denotes the table Bx_a/By_a/Bs_a (and
 # likewise Bc_b, Bc_bs and the potential tables Ac_a, Ac_b, Ac_bs); and the
-# coefficient sum CS(T, n,m; x,y) = Σ coeff·hᵏ·xᵖ·yᵠ runs over the entries
+# coefficient sum CS(T, n,m; x,y) = Σ coeff·g_refᵏ·xᵖ·yᵠ runs over the entries
 # (coeff,p,q,k) stored under key (n,m) of table T.  The A tables (Ax_a, …,
 # As_bs) are precomputed in tables/gg_coef_table.jl from the α/β/γ construction
 # of papers/vector-potential and satisfy B = ∇×A exactly.
@@ -52,7 +52,7 @@ function gg_load_fit(path::AbstractString)
     d = load(path)
     return (; z_base   = d["z_base"],
               a        = d["a"],   b  = d["b"],  bs = d["bs"],
-              h        = d["h"],   origin = d["origin"], dz_grid = d["dz_grid"],
+              g_ref        = d["g_ref"],   origin = d["origin"], dz_grid = d["dz_grid"],
               m_max    = d["m_max"],   rms_plane = d["rms_plane"],
               # Fit-control metadata (absent in older files → default values).
               n_planes_add       = get(d, "n_planes_add", missing),
@@ -65,18 +65,18 @@ end
 # Coefficient-array builders.  K[p+1,q+1] = coefficient of xᵖ yᵠ.
 
 """
-    _accum(tdict, valfun, h) -> K
+    _accum(tdict, valfun, g_ref) -> K
 
 Coefficient-array builder.  `K[p+1,q+1]` = coefficient of xᵖ yᵠ.
 `valfun(key)` returns the GG function value multiplying that table entry.
 """
-function _accum(tdict, valfun, h)
+function _accum(tdict, valfun, g_ref)
     K = _newK()
     for (key, terms) in tdict
         v = valfun(key)
         v == 0.0 && continue
         for (c, p, q, k) in terms
-            K[p+1, q+1] += float(c) * (k == 0 ? 1.0 : float(h)^k) * v
+            K[p+1, q+1] += float(c) * (k == 0 ? 1.0 : float(g_ref)^k) * v
         end
     end
     return K
@@ -85,15 +85,15 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    _comp_array(Ta, Tb, Tbs, aval, bval, bsval, h) -> K
+    _comp_array(Ta, Tb, Tbs, aval, bval, bsval, g_ref) -> K
 
 Combined coefficient array of a component: sum of its a, b and bs parts.
 `Ta`/`Tb` are keyed by (n,m) and `Tbs` by m.
 """
-function _comp_array(Ta, Tb, Tbs, aval, bval, bsval, h)
-    return _accum(Ta, k -> aval(k...), h) .+
-           _accum(Tb, k -> bval(k...), h) .+
-           _accum(Tbs, m -> bsval(m), h)
+function _comp_array(Ta, Tb, Tbs, aval, bval, bsval, g_ref)
+    return _accum(Ta, k -> aval(k...), g_ref) .+
+           _accum(Tb, k -> bval(k...), g_ref) .+
+           _accum(Tbs, m -> bsval(m), g_ref)
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -138,7 +138,7 @@ Returns (B, A, dA) where
        and (u_1,u_2,u_3)=(x,y,s).
 """
 function field_and_potential_evaluate(gg_fit, ip::Integer, x::Real, y::Real)
-    h = gg_fit.h
+    g_ref = gg_fit.g_ref
     # Shift absolute coordinates onto the GG expansion axis.
     x = float(x) - gg_fit.origin[1]
     y = float(y) - gg_fit.origin[2]
@@ -154,19 +154,19 @@ function field_and_potential_evaluate(gg_fit, ip::Integer, x::Real, y::Real)
     bsvalp(m)   = bsval(m + 1)
 
     # --- field ---
-    Bx = _polyval(_comp_array(Bx_a, Bx_b, Bx_bs, aval, bval, bsval, h), x, y)[1]
-    By = _polyval(_comp_array(By_a, By_b, By_bs, aval, bval, bsval, h), x, y)[1]
-    Bs = _polyval(_comp_array(Bs_a, Bs_b, Bs_bs, aval, bval, bsval, h), x, y)[1]
+    Bx = _polyval(_comp_array(Bx_a, Bx_b, Bx_bs, aval, bval, bsval, g_ref), x, y)[1]
+    By = _polyval(_comp_array(By_a, By_b, By_bs, aval, bval, bsval, g_ref), x, y)[1]
+    Bs = _polyval(_comp_array(Bs_a, Bs_b, Bs_bs, aval, bval, bsval, g_ref), x, y)[1]
 
     # --- vector potential: value and (x,y) partials straight from the tables ---
-    Axv, Axx, Axy = _polyval(_comp_array(Ax_a, Ax_b, Ax_bs, aval, bval, bsval, h), x, y)
-    Ayv, Ayx, Ayy = _polyval(_comp_array(Ay_a, Ay_b, Ay_bs, aval, bval, bsval, h), x, y)
-    Asv, Asx, Asy = _polyval(_comp_array(As_a, As_b, As_bs, aval, bval, bsval, h), x, y)
+    Axv, Axx, Axy = _polyval(_comp_array(Ax_a, Ax_b, Ax_bs, aval, bval, bsval, g_ref), x, y)
+    Ayv, Ayx, Ayy = _polyval(_comp_array(Ay_a, Ay_b, Ay_bs, aval, bval, bsval, g_ref), x, y)
+    Asv, Asx, Asy = _polyval(_comp_array(As_a, As_b, As_bs, aval, bval, bsval, g_ref), x, y)
 
     # ∂A/∂s: same tables evaluated with bumped GG derivative orders.
-    dAxv = _polyval(_comp_array(Ax_a, Ax_b, Ax_bs, avalp, bvalp, bsvalp, h), x, y)[1]
-    dAyv = _polyval(_comp_array(Ay_a, Ay_b, Ay_bs, avalp, bvalp, bsvalp, h), x, y)[1]
-    dAsv = _polyval(_comp_array(As_a, As_b, As_bs, avalp, bvalp, bsvalp, h), x, y)[1]
+    dAxv = _polyval(_comp_array(Ax_a, Ax_b, Ax_bs, avalp, bvalp, bsvalp, g_ref), x, y)[1]
+    dAyv = _polyval(_comp_array(Ay_a, Ay_b, Ay_bs, avalp, bvalp, bsvalp, g_ref), x, y)[1]
+    dAsv = _polyval(_comp_array(As_a, As_b, As_bs, avalp, bvalp, bsvalp, g_ref), x, y)[1]
 
     B  = [Bx, By, Bs]
     A  = [Axv, Ayv, Asv]
@@ -387,7 +387,7 @@ function _interp_gg_fit(gg_fit, s::Real)
     bs2 = _interp_m_dict(gg_fit.bs, iL, iR, zL, zR, sq, single)
 
     return (; z_base = [sq], a = a2, b = b2, bs = bs2,
-              h = gg_fit.h, origin = gg_fit.origin, dz_grid = gg_fit.dz_grid,
+              g_ref = gg_fit.g_ref, origin = gg_fit.origin, dz_grid = gg_fit.dz_grid,
               m_max = gg_fit.m_max, rms_plane = [NaN])
 end
 
@@ -432,13 +432,13 @@ Field-expansion coefficients  B_c(x,y,s) = Σ_{i,j} CB_{c,i,j}(s) xⁱ yʲ.
 Returns full _NMAX×_NMAX arrays summed over the a, b, bs parts.
 """
 function _field_CB(gg_fit, ip::Integer)
-    h = gg_fit.h
+    g_ref = gg_fit.g_ref
     aval(n, m) = (m >= 0 && haskey(gg_fit.a, (n, m))) ? gg_fit.a[(n, m)][ip] : 0.0
     bval(n, m) = (m >= 0 && haskey(gg_fit.b, (n, m))) ? gg_fit.b[(n, m)][ip] : 0.0
     bsval(m)   = (m >= 0 && haskey(gg_fit.bs, m))     ? gg_fit.bs[m][ip]     : 0.0
-    CBx = _accum(Bx_a, k -> aval(k...), h) .+ _accum(Bx_b, k -> bval(k...), h) .+ _accum(Bx_bs, m -> bsval(m), h)
-    CBy = _accum(By_a, k -> aval(k...), h) .+ _accum(By_b, k -> bval(k...), h) .+ _accum(By_bs, m -> bsval(m), h)
-    CBs = _accum(Bs_a, k -> aval(k...), h) .+ _accum(Bs_b, k -> bval(k...), h) .+ _accum(Bs_bs, m -> bsval(m), h)
+    CBx = _accum(Bx_a, k -> aval(k...), g_ref) .+ _accum(Bx_b, k -> bval(k...), g_ref) .+ _accum(Bx_bs, m -> bsval(m), g_ref)
+    CBy = _accum(By_a, k -> aval(k...), g_ref) .+ _accum(By_b, k -> bval(k...), g_ref) .+ _accum(By_bs, m -> bsval(m), g_ref)
+    CBs = _accum(Bs_a, k -> aval(k...), g_ref) .+ _accum(Bs_b, k -> bval(k...), g_ref) .+ _accum(Bs_bs, m -> bsval(m), g_ref)
     return CBx, CBy, CBs
 end
 

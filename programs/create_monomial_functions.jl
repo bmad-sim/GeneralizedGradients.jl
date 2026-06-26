@@ -3,7 +3,7 @@ using Symbolics
 # ---------------------------------------------------------------------------
 # Reproduces and extends Table 1 of Van der Schueren et al., IPAC'24):
 # Taylor expansion coefficients of B_x, B_y, B_s in x and y, up to total
-# monomial degree MAXTOT, expressed in terms of a_n(s), b_n(s), b_s(s), h
+# monomial degree MAXTOT, expressed in terms of a_n(s), b_n(s), b_s(s), g_ref
 # and their s-derivatives.
 # ---------------------------------------------------------------------------
 
@@ -21,7 +21,7 @@ for n in 0:13
     end
 end
 
-@variables h  # h is taken to be constant (independent of s)
+@variables g_ref  # g_ref is taken to be constant (independent of s)
 
 avars = [eval(Symbol("a$n")) for n in 0:13]
 bvars = [eval(Symbol("b$n")) for n in 1:13]
@@ -62,23 +62,23 @@ function dx(p::Vector{Num})
     return q
 end
 
-# multiply by (1 + h*x)
+# multiply by (1 + g_ref*x)
 function mul1phx(p::Vector{Num})
     q = Vector{Num}(undef, N)
     q[1] = p[1]
     for i in 2:N
-        q[i] = p[i] + h * p[i-1]
+        q[i] = p[i] + g_ref * p[i-1]
     end
     return q
 end
 
-# multiply by 1/(1+h*x) = sum_j (-h)^j x^j  (truncated)
+# multiply by 1/(1+g_ref*x) = sum_j (-g_ref)^j x^j  (truncated)
 function mulinv1phx(p::Vector{Num})
     q = Vector{Num}(undef, N)
     hpow = Vector{Num}(undef, N)
     hpow[1] = Num(1)
     for j in 2:N
-        hpow[j] = -h * hpow[j-1]
+        hpow[j] = -g_ref * hpow[j-1]
     end
     for i in 1:N
         acc = Num(0)
@@ -106,7 +106,7 @@ phi[1] = phi1
 for i in 0:(MAXTOT-1)
     println("computing phi[$(i+2)] ...")
     p = phi[i]
-    term1 = mul1phx(dx(dx(p))) .+ h .* dx(p)
+    term1 = mul1phx(dx(dx(p))) .+ g_ref .* dx(p)
     term2 = dsarr(mulinv1phx(dsarr(p)))
     pnew = -mulinv1phx(term1 .+ term2)
     phi[i+2] = [expand(x) for x in pnew]
@@ -131,7 +131,7 @@ TBs = Dict{Tuple{Int,Int},Num}()
 hpow_static = Vector{Num}(undef, N)
 hpow_static[1] = Num(1)
 for j in 2:N
-    hpow_static[j] = -h * hpow_static[j-1]
+    hpow_static[j] = -g_ref * hpow_static[j-1]
 end
 
 for q in 0:MAXTOT
@@ -166,7 +166,7 @@ println("coefficients computed")
 #         + (1+hx) sum [int ds gamma_{y,i,j}] x^i y^j
 #   A_y = - (1+hx) sum [int ds gamma_{x,i,j}] x^i y^j
 #   A_s =   sum 1/(j+1) (alpha+beta)_{x,i,j} x^i y^{j+1}
-#         - 1/(1+hx) sum_i beta_{y,i,0} ( x^{i+1}/(i+1) + h x^{i+2}/(i+2) )
+#         - 1/(1+hx) sum_i beta_{y,i,0} ( x^{i+1}/(i+1) + g_ref x^{i+2}/(i+2) )
 #
 # (alpha+beta)_{c} is the part of C_c not involving b_s; gamma_c is the b_s
 # part.  int ds lowers the b_s derivative order by one, which is always well
@@ -227,13 +227,13 @@ for q in 0:MAXTOT, p in 0:(MAXTOT-q)
 end
 getD(D, p, q) = (p >= 0 && q >= 0 && haskey(D, (p,q))) ? D[(p,q)] : Num(0)
 
-# Midplane-correction polynomial P(x) = sum_i beta_{y,i,0}(x^{i+1}/(i+1)+h x^{i+2}/(i+2))
+# Midplane-correction polynomial P(x) = sum_i beta_{y,i,0}(x^{i+1}/(i+1)+g_ref x^{i+2}/(i+2))
 # stored as a length-N coefficient vector (index k <-> x^{k-1}); As_corr = -P/(1+hx).
 Pvec = fill(Num(0), N)
 for i in 0:MAXTOT
     byi0 = b_part(TBy[(i,0)])
     i + 2 <= N && (Pvec[i+2] += byi0 * (1 // (i + 1)))   # x^{i+1}
-    i + 3 <= N && (Pvec[i+3] += byi0 * h * (1 // (i + 2)))   # x^{i+2}
+    i + 3 <= N && (Pvec[i+3] += byi0 * g_ref * (1 // (i + 2)))   # x^{i+2}
 end
 As_corr = (-1) .* mulinv1phx(Pvec)
 
@@ -241,11 +241,11 @@ TAx = Dict{Tuple{Int,Int},Num}()
 TAy = Dict{Tuple{Int,Int},Num}()
 TAs = Dict{Tuple{Int,Int},Num}()
 for q in 0:MAXTOT, p in 0:(MAXTOT-q)
-    ax = getD(Igy, p, q) + h * getD(Igy, p - 1, q)
+    ax = getD(Igy, p, q) + g_ref * getD(Igy, p - 1, q)
     q >= 1 && (ax += -(1 // q) * getD(TBs_ab, p, q - 1))
     TAx[(p,q)] = expand(ax)
 
-    ay = -(getD(Igx, p, q) + h * getD(Igx, p - 1, q))
+    ay = -(getD(Igx, p, q) + g_ref * getD(Igx, p - 1, q))
     TAy[(p,q)] = expand(ay)
 
     as = q == 0 ? As_corr[p+1] : (1 // q) * getD(TBx_ab, p, q - 1)
@@ -290,11 +290,11 @@ end
 
 open(joinpath(@__DIR__, "..", "tables", "monomial_functions.jl"), "w") do io
     println(io, "# Extended Table 1: Taylor expansion of the magnetic field and the")
-    println(io, "# vector potential (constant h)")
+    println(io, "# vector potential (constant g_ref)")
     println(io, "")
     println(io, "# Coefficients of the monomials x^p y^q in B_x, B_y, B_s and in the")
     println(io, "# vector potential A_x, A_y, A_s (B = curl A), for total degree")
-    println(io, "# p+q <= $MAXTOT, assuming the curvature h is constant (h' = 0).")
+    println(io, "# p+q <= $MAXTOT, assuming the curvature g_ref is constant (g_ref' = 0).")
     println(io, "# Notation: a(n,m) = d^m a_n/ds^m, b(n,m) = d^m b_n/ds^m,")
     println(io, "# bs(m) = d^m b_s/ds^m.")
     println(io, "")

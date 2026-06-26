@@ -16,7 +16,7 @@ using Symbolics
 #
 # Example: By_b[(n,m)] = [(coef, p, q, r), ...]
 # means contribution by b(n,m) is:
-#   By += coef * h^r * x^p * y^q * b(n,m)
+#   By += coef * g_ref^r * x^p * y^q * b(n,m)
 # ---------------------------------------------------------------------------
 
 const MAXTOT = parse(Int, get(ENV, "MAXTOT", "12"))
@@ -32,7 +32,7 @@ for n in 0:13
     end
 end
 
-@variables h
+@variables g_ref
 
 avars = [eval(Symbol("a$n")) for n in 0:13]   # avars[k+1] = a_k(s)
 bvars = [eval(Symbol("b$n")) for n in 1:13]   # bvars[n]   = b_n(s)
@@ -68,7 +68,7 @@ end
 function mul1phx(p::Vector{Num})
     q = Vector{Num}(undef, N)
     q[1] = p[1]
-    for i in 2:N; q[i] = p[i] + h * p[i-1]; end
+    for i in 2:N; q[i] = p[i] + g_ref * p[i-1]; end
     return q
 end
 
@@ -76,7 +76,7 @@ function mulinv1phx(p::Vector{Num})
     q = Vector{Num}(undef, N)
     hpow = Vector{Num}(undef, N)
     hpow[1] = Num(1)
-    for j in 2:N; hpow[j] = -h * hpow[j-1]; end
+    for j in 2:N; hpow[j] = -g_ref * hpow[j-1]; end
     for i in 1:N
         acc = Num(0)
         for j in 1:i; acc += hpow[j] * p[i-j+1]; end
@@ -100,7 +100,7 @@ phi[1] = phi1
 for i in 0:(MAXTOT-1)
     println("computing phi[$(i+2)] ...")
     p = phi[i]
-    term1 = mul1phx(dx(dx(p))) .+ h .* dx(p)
+    term1 = mul1phx(dx(dx(p))) .+ g_ref .* dx(p)
     term2 = dsarr(mulinv1phx(dsarr(p)))
     pnew  = -mulinv1phx(term1 .+ term2)
     phi[i+2] = [expand(x) for x in pnew]
@@ -123,7 +123,7 @@ TBs = Dict{Tuple{Int,Int},Num}()
 
 hpow_static = Vector{Num}(undef, N)
 hpow_static[1] = Num(1)
-for j in 2:N; hpow_static[j] = -h * hpow_static[j-1]; end
+for j in 2:N; hpow_static[j] = -g_ref * hpow_static[j-1]; end
 
 for q in 0:MAXTOT
     dphiq = dx(phi[q])
@@ -139,7 +139,7 @@ end
 println("field coefficients computed")
 
 # ---------------------------------------------------------------------------
-# Build inverse coefficient table (full h dependence)
+# Build inverse coefficient table (full g_ref dependence)
 # ---------------------------------------------------------------------------
 
 # Compute the m-th s-derivative of v by iterative application of Ds,
@@ -163,7 +163,7 @@ end
 #         + (1+hx) sum [int ds gamma_{y,i,j}] x^i y^j
 #   A_y = - (1+hx) sum [int ds gamma_{x,i,j}] x^i y^j
 #   A_s =   sum 1/(j+1) (alpha+beta)_{x,i,j} x^i y^{j+1}
-#         - 1/(1+hx) sum_i beta_{y,i,0} ( x^{i+1}/(i+1) + h x^{i+2}/(i+2) )
+#         - 1/(1+hx) sum_i beta_{y,i,0} ( x^{i+1}/(i+1) + g_ref x^{i+2}/(i+2) )
 # ---------------------------------------------------------------------------
 
 println("computing vector potential coefficients ...")
@@ -215,7 +215,7 @@ Pvec = fill(Num(0), N)
 for i in 0:MAXTOT
     byi0 = b_part(TBy[(i,0)])
     i + 2 <= N && (Pvec[i+2] += byi0 * (1 // (i + 1)))       # x^{i+1}
-    i + 3 <= N && (Pvec[i+3] += byi0 * h * (1 // (i + 2)))   # x^{i+2}
+    i + 3 <= N && (Pvec[i+3] += byi0 * g_ref * (1 // (i + 2)))   # x^{i+2}
 end
 As_corr = (-1) .* mulinv1phx(Pvec)
 
@@ -223,11 +223,11 @@ TAx = Dict{Tuple{Int,Int},Num}()
 TAy = Dict{Tuple{Int,Int},Num}()
 TAs = Dict{Tuple{Int,Int},Num}()
 for q in 0:MAXTOT, p in 0:(MAXTOT-q)
-    ax = getD(Igy, p, q) + h * getD(Igy, p - 1, q)
+    ax = getD(Igy, p, q) + g_ref * getD(Igy, p - 1, q)
     q >= 1 && (ax += -(1 // q) * getD(TBs_ab, p, q - 1))
     TAx[(p,q)] = expand(ax)
 
-    ay = -(getD(Igx, p, q) + h * getD(Igx, p - 1, q))
+    ay = -(getD(Igx, p, q) + g_ref * getD(Igx, p - 1, q))
     TAy[(p,q)] = expand(ay)
 
     as = q == 0 ? As_corr[p+1] : (1 // q) * getD(TBx_ab, p, q - 1)
@@ -236,10 +236,10 @@ end
 
 println("vector potential coefficients computed")
 
-Dh = Differential(h)
+Dh = Differential(g_ref)
 
 # Build the zero-substitution dictionary once: every symbolic function and
-# every s-derivative (up to MAXTOT+4) mapped to 0.  h is NOT zeroed here.
+# every s-derivative (up to MAXTOT+4) mapped to 0.  g_ref is NOT zeroed here.
 println("building zero substitution dict ...")
 all_zero = Dict{Num,Num}()
 
@@ -267,18 +267,18 @@ function to_rat(v)::Rational{Int}
     return rationalize(Int, Float64(v))
 end
 
-# Extract the full h-polynomial coefficient of sym in expr with all other
+# Extract the full g_ref-polynomial coefficient of sym in expr with all other
 # symbolic functions zeroed out.  Returns a Dict{Int,Rational{Int}} mapping
-# h-power => coefficient.  Mutates all_zero temporarily.
+# g_ref-power => coefficient.  Mutates all_zero temporarily.
 function coeff_poly_h(expr, sym, max_h_power)
     all_zero[sym] = Num(1)
-    poly = substitute(expr, all_zero)   # polynomial in h
+    poly = substitute(expr, all_zero)   # polynomial in g_ref
     all_zero[sym] = Num(0)
 
     result = Dict{Int,Rational{Int}}()
     curr   = poly
     fk     = 1   # factorial(k)
-    h0     = Dict(h => Num(0))
+    h0     = Dict(g_ref => Num(0))
     for k in 0:max_h_power
         k > 0 && (fk *= k)
         v = Symbolics.value(substitute(curr, h0))
@@ -303,7 +303,7 @@ function fmt_terms(terms)
     return "[" * join(parts, ", ") * "]"
 end
 
-# Maximum h power that can appear in any T[(p,q)] coefficient.
+# Maximum g_ref power that can appear in any T[(p,q)] coefficient.
 const MAX_H = MAXTOT + 2
 
 # ---------------------------------------------------------------------------
@@ -312,9 +312,9 @@ const MAX_H = MAXTOT + 2
 
 outfile = joinpath(@__DIR__, "..", "tables", "gg_coef_table.jl")
 open(outfile, "w") do io
-    println(io, "# Inverse field and vector-potential coefficient table (full h dependence)")
+    println(io, "# Inverse field and vector-potential coefficient table (full g_ref dependence)")
     println(io, "#")
-    println(io, "# By_b[(n,m)] = [(c, p, q, k), ...]  means  By += c * h^k * x^p * y^q * b(n,m)")
+    println(io, "# By_b[(n,m)] = [(c, p, q, k), ...]  means  By += c * g_ref^k * x^p * y^q * b(n,m)")
     println(io, "# Similarly for Bx_b, Bs_b, By_a, Bx_a, Bs_a, By_bs, Bx_bs, Bs_bs and for")
     println(io, "# the vector potential A (B = curl A):  Ax_a, Ax_b, Ax_bs, Ay_a, Ay_b,")
     println(io, "# Ay_bs, As_a, As_b, As_bs (same meaning, e.g. Ax_b[(n,m)] -> Ax += ...).")

@@ -10,7 +10,7 @@ a_n(z), b_n(z), b_s(z) and their z-derivatives, plane by plane.
 
 Run with command:
   julia src/gg_fit.jl [parameter_input_file]
-The parameter input file defines the field grid `field`, the bending strength `h`, the transverse 
+The parameter input file defines the field grid `field`, the transverse 
 `origin`, and the fit-control parameters `n_planes_add`, `core_weight`, `outer_plane_weight`. See below.
 
 Besides the input file, this function will open the file (relative to this directory)
@@ -27,7 +27,7 @@ functions and their s-derivatives:
              + Σ_{m}      CS_c,bs(m; x,y)  · bs(m)(z)
 
 for each field component c ∈ {Bx, By, Bs}, where
-  CS_c,f(n,m; x,y) = Σ (coeff · h^k · x^p · y^q)
+  CS_c,f(n,m; x,y) = Σ (coeff · g_ref^k · x^p · y^q)
 is the sum of the table entries c_f[(n,m)] = [(coeff,p,q,k), ...], and
   b(n,m) = dᵐb_n/dzᵐ,  a(n,m) = dᵐa_n/dzᵐ,  bs(m) = dᵐ⁺¹a_0/dzᵐ⁺¹.
 
@@ -52,7 +52,6 @@ Example parameter file is at "example/fit_params.jl".
 using JLD2, OffsetArrays
 
 field = load("wsnk_field.jld2")     # Field table dict.
-h = 0                       # Bending strength
 origin = [-0.001, 0.0]      # (x, y) origin about which the generalized gradients coefs are computed
 n_planes_add = 1            # Number of z-planes added.
 core_weight = 1             # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
@@ -62,7 +61,7 @@ output_file = "gg_fit_result.jld2"
 ### origin = [x0, y0]
 
 Defines the line [x0, y0, z] about which the generalized gradient coefficients are computed.
-If h is non-zero, origin must be [0, 0].
+If g_ref is non-zero, origin must be [0, 0].
 
 ### n_planes_add = Int
 
@@ -114,19 +113,19 @@ using JLD2, OffsetArrays, LinearAlgebra, Printf
 const INPUT_FILE = joinpath(pwd(), ARGS[1])
 const TABLE_FILE = joinpath(@__DIR__, "..", "tables", "gg_coef_table.jl")
 
-include(INPUT_FILE)   # defines: field, h, origin, n_planes_add, core_weight, outer_plane_weight
+include(INPUT_FILE)   # defines: field, origin, n_planes_add, core_weight, outer_plane_weight
 include(TABLE_FILE)   # defines: Bx_a By_a Bs_a  Bx_b By_b Bs_b  Bx_bs By_bs Bs_bs
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-# CB coefficient sum: Σ coeff·h^k·x^p·y^q over the table entries for one
+# CB coefficient sum: Σ coeff·g_ref^k·x^p·y^q over the table entries for one
 # (component, function) — one entry of the CB grids built in run_fit.
-function coefsum(terms, x::Float64, y::Float64, h)
+function coefsum(terms, x::Float64, y::Float64, g_ref)
     s = 0.0
     for (c, p, q, k) in terms
-        hk = k == 0 ? 1.0 : float(h)^k
+        hk = k == 0 ? 1.0 : float(g_ref)^k
         s += float(c) * hk * x^p * y^q
     end
     return s
@@ -139,7 +138,7 @@ ffact(k::Int) = k <= 1 ? 1.0 : prod(2.0:float(k))
 # Main fit routine
 # ---------------------------------------------------------------------------
 
-function run_fit(pt, r0, dr, h, origin, n_planes_add, core_weight, outer_plane_weight,
+function run_fit(pt, g_ref, r0, dr, origin, n_planes_add, core_weight, outer_plane_weight,
                  a_dicts, b_dicts, bs_dicts)
 
     npa     = n_planes_add
@@ -184,7 +183,7 @@ function run_fit(pt, r0, dr, h, origin, n_planes_add, core_weight, outer_plane_w
         for (key, terms) in d
             n, m = typ == :bs ? (0, key) : (key[1], key[2])
             m <= m_max || continue
-            grid = [coefsum(terms, xs[i], ys[j], h) for i in eachindex(xs), j in eachindex(ys)]
+            grid = [coefsum(terms, xs[i], ys[j], g_ref) for i in eachindex(xs), j in eachindex(ys)]
             CB[(comp, typ, n, m)] = grid
         end
     end
@@ -263,15 +262,16 @@ end
 # Run
 # ---------------------------------------------------------------------------
 
-pt = field["pt"]
-r0 = field["r0_grid"]
-dr = field["dr_grid"]
+pt    = field["pt"]
+r0    = field["r0_grid"]
+dr    = field["dr_grid"]
+g_ref = field["g_ref"]
 
 a_dicts  = (Bx_a, By_a, Bs_a)
 b_dicts  = (Bx_b, By_b, Bs_b)
 bs_dicts = (Bx_bs, By_bs, Bs_bs)
 
-result = run_fit(pt, r0, dr, h, origin, n_planes_add, core_weight, outer_plane_weight,
+result = run_fit(pt, g_ref, r0, dr, g_ref, origin, n_planes_add, core_weight, outer_plane_weight,
                  a_dicts, b_dicts, bs_dicts)
 
 # ---- Report --------------------------------------------------------------
@@ -279,7 +279,7 @@ println("="^72)
 println("GG fit complete")
 println("  input file        : ", INPUT_FILE)
 println("  field grid        : ", join(length.(axes(pt)), " x "), "  (ix, iy, iz)")
-println("  h                 : ", h)
+println("  g_ref             : ", g_ref)
 println("  origin (x,y)      : ", origin)
 println("  n_planes_add      : ", n_planes_add, "   (max derivative order m_max = ", result.m_max, ")")
 println("  core_weight       : ", core_weight)
@@ -321,7 +321,7 @@ jldsave(outfile;
         bs                 = result.res_bs,
         rms_plane          = result.rms_plane,
         m_max              = result.m_max,
-        h                  = h,
+        g_ref              = g_ref,
         origin             = origin,
         dz_grid            = dr[3],
         # Fit-control parameters, retained for later reference / reproducibility.

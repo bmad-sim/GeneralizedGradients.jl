@@ -6,21 +6,21 @@ const EXAMPLE = joinpath(@__DIR__, "data", "gg_fit_result.jld2")
 
 # Frenet–Serret curl of the vector potential.  Given A and its Jacobian
 # dA[i,j] = ∂A_i/∂u_j with u = (x, y, s), reconstruct B; this must equal the
-# B returned by the evaluator for ANY coefficient values (constant curvature h).
-function curl_from(A, dA, x, h)
-    g = 1 + h * x
+# B returned by the evaluator for ANY coefficient values (constant curvature g_ref).
+function curl_from(A, dA, x, g_ref)
+    g = 1 + g_ref * x
     Bx = dA[3, 2] - dA[2, 3] / g
-    By = dA[1, 3] / g - (h * A[3] + g * dA[3, 1]) / g
+    By = dA[1, 3] / g - (g_ref * A[3] + g * dA[3, 1]) / g
     Bs = dA[2, 1] - dA[1, 2]
     return [Bx, By, Bs]
 end
 
 # Build a synthetic gg_fit NamedTuple (same shape as gg_load_fit returns) so we
-# can exercise finite curvature h, which the example file (h = 0) does not.
-synth(z_base, a, b, bs, h; m_max, dz_grid) = (;
+# can exercise finite curvature g_ref, which the example file (g_ref = 0) does not.
+synth(z_base, a, b, bs, g_ref; m_max, dz_grid) = (;
     z_base = collect(float.(z_base)),
     a = a, b = b, bs = bs,
-    h = h, origin = [0.0, 0.0], dz_grid = dz_grid,
+    g_ref = g_ref, origin = [0.0, 0.0], dz_grid = dz_grid,
     m_max = m_max, rms_plane = fill(NaN, length(z_base)))
 
 const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.007, 0.0))
@@ -29,23 +29,23 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
 
     @testset "gg_load_fit" begin
         gg = gg_load_fit(EXAMPLE)
-        for k in (:z_base, :a, :b, :bs, :h, :origin, :dz_grid, :m_max, :rms_plane)
+        for k in (:z_base, :a, :b, :bs, :g_ref, :origin, :dz_grid, :m_max, :rms_plane)
             @test hasproperty(gg, k)
         end
         @test length(gg.z_base) == length(gg.rms_plane)
         @test gg.a isa Dict && gg.b isa Dict && gg.bs isa Dict
     end
 
-    @testset "curl(A) == B at grid planes (example, h=0)" begin
+    @testset "curl(A) == B at grid planes (example, g_ref=0)" begin
         gg = gg_load_fit(EXAMPLE)
         for ip in 1:length(gg.z_base), (x, y) in PTS
             B, A, dA = field_and_potential_evaluate(gg, ip, x, y)
-            Bc = curl_from(A, dA, x - gg.origin[1], gg.h)
+            Bc = curl_from(A, dA, x - gg.origin[1], gg.g_ref)
             @test maximum(abs, B .- Bc) < 1e-12
         end
     end
 
-    @testset "curl(A) == B, synthetic single plane (h=0.6)" begin
+    @testset "curl(A) == B, synthetic single plane (g_ref=0.6)" begin
         a  = Dict((1,0)=>0.7,(2,0)=>-0.4,(3,0)=>0.25,(1,1)=>0.3,(2,1)=>-0.15,(1,2)=>0.2)
         b  = Dict((1,0)=>0.5,(2,0)=>0.35,(3,0)=>-0.2,(1,1)=>0.1,(2,1)=>0.05)
         bs = Dict(0=>0.45, 1=>-0.12, 2=>0.08)
@@ -55,7 +55,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
         gg = synth([0.0], va, vb, vbs, 0.6; m_max = 2, dz_grid = 0.1)
         for (x, y) in PTS
             B, A, dA = field_and_potential_evaluate(gg, 1, x, y)
-            Bc = curl_from(A, dA, x, gg.h)
+            Bc = curl_from(A, dA, x, gg.g_ref)
             @test maximum(abs, B .- Bc) < 1e-12
         end
     end
@@ -79,10 +79,10 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
     bsmap = Dict(m => [mvec(fbs, s)[m+1] for s in zg] for m in 0:3)
     ggM = synth(zg, amap, bmap, bsmap, 0.5; m_max = 3, dz_grid = 0.05)
 
-    @testset "curl(A) == B, multi-plane (h=0.5)" begin
+    @testset "curl(A) == B, multi-plane (g_ref=0.5)" begin
         for ip in 1:length(zg), (x, y) in PTS
             B, A, dA = field_and_potential_evaluate(ggM, ip, x, y)
-            Bc = curl_from(A, dA, x, ggM.h)
+            Bc = curl_from(A, dA, x, ggM.g_ref)
             @test maximum(abs, B .- Bc) < 1e-12
         end
     end

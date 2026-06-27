@@ -1,16 +1,18 @@
 # ---------------------------------------------------------------------------
 # hdf5_grid_field.jl
 #
-# Read and write Bmad `grid_field` field maps in openPMD HDF5 format, matching
-# Bmad's hdf5_write_grid_field.f90 / hdf5_read_grid_field.f90.  Currently
-# supports `geometry = xyz` (rectangular) magnetic grids, which is what
-# grid_to_bmad.jl produces.
+# Read and write Bmad `grid_field` field maps (as a `FieldGridTable`) in openPMD
+# HDF5 format, matching Bmad's hdf5_write_grid_field.f90 / hdf5_read_grid_field.f90.
+# Currently supports `geometry = xyz` (rectangular) grids.
 #
-# openPMD/HDF5 ordering note: HDF5.jl reverses dimensions on write (column-major,
-# like Fortran), so an (nx, ny, nz) grid is written by reshaping to (nz, ny, nx)
-# to land on disk with C-dims (nx, ny, nz) -- byte-identical to Bmad's Fortran
-# writer.  Each dataset carries `gridDataOrder = "F"`, which Bmad's reader honors
-# first (overriding axisLabels).  The reader here honors it the same way.
+# openPMD/HDF5 ordering note: each field component is written as a plain 1-based
+# (nx, ny, nz) Julia array.  HDF5.jl reverses dimensions on write (column-major,
+# like Fortran), giving on-disk C-dims (nz, ny, nx) -- byte-identical to Bmad's
+# Fortran writer (H5Screate_simple_f with Fortran dims [nx,ny,nz]).  Bmad reads
+# the size via H5LTget_dataset_info_f, which reverses back to (nx,ny,nz); combined
+# with reversed `axisLabels` / `gridDataOrder = "F"` its size check and data read
+# both succeed.  On read, HDF5.jl likewise hands back a (nx,ny,nz) array == the
+# field, so no transpose is needed.
 # ---------------------------------------------------------------------------
 
 # openPMD complex field samples are a compound type with real ("r") and
@@ -20,39 +22,107 @@ struct ComplexPMD
     i::Float64
 end
 
-# openPMD SI base-unit exponents (L, M, T, I, Theta, N, J) for Tesla.
+# openPMD SI base-unit exponents (L, M, T, I, Theta, N, J) for Tesla and V/m.
 const _DIM_TESLA = [0.0, 1, -2, -1, 0, 0, 0]
+const _DIM_VPERM = [1.0, 1, -3, -1, 0, 0, 0]
+
+# Write a fixed-length (null-terminated, ASCII) string-array attribute, matching
+# Bmad's `hdf5_write_attribute_string` rank-1.  HDF5.jl writes String arrays as
+# variable-length strings by default, which Bmad's reader cannot convert into its
+# fixed `character` buffers (it aborts on `axisLabels`).
+function _write_fixed_str_array(parent, name, strs::AbstractVector{<:AbstractString})
+    n = maximum(length, strs)
+    dt = HDF5.Datatype(HDF5.API.h5t_copy(HDF5.API.H5T_C_S1))
+    HDF5.API.h5t_set_size(dt, n)
+    HDF5.API.h5t_set_strpad(dt, HDF5.API.H5T_STR_NULLTERM)
+    HDF5.API.h5t_set_cset(dt, HDF5.API.H5T_CSET_ASCII)
+    dspace = dataspace((length(strs),))
+    attr = create_attribute(parent, name, dt, dspace)
+    buf = zeros(UInt8, n * length(strs))
+    for (i, s) in enumerate(strs)
+        cu = codeunits(s)
+        copyto!(buf, (i - 1) * n + 1, cu, 1, length(cu))
+    end
+    HDF5.API.h5a_write(attr, dt, buf)
+    close(attr); close(dspace); close(dt)
+end
+
+# Map the GridAnchorPt enum <-> the openPMD `eleAnchorPt` strings.
+function _anchor_to_str(a::GridAnchorPt.T)
+    a == GridAnchorPt.Beginning && return "beginning"
+    a == GridAnchorPt.Center    && return "center"
+    return "end"
+end
+
+function _anchor_from_str(s)
+    ls = lowercase(strip(string(s)))
+    ls == "beginning" && return GridAnchorPt.Beginning
+    ls == "center"    && return GridAnchorPt.Center
+    ls == "end"       && return GridAnchorPt.End
+    error("Unrecognized eleAnchorPt: $s")
+end
+
+# Map the GridGeometry enum <-> the openPMD `gridGeometry` strings.
+_geometry_to_str(::GridGeometry.T) = "rectangular"   # only XYZ supported
+function _geometry_from_str(s)
+    s == "rectangular" && return GridGeometry.XYZ
+    error("read_grid_field_hdf5 supports only 'rectangular' (xyz) grids, got: $s")
+end
 
 # ---------------------------------------------------------------------------
 # Write
 # ---------------------------------------------------------------------------
 
+# Lay one component `c` of a (3, ix, iy, iz) OffsetArray out as a 1-based
+# (nx, ny, nz) complex array.  HDF5.jl reverses dims on write, so the dataset
+# lands on disk exactly like Bmad's own Fortran writer (H5Screate_simple_f with
+# Fortran dims [nx,ny,nz]): Bmad's reader gets data_dim = (nx,ny,nz) and, with
+# data_order "F", reads the column-major buffer back into pt[ix,iy,iz] correctly.
+function _component_dataset(field, c)
+    ax = axes(field)
+    nx, ny, nz = length(ax[2]), length(ax[3]), length(ax[4])
+    out = Array{ComplexPMD}(undef, nx, ny, nz)
+    for (a, ix) in enumerate(ax[2]), (b, iy) in enumerate(ax[3]), (k, iz) in enumerate(ax[4])
+        out[a, b, k] = ComplexPMD(real(field[c, ix, iy, iz]), imag(field[c, ix, iy, iz]))
+    end
+    return out
+end
+
+# Write one field group ("magneticField"/"electricField") from a (3,ix,iy,iz) OffsetArray.
+function _write_field_group(g1, name, field, unit_dim, unit_sym)
+    grp = create_group(g1, name)
+    for (c, axis) in enumerate(("x", "y", "z"))
+        grp[axis] = _component_dataset(field, c)
+        da = attributes(grp[axis])
+        da["gridDataOrder"] = "F"           # explicit; Bmad reader honors this first
+        da["localName"]     = axis
+        da["unitSI"]        = [1.0]
+        da["unitDimension"] = unit_dim
+        da["unitSymbol"]    = unit_sym
+    end
+end
+
 """
-    write_grid_field_hdf5(path, pt, lb, gf_r0, dr, g_ref, field_scale)
+    write_grid_field_hdf5(path, fg::FieldGridTable)
 
-Write a magnetic `grid_field` as an openPMD HDF5 file matching Bmad's
-`hdf5_write_grid_field` (geometry = xyz, field_type = magnetic).
-
-  path         Output file path (conventionally ending in ".h5").
-  pt           Field array; `pt[ix,iy,iz]` holds [Bx, By, Bz] (may be an OffsetArray).
-  lb           Grid lower-bound index triple (ix_lo, iy_lo, iz_lo).
-  gf_r0        Grid origin offset (x0, y0, z0).
-  dr           Grid spacing (dx, dy, dz).
-  g_ref            Bending strength g = 1/radius [1/m]. A non-zero `g_ref` means the
-               reference curve is an arc, so gridCurvatureRadius is set to 1/g_ref
-               (non-zero) and Bmad enables `curved_ref_frame`.
-  field_scale  Overall field scale factor.
+Write a `FieldGridTable` as an openPMD HDF5 `grid_field` file matching Bmad's
+`hdf5_write_grid_field` (geometry = xyz).  The `fg.magnetic` and/or `fg.electric`
+OffsetArrays have axes `(1:3, ix_lo:ix_hi, iy_lo:iy_hi, iz_lo:iz_hi)` (component
+first, then the grid indices); an empty array means that field type is omitted.
+`gridLowerBound` is taken from the array's index ranges (the grids are not assumed
+to start at zero) and `fg.r0` is written as `gridOriginOffset`, so a grid point
+`(ix,iy,iz)` is at `dr .* (ix,iy,iz) + r0` relative to the anchor.  A non-zero
+`fg.g_ref` sets `gridCurvatureRadius = 1/g_ref` so Bmad enables `curved_ref_frame`.
 """
-function write_grid_field_hdf5(path, pt, lb, gf_r0, dr, g_ref, field_scale)
-    ix_lo, iy_lo, iz_lo = lb
-    nx, ny, nz = length.(axes(pt))
-
-    # Build a 1-based (nx, ny, nz) complex array per component, then reshape to
-    # reversed dims so HDF5.jl (column-major, dims-reversing) lays the dataset on
-    # disk with C-dims (nx, ny, nz) and column-major data.
-    comp(c) = reshape([ComplexPMD(pt[ix, iy, iz][c], 0.0)
-                       for ix in ix_lo:ix_lo+nx-1, iy in iy_lo:iy_lo+ny-1,
-                           iz in iz_lo:iz_lo+nz-1], (nz, ny, nx))
+function write_grid_field_hdf5(path::AbstractString, fg::FieldGridTable)
+    has_mag = !isempty(fg.magnetic)
+    has_elec = !isempty(fg.electric)
+    (has_mag || has_elec) ||
+        error("FieldGridTable has no magnetic or electric field data.")
+    ref = has_mag ? fg.magnetic : fg.electric
+    ax = axes(ref)
+    lb = (first(ax[2]), first(ax[3]), first(ax[4]))
+    nx, ny, nz = length(ax[2]), length(ax[3]), length(ax[4])
 
     h5open(path, "w") do f
         attributes(f)["dataType"]          = "Bmad:grid_field"
@@ -66,29 +136,26 @@ function write_grid_field_hdf5(path, pt, lb, gf_r0, dr, g_ref, field_scale)
         g = create_group(f, "ExternalFieldMesh")
         g1 = create_group(g, "1")
         a = attributes(g1)
-        a["gridGeometry"]        = "rectangular"
-        a["fieldScale"]          = [Float64(field_scale)]
-        a["componentFieldScale"] = [Float64(field_scale)]
-        a["axisLabels"]          = ["z", "y", "x"]          # reversed -> data_order F
-        a["eleAnchorPt"]         = "beginning"
-        a["gridOriginOffset"]    = Float64[gf_r0...]
-        a["gridSpacing"]         = Float64[dr...]
+        a["gridGeometry"]        = _geometry_to_str(fg.geometry)
+        a["fieldScale"]          = [Float64(fg.scale)]
+        a["componentFieldScale"] = [Float64(fg.scale)]
+        # Fixed-length (not variable-length) so Bmad can read it; reversed -> data_order F.
+        _write_fixed_str_array(g1, "axisLabels", ["z", "y", "x"])
+        a["eleAnchorPt"]         = _anchor_to_str(fg.anchor_pt)
+        a["gridOriginOffset"]    = Float64[fg.r0...]
+        a["gridSpacing"]         = Float64[fg.dr...]
         a["harmonic"]            = Int32[0]
         a["interpolationOrder"]  = Int32[1]
-        a["gridLowerBound"]      = Int32[ix_lo, iy_lo, iz_lo]
+        a["gridLowerBound"]      = Int32[lb...]
         a["gridSize"]            = Int32[nx, ny, nz]
-        g_ref == 0 ? a["gridCurvatureRadius"] = [0.0] :  a["gridCurvatureRadius"] = Float64[1/g_ref]
-        
-        b = create_group(g1, "magneticField")
-        for (i, name) in enumerate(("x", "y", "z"))
-            b[name] = comp(i)
-            da = attributes(b[name])
-            da["gridDataOrder"] = "F"           # explicit; Bmad reader honors this first
-            da["localName"]     = name
-            da["unitSI"]        = [1.0]
-            da["unitDimension"] = _DIM_TESLA
-            da["unitSymbol"]    = "Tesla"
+        a["gridCurvatureRadius"] = fg.g_ref == 0 ? [0.0] : Float64[1 / fg.g_ref]
+        if fg.RF_frequency != 0
+            a["fundamentalFrequency"] = [Float64(fg.RF_frequency)]
+            a["RFphase"]              = [Float64(fg.RF_phase)]
         end
+
+        has_mag  && _write_field_group(g1, "magneticField", fg.magnetic, _DIM_TESLA, "Tesla")
+        has_elec && _write_field_group(g1, "electricField", fg.electric, _DIM_VPERM, "V/m")
     end
     return path
 end
@@ -100,44 +167,39 @@ end
 # Read an attribute if present, else return `default`.
 _attr(obj, name, default) = haskey(attributes(obj), name) ? read_attribute(obj, name) : default
 
-# Map a stored component dataset to a 1-based (nx, ny, nz) real array, applying
-# the data order the same way Bmad does.  `R` is the array HDF5.jl returns (its
-# column-major flat == the on-disk byte order).
-function _order_component(R, nx, ny, nz, order)
-    flat = real.(vec(R))
-    if uppercase(string(order)) == "C"
-        return permutedims(reshape(flat, (nz, ny, nx)), (3, 2, 1))
-    else                                   # "F" (Bmad default) and anything else
-        return reshape(flat, (nx, ny, nz))
+# Read a field group ("magneticField"/"electricField") into a (3, ix, iy, iz)
+# OffsetArray indexed from `lb`, or return `nothing` if the group is absent.
+#
+# In a Bmad grid_field file each component dataset is written Fortran-order
+# (logical dims [nx,ny,nz]; on-disk C-dims (nz,ny,nx)).  HDF5.jl reverses dims on
+# read, so it hands back a 1-based (nx, ny, nz) array that is already the field --
+# no transpose needed.
+function _read_field_group(g1, name, lb, nx, ny, nz)
+    haskey(g1, name) || return nothing
+    grp = g1[name]
+    dense = zeros(Float64, 3, nx, ny, nz)   # 1-based; filled then wrapped
+    for (c, axis) in enumerate(("x", "y", "z"))
+        haskey(grp, axis) || continue       # missing component => zero field
+        comp = read(grp[axis])
+        size(comp) == (nx, ny, nz) ||
+            error("grid_field dataset $name/$axis has size $(size(comp)), expected ($nx, $ny, $nz) " *
+                  "-- not a Bmad-format (Fortran-order) grid_field file.")
+        dense[c, :, :, :] = real.(comp)
     end
-end
-
-# Decide the data order for a dataset: explicit `gridDataOrder` wins, else infer
-# from `axisLabels` (reversed labels => "F"), else default "F".
-function _data_order(dset, axis_labels)
-    haskey(attributes(dset), "gridDataOrder") && return read_attribute(dset, "gridDataOrder")
-    axis_labels !== nothing && axis_labels == ["z", "y", "x"] && return "F"
-    axis_labels !== nothing && axis_labels == ["x", "y", "z"] && return "C"
-    return "F"
+    return OffsetArray(dense, 1:3, lb[1]:lb[1]+nx-1, lb[2]:lb[2]+ny-1, lb[3]:lb[3]+nz-1)
 end
 
 """
-    read_grid_field_hdf5(path; index = 1) -> NamedTuple
+    read_grid_field_hdf5(path; index = 1) -> FieldGridTable
 
 Read a Bmad/openPMD `grid_field` HDF5 file (as written by
-`write_grid_field_hdf5`, or by Bmad itself) and return its contents:
-
-  geometry          "rectangular" (only xyz is supported).
-  field_type        :magnetic or :electric.
-  ele_anchor_pt     "beginning" / "center" / "end".
-  g_ref             Real. Curvilinear coordinates bending strength = 1/bend_radius
-  field_scale       Real.
-  r0                gridOriginOffset, 3-vector.
-  dr                gridSpacing, 3-vector.
-  lb                gridLowerBound, integer 3-vector.
-  pt                OffsetArray; `pt[ix,iy,iz]` = [Fx, Fy, Fz], indexed from `lb`.
-
-`index` selects which grid under `/ExternalFieldMesh/` to read (default 1).
+`write_grid_field_hdf5`, or by Bmad itself) into a [`FieldGridTable`].  The
+`magnetic`/`electric` OffsetArrays have axes `(1:3, ix_lo:ix_hi, …)` where the
+grid index ranges come from `gridLowerBound`/`gridSize` (the grid is not assumed
+to start at zero).  `r0` is `gridOriginOffset` (so a point `(ix,iy,iz)` is at
+`dr .* (ix,iy,iz) + r0` relative to the anchor).  An absent field type is left at
+the struct default.  `index` selects which grid under `/ExternalFieldMesh/` to
+read (default 1).
 """
 function read_grid_field_hdf5(path::AbstractString; index::Integer = 1)
     h5open(path, "r") do f
@@ -145,9 +207,7 @@ function read_grid_field_hdf5(path::AbstractString; index::Integer = 1)
             error("Not a Bmad grid_field HDF5 file (missing /ExternalFieldMesh): $path")
         g1 = f["ExternalFieldMesh"][string(index)]
 
-        geometry = _attr(g1, "gridGeometry", "rectangular")
-        geometry == "rectangular" ||
-            error("read_grid_field_hdf5 supports only 'rectangular' (xyz) grids, got: $geometry")
+        geometry = _geometry_from_str(_attr(g1, "gridGeometry", "rectangular"))
 
         lb  = Int.(read_attribute(g1, "gridLowerBound"))
         sz  = Int.(read_attribute(g1, "gridSize"))
@@ -155,32 +215,28 @@ function read_grid_field_hdf5(path::AbstractString; index::Integer = 1)
         dr  = collect(Float64, read_attribute(g1, "gridSpacing"))
         nx, ny, nz = sz[1], sz[2], sz[3]
 
-        field_scale = first(_attr(g1, "fieldScale", _attr(g1, "componentFieldScale", [1.0])))
-        anchor      = _attr(g1, "eleAnchorPt", "beginning")
-        rho         = first(_attr(g1, "gridCurvatureRadius", [0.0]))
-        axis_labels = haskey(attributes(g1), "axisLabels") ?
-                      collect(String, read_attribute(g1, "axisLabels")) : nothing
+        scale   = Float64(first(_attr(g1, "fieldScale", _attr(g1, "componentFieldScale", [1.0]))))
+        anchor  = _anchor_from_str(_attr(g1, "eleAnchorPt", "center"))
+        rho     = first(_attr(g1, "gridCurvatureRadius", [0.0]))
+        rf_freq = Float64(first(_attr(g1, "fundamentalFrequency", [0.0])))
+        rf_phase = Float64(first(_attr(g1, "RFphase", [0.0])))
 
-        # Pick the field group (magnetic preferred, else electric).
-        grp_name, ftype = haskey(g1, "magneticField") ? ("magneticField", :magnetic) :
-                          haskey(g1, "electricField") ? ("electricField", :electric) :
-                          error("Grid has neither magneticField nor electricField: $path")
-        fg = g1[grp_name]
+        mag = _read_field_group(g1, "magneticField", lb, nx, ny, nz)
+        elec = _read_field_group(g1, "electricField", lb, nx, ny, nz)
+        (mag === nothing && elec === nothing) &&
+            error("Grid has neither magneticField nor electricField: $path")
 
-        comps = [zeros(Float64, nx, ny, nz) for _ in 1:3]
-        for (i, name) in enumerate(("x", "y", "z"))
-            haskey(fg, name) || continue   # missing component => zero field
-            dset = fg[name]
-            comps[i] = _order_component(read(dset), nx, ny, nz, _data_order(dset, axis_labels))
-        end
-
-        # Assemble pt[ix,iy,iz] = [Fx, Fy, Fz] as an OffsetArray indexed from lb.
-        pt = OffsetArray([ [comps[1][a, b, c], comps[2][a, b, c], comps[3][a, b, c]]
-                           for a in 1:nx, b in 1:ny, c in 1:nz ],
-                         lb[1]:lb[1]+nx-1, lb[2]:lb[2]+ny-1, lb[3]:lb[3]+nz-1)
-
-        rho == 0 ? g_ref = 0.0 : g_ref = 1/rho
-        return (; geometry, field_type = ftype, ele_anchor_pt = anchor,
-                  g_ref, field_scale, r0, dr, lb, pt)
+        fg = FieldGridTable{Float64}(;
+            r0 = r0,                        # gridOriginOffset (grid indices kept as-is)
+            dr = dr,
+            g_ref = rho == 0 ? 0.0 : 1 / rho,
+            scale = scale,
+            RF_frequency = rf_freq,
+            RF_phase = rf_phase,
+            anchor_pt = anchor,
+            geometry = geometry)
+        mag  !== nothing && (fg.magnetic = mag)
+        elec !== nothing && (fg.electric = elec)
+        return fg
     end
 end

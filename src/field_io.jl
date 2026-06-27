@@ -13,33 +13,33 @@
 using HDF5, OffsetArrays
 
 # ===========================================================================
-# Field grid
+# Field grid  (stored / returned as a FieldGridTable)
 #
 # HDF5 schema:
 #   root attributes : g_ref (Float64, bending strength = 1/rho; 0 for straight)
-#   root datasets   : r0_grid     (Float64[3])      grid origin
-#                     dr_grid     (Float64[3])      grid spacing
-#                     lower_bound (Int[3])          (ix_lo, iy_lo, iz_lo)
+#   root datasets   : r0_grid     (Float64[3])   grid origin (gridOriginOffset)
+#                     dr_grid     (Float64[3])   grid spacing
+#                     lower_bound (Int[3])        grid index of the first point
 #                     B           (Float64[3,nx,ny,nz])  B[:,a,b,c] = [Bx,By,Bz]
 # ===========================================================================
 
 """
-    read_field_grid(path) -> Dict
+    read_field_grid(path) -> FieldGridTable
 
-Load a field-grid HDF5 file and sanity check it. Returns a Dict with keys
-`"r0_grid"`, `"dr_grid"`, `"g_ref"`, and `"pt"`, where `pt[ix,iy,iz]` is the
-`[Bx,By,Bz]` 3-vector at that grid point (an OffsetArray indexed from the stored
-lower bound).
+Load a field-grid HDF5 file into a [`FieldGridTable`].  `fg.magnetic` is an
+OffsetArray with axes `(1:3, ix_lo:ix_hi, …)` taken from the stored `lower_bound`
+(the grid is not assumed to start at zero); a point `(ix,iy,iz)` is at
+`r0 + dr .* (ix,iy,iz)`.  `fg.dr` and `fg.g_ref` are the grid spacing and bending strength.
 """
 function read_field_grid(path::AbstractString)
     h5open(path, "r") do f
-        for name in ("r0_grid", "dr_grid", "B", "lower_bound")
+        for name in ("r0_grid", "dr_grid", "B")
             haskey(f, name) || error("Field grid file is missing the \"$name\" dataset: $path")
         end
         r0_grid = collect(Float64, read(f["r0_grid"]))
         dr_grid = collect(Float64, read(f["dr_grid"]))
-        lb      = Int.(read(f["lower_bound"]))
-        B       = read(f["B"])                       # (3, nx, ny, nz)
+        lb      = haskey(f, "lower_bound") ? Int.(read(f["lower_bound"])) : [0, 0, 0]
+        B       = Float64.(read(f["B"]))             # (3, nx, ny, nz)
         g_ref   = haskey(attributes(f), "g_ref") ? read_attribute(f, "g_ref") : 0.0
 
         length(r0_grid) == 3 || error("\"r0_grid\" must be a 3-vector.")
@@ -48,35 +48,34 @@ function read_field_grid(path::AbstractString)
             error("\"B\" must have shape (3, nx, ny, nz).")
         nx, ny, nz = size(B, 2), size(B, 3), size(B, 4)
 
-        pt = OffsetArray([Float64[B[1, a, b, c], B[2, a, b, c], B[3, a, b, c]]
-                          for a in 1:nx, b in 1:ny, c in 1:nz],
-                         lb[1]:lb[1]+nx-1, lb[2]:lb[2]+ny-1, lb[3]:lb[3]+nz-1)
-
-        return Dict{String,Any}("r0_grid" => r0_grid, "dr_grid" => dr_grid,
-                                "g_ref" => g_ref, "pt" => pt)
+        magnetic = OffsetArray(B, 1:3, lb[1]:lb[1]+nx-1, lb[2]:lb[2]+ny-1, lb[3]:lb[3]+nz-1)
+        return FieldGridTable{Float64}(;
+            magnetic = magnetic,
+            r0 = r0_grid,
+            dr = dr_grid,
+            g_ref = Float64(g_ref),
+            scale = 1.0,
+            geometry = GridGeometry.XYZ)
     end
 end
 
 """
-    write_field_grid(path; r0_grid, dr_grid, pt, g_ref = 0.0)
+    write_field_grid(path, fg::FieldGridTable)
 
-Write a field grid to an HDF5 file readable by [`read_field_grid`].  `pt[ix,iy,iz]`
-must be a `[Bx,By,Bz]` 3-vector (an array of 3-vectors; may be an OffsetArray).
+Write a [`FieldGridTable`] to an HDF5 field-grid file readable by
+[`read_field_grid`].  `fg.magnetic` must be a `(3, ix, iy, iz)` OffsetArray; its
+grid index ranges are stored in `lower_bound`.
 """
-function write_field_grid(path::AbstractString; r0_grid, dr_grid, pt, g_ref::Real = 0.0)
-    ix_lo, iy_lo, iz_lo = first.(axes(pt))
-    nx, ny, nz = length.(axes(pt))
-    B = Array{Float64}(undef, 3, nx, ny, nz)
-    for (c, iz) in enumerate(iz_lo:iz_lo+nz-1), (b, iy) in enumerate(iy_lo:iy_lo+ny-1),
-        (a, ix) in enumerate(ix_lo:ix_lo+nx-1)
-        B[:, a, b, c] = pt[ix, iy, iz]
-    end
+function write_field_grid(path::AbstractString, fg::FieldGridTable)
+    (ndims(fg.magnetic) == 4 && size(fg.magnetic, 1) == 3) ||
+        error("fg.magnetic must be a (3, nx, ny, nz) array.")
+    ax = axes(fg.magnetic)
     h5open(path, "w") do f
-        attributes(f)["g_ref"] = Float64(g_ref)
-        f["r0_grid"]     = Float64[r0_grid...]
-        f["dr_grid"]     = Float64[dr_grid...]
-        f["lower_bound"] = Int[ix_lo, iy_lo, iz_lo]
-        f["B"]           = B
+        attributes(f)["g_ref"] = Float64(fg.g_ref)
+        f["r0_grid"]     = Float64[fg.r0...]
+        f["dr_grid"]     = Float64[fg.dr...]
+        f["lower_bound"] = Int[first(ax[2]), first(ax[3]), first(ax[4])]
+        f["B"]           = Float64.(collect(fg.magnetic))   # 1-based dense copy
     end
     return path
 end

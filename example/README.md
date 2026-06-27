@@ -16,14 +16,18 @@ Field grids and GG fit results are stored as HDF5 files.
 Created via:
 ```
 julia> using GeneralizedGradients, OffsetArrays
-julia> include("ags-snakes/wsnk_fieldmap.jl")       # Full table 
-julia> pt = OffsetArray(pt[:,:,0:11], 0, 0, -1);    # Truncate for test
-julia> write_field_grid("wsnk_fieldmap_reduced.h5"; r0_grid = r0_grid, dr_grid = dr_grid, pt = pt, g_ref = 0.0)
+julia> include("ags-snakes/wsnk_fieldmap.jl")       # defines r0_grid, dr_grid, pt
+julia> pt = OffsetArray(pt[:, :, 0:11], 0, 0, -1)   # truncate to 12 planes; pt[ix,iy,iz]=[Bx,By,Bz]
+julia> # Pack into a (3, ix, iy, iz) OffsetArray (grid indices preserved):
+julia> B = OffsetArray(zeros(3, size(pt)...), 1:3, axes(pt)...);
+julia> for I in CartesianIndices(pt); B[:, Tuple(I)...] .= pt[I]; end
+julia> fg = FieldGridTable{Float64}(; magnetic = B, r0 = r0_grid, dr = dr_grid, g_ref = 0.0)
+julia> write_field_grid("wsnk_fieldmap_reduced.h5", fg)
 ```
 
 To read back in use:
 ```
-julia> field = read_field_grid("wsnk_fieldmap_reduced.h5")
+julia> field = read_field_grid("wsnk_fieldmap_reduced.h5")   # a FieldGridTable
 ```
 
 ## Create a GG fit file.

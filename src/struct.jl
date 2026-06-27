@@ -7,8 +7,11 @@
 Struct to hold electric and magnetic field grid.
 """
 @kwdef mutable struct FieldGridTable{T}
-  magnetic::OffsetArray{T} = OffsetArray(zeros(T, 3, 0, 0, 0), 1:3, 1:0, 1:0, 1:0)
-  electric::OffsetArray{T} = OffsetArray(zeros(T, 3, 0, 0, 0), 1:3, 1:0, 1:0, 1:0)
+  # `magnetic`/`electric` are 3D grids whose elements are field 3-vectors:
+  # `magnetic[ix,iy,iz] == [Bx, By, Bz]`.  Defaults use concrete Float64 (not `T`)
+  # so that the parameterless `FieldGridTable()` works: it infers T = Float64.
+  magnetic::OffsetArray{Vector{T}} = OffsetArray(Array{Vector{Float64}}(undef, 0, 0, 0), 1:0, 1:0, 1:0)
+  electric::OffsetArray{Vector{T}} = OffsetArray(Array{Vector{Float64}}(undef, 0, 0, 0), 1:0, 1:0, 1:0)
   r0::Vector{T} = [0.0, 0.0, 0.0]
   dr::Vector{T} = [0.0, 0.0, 0.0]
   g_ref::T = 0.0

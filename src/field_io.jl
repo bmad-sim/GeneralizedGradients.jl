@@ -27,9 +27,10 @@ using HDF5, OffsetArrays
     read_field_grid(path) -> FieldGridTable
 
 Load a field-grid HDF5 file into a [`FieldGridTable`].  `fg.magnetic` is an
-OffsetArray with axes `(1:3, ix_lo:ix_hi, …)` taken from the stored `lower_bound`
-(the grid is not assumed to start at zero); a point `(ix,iy,iz)` is at
-`r0 + dr .* (ix,iy,iz)`.  `fg.dr` and `fg.g_ref` are the grid spacing and bending strength.
+OffsetArray indexed `(ix_lo:ix_hi, …)` (from the stored `lower_bound`; the grid is
+not assumed to start at zero) with each element a `[Bx,By,Bz]` 3-vector; a point
+`(ix,iy,iz)` is at `r0 + dr .* (ix,iy,iz)`.  `fg.dr` and `fg.g_ref` are the grid
+spacing and bending strength.
 """
 function read_field_grid(path::AbstractString)
     h5open(path, "r") do f
@@ -48,7 +49,9 @@ function read_field_grid(path::AbstractString)
             error("\"B\" must have shape (3, nx, ny, nz).")
         nx, ny, nz = size(B, 2), size(B, 3), size(B, 4)
 
-        magnetic = OffsetArray(B, 1:3, lb[1]:lb[1]+nx-1, lb[2]:lb[2]+ny-1, lb[3]:lb[3]+nz-1)
+        field = [Float64[B[1, a, b, k], B[2, a, b, k], B[3, a, b, k]]
+                 for a in 1:nx, b in 1:ny, k in 1:nz]
+        magnetic = OffsetArray(field, lb[1]:lb[1]+nx-1, lb[2]:lb[2]+ny-1, lb[3]:lb[3]+nz-1)
         return FieldGridTable{Float64}(;
             magnetic = magnetic,
             r0 = r0_grid,
@@ -63,19 +66,24 @@ end
     write_field_grid(path, fg::FieldGridTable)
 
 Write a [`FieldGridTable`] to an HDF5 field-grid file readable by
-[`read_field_grid`].  `fg.magnetic` must be a `(3, ix, iy, iz)` OffsetArray; its
-grid index ranges are stored in `lower_bound`.
+[`read_field_grid`].  `fg.magnetic` must be an `(ix, iy, iz)` OffsetArray of
+`[Bx,By,Bz]` 3-vectors; its grid index ranges are stored in `lower_bound`.
 """
 function write_field_grid(path::AbstractString, fg::FieldGridTable)
-    (ndims(fg.magnetic) == 4 && size(fg.magnetic, 1) == 3) ||
-        error("fg.magnetic must be a (3, nx, ny, nz) array.")
+    ndims(fg.magnetic) == 3 ||
+        error("fg.magnetic must be a 3D (ix, iy, iz) array of [Bx,By,Bz] 3-vectors.")
     ax = axes(fg.magnetic)
+    nx, ny, nz = length(ax[1]), length(ax[2]), length(ax[3])
+    B = Array{Float64}(undef, 3, nx, ny, nz)
+    for (a, ix) in enumerate(ax[1]), (b, iy) in enumerate(ax[2]), (k, iz) in enumerate(ax[3])
+        B[:, a, b, k] = fg.magnetic[ix, iy, iz]
+    end
     h5open(path, "w") do f
         attributes(f)["g_ref"] = Float64(fg.g_ref)
         f["r0_grid"]     = Float64[fg.r0...]
         f["dr_grid"]     = Float64[fg.dr...]
-        f["lower_bound"] = Int[first(ax[2]), first(ax[3]), first(ax[4])]
-        f["B"]           = Float64.(collect(fg.magnetic))   # 1-based dense copy
+        f["lower_bound"] = Int[first(ax[1]), first(ax[2]), first(ax[3])]
+        f["B"]           = B
     end
     return path
 end

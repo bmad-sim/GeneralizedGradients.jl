@@ -91,9 +91,9 @@ Name of the output file.
 
 A `FieldGridTable` holding the field table and associated parameters
 (in the (x, y, z) curvilinear coordinate system):
-  field.magnetic[c, ix, iy, iz]  Field components (c = 1,2,3 -> Bx, By, Bz). An
-                                 OffsetArray; the grid indices (ix, iy, iz) need
-                                 not start at 0 or 1.
+  field.magnetic[ix, iy, iz]      Field 3-vector [Bx, By, Bz] at the grid point.
+                                 An OffsetArray; the grid indices (ix, iy, iz)
+                                 need not start at 0 or 1.
   field.r0                        Grid origin 3-vector
   field.dr                        Grid spacing 3-vector
   field.g_ref                     Bending strength = 1 / bending_radius
@@ -103,7 +103,7 @@ Note: To construct a field file to be read in use the following:
   using GeneralizedGradients, OffsetArrays
   write_field_grid("this_file.h5", FieldGridTable{Float64}(; magnetic = B, r0 = r0,
                                                              dr = dr, g_ref = g_ref))
-where `B` is a (3, nx, ny, nz) OffsetArray with axes (1:3, ix_lo:ix_hi, …).
+where `B` is an (ix, iy, iz) OffsetArray whose elements are [Bx,By,Bz] 3-vectors.
 """ gg_fit
 
 using OffsetArrays, LinearAlgebra, Printf, GeneralizedGradients
@@ -143,7 +143,7 @@ ffact(k::Int) = k <= 1 ? 1.0 : prod(2.0:float(k))
 function run_fit(field::FieldGridTable, origin, n_planes_add, core_weight, outer_plane_weight,
                  a_dicts, b_dicts, bs_dicts)
 
-    mag   = field.magnetic            # OffsetArray: mag[comp, ix, iy, iz]
+    mag   = field.magnetic            # OffsetArray: mag[ix, iy, iz] == [Bx, By, Bz]
     r0    = field.r0                   # grid origin (gridOriginOffset)
     dr    = field.dr
     g_ref = field.g_ref
@@ -155,9 +155,9 @@ function run_fit(field::FieldGridTable, origin, n_planes_add, core_weight, outer
     # Grid index ranges, taken from the field arrays (not assumed to start at 0/1).
     # Use plain UnitRanges (not the OffsetArray axes) so the `xs`/`ys`/`z_base`
     # comprehensions below stay 1-based while `mag` is still indexed by real index.
-    ixs = first(axes(mag, 2)):last(axes(mag, 2))
-    iys = first(axes(mag, 3)):last(axes(mag, 3))
-    izs_grid = first(axes(mag, 4)):last(axes(mag, 4))
+    ixs = first(axes(mag, 1)):last(axes(mag, 1))
+    iys = first(axes(mag, 2)):last(axes(mag, 2))
+    izs_grid = first(axes(mag, 3)):last(axes(mag, 3))
 
     # Transverse coordinates relative to the GG origin (the expansion axis).
     xs = [r0[1] + dr[1] * ix - origin[1] for ix in ixs]
@@ -231,7 +231,7 @@ function run_fit(field::FieldGridTable, origin, n_planes_add, core_weight, outer
                 wco = core_weight == 1 ? 1.0 :
                       core_weight * rmax2 / (rmax2 + r2 * (core_weight - 1))
                 w   = wco * wpl
-                B3  = @view mag[:, ix, iy, iz]            # [Bx, By, Bs]
+                B3  = mag[ix, iy, iz]                     # [Bx, By, Bs]
                 for comp in 1:3
                     row += 1
                     bvec[row] = B3[comp]
@@ -285,7 +285,7 @@ result = run_fit(field, origin, n_planes_add, core_weight, outer_plane_weight,
 println("="^72)
 println("GG fit complete")
 println("  input file        : ", INPUT_FILE)
-println("  field grid        : ", join(size(field.magnetic)[2:4], " x "), "  (ix, iy, iz)")
+println("  field grid        : ", join(size(field.magnetic), " x "), "  (ix, iy, iz)")
 println("  g_ref             : ", g_ref)
 println("  origin (x,y)      : ", origin)
 println("  n_planes_add      : ", n_planes_add, "   (max derivative order m_max = ", result.m_max, ")")

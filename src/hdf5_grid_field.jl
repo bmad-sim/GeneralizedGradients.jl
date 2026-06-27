@@ -73,22 +73,24 @@ end
 # Write
 # ---------------------------------------------------------------------------
 
-# Lay one component `c` of a (3, ix, iy, iz) OffsetArray out as a 1-based
+# Lay component `c` of a (ix, iy, iz) OffsetArray of 3-vectors out as a 1-based
 # (nx, ny, nz) complex array.  HDF5.jl reverses dims on write, so the dataset
 # lands on disk exactly like Bmad's own Fortran writer (H5Screate_simple_f with
 # Fortran dims [nx,ny,nz]): Bmad's reader gets data_dim = (nx,ny,nz) and, with
 # data_order "F", reads the column-major buffer back into pt[ix,iy,iz] correctly.
 function _component_dataset(field, c)
     ax = axes(field)
-    nx, ny, nz = length(ax[2]), length(ax[3]), length(ax[4])
+    nx, ny, nz = length(ax[1]), length(ax[2]), length(ax[3])
     out = Array{ComplexPMD}(undef, nx, ny, nz)
-    for (a, ix) in enumerate(ax[2]), (b, iy) in enumerate(ax[3]), (k, iz) in enumerate(ax[4])
-        out[a, b, k] = ComplexPMD(real(field[c, ix, iy, iz]), imag(field[c, ix, iy, iz]))
+    for (a, ix) in enumerate(ax[1]), (b, iy) in enumerate(ax[2]), (k, iz) in enumerate(ax[3])
+        v = field[ix, iy, iz][c]
+        out[a, b, k] = ComplexPMD(real(v), imag(v))
     end
     return out
 end
 
-# Write one field group ("magneticField"/"electricField") from a (3,ix,iy,iz) OffsetArray.
+# Write one field group ("magneticField"/"electricField") from an (ix,iy,iz)
+# OffsetArray of 3-vectors.
 function _write_field_group(g1, name, field, unit_dim, unit_sym)
     grp = create_group(g1, name)
     for (c, axis) in enumerate(("x", "y", "z"))
@@ -107,8 +109,8 @@ end
 
 Write a `FieldGridTable` as an openPMD HDF5 `grid_field` file matching Bmad's
 `hdf5_write_grid_field` (geometry = xyz).  The `fg.magnetic` and/or `fg.electric`
-OffsetArrays have axes `(1:3, ix_lo:ix_hi, iy_lo:iy_hi, iz_lo:iz_hi)` (component
-first, then the grid indices); an empty array means that field type is omitted.
+OffsetArrays are indexed `(ix_lo:ix_hi, iy_lo:iy_hi, iz_lo:iz_hi)` with each
+element a `[Bx,By,Bz]` 3-vector; an empty array means that field type is omitted.
 `gridLowerBound` is taken from the array's index ranges (the grids are not assumed
 to start at zero) and `fg.r0` is written as `gridOriginOffset`, so a grid point
 `(ix,iy,iz)` is at `dr .* (ix,iy,iz) + r0` relative to the anchor.  A non-zero
@@ -121,8 +123,8 @@ function write_grid_field_hdf5(path::AbstractString, fg::FieldGridTable)
         error("FieldGridTable has no magnetic or electric field data.")
     ref = has_mag ? fg.magnetic : fg.electric
     ax = axes(ref)
-    lb = (first(ax[2]), first(ax[3]), first(ax[4]))
-    nx, ny, nz = length(ax[2]), length(ax[3]), length(ax[4])
+    lb = (first(ax[1]), first(ax[2]), first(ax[3]))
+    nx, ny, nz = length(ax[1]), length(ax[2]), length(ax[3])
 
     h5open(path, "w") do f
         attributes(f)["dataType"]          = "Bmad:grid_field"
@@ -167,8 +169,8 @@ end
 # Read an attribute if present, else return `default`.
 _attr(obj, name, default) = haskey(attributes(obj), name) ? read_attribute(obj, name) : default
 
-# Read a field group ("magneticField"/"electricField") into a (3, ix, iy, iz)
-# OffsetArray indexed from `lb`, or return `nothing` if the group is absent.
+# Read a field group ("magneticField"/"electricField") into an (ix, iy, iz)
+# OffsetArray of [Bx,By,Bz] 3-vectors indexed from `lb`, or `nothing` if absent.
 #
 # In a Bmad grid_field file each component dataset is written Fortran-order
 # (logical dims [nx,ny,nz]; on-disk C-dims (nz,ny,nx)).  HDF5.jl reverses dims on
@@ -177,16 +179,18 @@ _attr(obj, name, default) = haskey(attributes(obj), name) ? read_attribute(obj, 
 function _read_field_group(g1, name, lb, nx, ny, nz)
     haskey(g1, name) || return nothing
     grp = g1[name]
-    dense = zeros(Float64, 3, nx, ny, nz)   # 1-based; filled then wrapped
+    comps = ntuple(_ -> zeros(Float64, nx, ny, nz), 3)   # one (nx,ny,nz) array per component
     for (c, axis) in enumerate(("x", "y", "z"))
         haskey(grp, axis) || continue       # missing component => zero field
         comp = read(grp[axis])
         size(comp) == (nx, ny, nz) ||
             error("grid_field dataset $name/$axis has size $(size(comp)), expected ($nx, $ny, $nz) " *
                   "-- not a Bmad-format (Fortran-order) grid_field file.")
-        dense[c, :, :, :] = real.(comp)
+        comps[c] .= real.(comp)
     end
-    return OffsetArray(dense, 1:3, lb[1]:lb[1]+nx-1, lb[2]:lb[2]+ny-1, lb[3]:lb[3]+nz-1)
+    field = [Float64[comps[1][a, b, k], comps[2][a, b, k], comps[3][a, b, k]]
+             for a in 1:nx, b in 1:ny, k in 1:nz]
+    return OffsetArray(field, lb[1]:lb[1]+nx-1, lb[2]:lb[2]+ny-1, lb[3]:lb[3]+nz-1)
 end
 
 """
@@ -194,9 +198,10 @@ end
 
 Read a Bmad/openPMD `grid_field` HDF5 file (as written by
 `write_grid_field_hdf5`, or by Bmad itself) into a [`FieldGridTable`].  The
-`magnetic`/`electric` OffsetArrays have axes `(1:3, ix_lo:ix_hi, …)` where the
-grid index ranges come from `gridLowerBound`/`gridSize` (the grid is not assumed
-to start at zero).  `r0` is `gridOriginOffset` (so a point `(ix,iy,iz)` is at
+`magnetic`/`electric` OffsetArrays are indexed `(ix_lo:ix_hi, …)` with each
+element a `[Bx,By,Bz]` 3-vector; the grid index ranges come from
+`gridLowerBound`/`gridSize` (the grid is not assumed to start at zero).  `r0` is
+`gridOriginOffset` (so a point `(ix,iy,iz)` is at
 `dr .* (ix,iy,iz) + r0` relative to the anchor).  An absent field type is left at
 the struct default.  `index` selects which grid under `/ExternalFieldMesh/` to
 read (default 1).

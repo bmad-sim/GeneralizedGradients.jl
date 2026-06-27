@@ -32,7 +32,7 @@ The program may also be `include`d to use `read_field_grid` and
 The input is an HDF5 field-grid file read by `read_field_grid` into a
 `FieldGridTable` (curvilinear (x, y, z) coordinates):
 
-  field.magnetic[c,ix,iy,iz]  Field components (c = 1,2,3 -> Bx, By, Bz)   [T]
+  field.magnetic[ix,iy,iz]     Field 3-vector [Bx, By, Bz] at the grid point   [T]
                               (an OffsetArray; grid indices need not start at 0/1)
   field.r0                     Grid origin (x0, y0, z0)                      [m]
   field.dr                     Grid spacing (dx, dy, dz)                     [m]
@@ -70,8 +70,9 @@ using OffsetArrays, Printf, GeneralizedGradients
 # avoids printing a signed "-0".
 _num(x::Real) = iszero(x) ? "0" : @sprintf("%.15g", float(x))
 
-# Write the plain-text grid_field block from a (3, ix, iy, iz) magnetic OffsetArray,
-# using the grid's own indices (grid origin `r0`, spacing `dr`, anchor = beginning).
+# Write the plain-text grid_field block from an (ix, iy, iz) OffsetArray of
+# [Bx,By,Bz] 3-vectors, using the grid's own indices (origin `r0`, spacing `dr`,
+# anchor = beginning).
 function _write_grid_field_text(path, mag, r0, dr, is_bend, field_scale)
     ax = axes(mag)
     open(path, "w") do io
@@ -84,10 +85,10 @@ function _write_grid_field_text(path, mag, r0, dr, is_bend, field_scale)
         println(io, "  r0 = (", _num(r0[1]), ", ", _num(r0[2]), ", ", _num(r0[3]), "),")
         println(io, "  dr = (", _num(dr[1]), ", ", _num(dr[2]), ", ", _num(dr[3]), "),")
         println(io, "  {")
-        for iz in ax[4], iy in ax[3], ix in ax[2]
+        for iz in ax[3], iy in ax[2], ix in ax[1]
+            B = mag[ix, iy, iz]
             @printf(io, "    %d %d %d: %s %s %s,\n",
-                    ix, iy, iz,
-                    _num(mag[1, ix, iy, iz]), _num(mag[2, ix, iy, iz]), _num(mag[3, ix, iy, iz]))
+                    ix, iy, iz, _num(B[1]), _num(B[2]), _num(B[3]))
         end
         println(io, "  }")
         println(io, "}")
@@ -119,7 +120,7 @@ function write_bmad_grid_field(field::FieldGridTable;
     mag = field.magnetic
     dr  = field.dr
     dz  = dr[3]
-    zax = axes(mag, 4)
+    zax = axes(mag, 3)
     iz_lo = first(zax)
     nz  = length(zax)
     is_bend = g_ref != 0
@@ -194,7 +195,7 @@ function main(args)
 
     ele_file = write_bmad_grid_field(field; ele_name, output_base, g_ref, hdf5)
 
-    nx, ny, nz = size(field.magnetic, 2), size(field.magnetic, 3), size(field.magnetic, 4)
+    nx, ny, nz = size(field.magnetic, 1), size(field.magnetic, 2), size(field.magnetic, 3)
     println("="^72)
     println("Field grid -> Bmad grid_field")
     println("  input file   : ", input)

@@ -4,7 +4,7 @@ using GeneralizedGradients
 # Field grid
 
 # read_field_grid returns a FieldGridTable with:
-#   field.magnetic[c, ix, iy, iz]  Field components (c = 1,2,3 -> Bx, By, Bz),
+#   field.magnetic[ix, iy, iz]     Field 3-vector [Bx, By, Bz] at the grid point,
 #                                  an OffsetArray (indices need not start at 0/1).
 #   field.r0                       Grid origin (3-vector)
 #   field.dr                       Grid spacing 3-vector

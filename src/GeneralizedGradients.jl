@@ -1,12 +1,16 @@
 module GeneralizedGradients
 
-  using HDF5, OffsetArrays, Dates
+  using HDF5, OffsetArrays, Dates, EnumX
 
+  include("struct.jl")
   include("gg_eval.jl")
   include("field_io.jl")
   include("hdf5_grid_field.jl")
 
-  export gg_load_fit,
+  export FieldGridTable,
+       GridAnchorPt,
+       GridGeometry,
+       gg_load_fit,
        gg_save_fit,
        read_field_grid,
        write_field_grid,

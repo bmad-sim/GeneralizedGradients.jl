@@ -3,13 +3,13 @@ using GeneralizedGradients
 #---------------------------------------------------------------------------------------------------
 # Field grid
 
-# When the field grid is loaded with read_field_grid, the following is defined:
-#   field["r0_grid"]           Grid origin 3-vector
-#   field["dr_grid"]           Grid spacing 3-vector
-#   field["g_ref"]             Curvilinear coordinate system bending strength = 1 / bending_radius.
-#   field["pt"][ix, iy, iz]    Field Grid points [Bx, By, Bz]
-# A point field["pt"][ix, iy, iz] has a (x, y, z) position of r0_grid + dr_grid * [ix, iy, iz]
-# Note: It may be that field["pt"] is not indexed from 1.
+# read_field_grid returns a FieldGridTable with:
+#   field.magnetic[c, ix, iy, iz]  Field components (c = 1,2,3 -> Bx, By, Bz),
+#                                  an OffsetArray (indices need not start at 0/1).
+#   field.r0                       Grid origin (3-vector)
+#   field.dr                       Grid spacing 3-vector
+#   field.g_ref                    Curvilinear coordinate system bending strength = 1 / bending_radius.
+# A grid point (ix, iy, iz) is at (x, y, z) = r0 + dr .* (ix, iy, iz).
 
 grid_file = joinpath(@__DIR__, "wsnk_fieldmap_reduced.h5")
 field = read_field_grid(grid_file)

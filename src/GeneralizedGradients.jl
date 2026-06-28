@@ -6,6 +6,7 @@ module GeneralizedGradients
   include("gg_eval.jl")
   include("field_io.jl")
   include("hdf5_grid_field.jl")
+  include("gg_fit.jl")
 
   export FieldGridTable,
        GridAnchorPt,

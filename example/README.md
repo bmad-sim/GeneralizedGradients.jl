@@ -34,8 +34,7 @@ Fitting parameters for this example are in:
 ```
 example/fit_params.jl
 ```
-
-Fit:
+To run the fit use the command:
 ```
 julia ../src/gg_fit.jl fit_params.jl
 ```

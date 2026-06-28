@@ -1,7 +1,7 @@
 #!/usr/bin/env julia
 
 """
-    gg_fit.jl
+    gg_fit(param_file)
 
 Fit a 3D magnetic field table to generalized-gradient (GG) coefficients
 a_n(z), b_n(z), b_s(z) and their z-derivatives, plane by plane.

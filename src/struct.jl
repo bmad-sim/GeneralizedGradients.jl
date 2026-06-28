@@ -16,10 +16,10 @@ Fields:
 - `electric` — electric field 3-vectors `[Ex, Ey, Ez]` [V/m].
 - `r0` — grid origin offset `(x0, y0, z0)` [m].
 - `dr` — grid spacing `(dx, dy, dz)` [m].
-- `g_ref` — curvilinear-coordinate bending strength `1/bending_radius` [1/m]
+- `g_ref` — curvilinear-coordinate bending strength `1/bending_radius`, in 1/m
   (`0` for a straight reference curve).
 - `scale` — overall field scale factor.
-- `RF_frequency` — RF frequency [Hz] (`0` for a static field).
+- `RF_frequency` — RF frequency in Hz (`0` for a static field).
 - `RF_phase` — RF phase [rad].
 - `anchor_pt` — grid anchor point, a `GridAnchorPt.T` (`Beginning`, `Center`, or `End`).
 - `geometry` — grid geometry, a `GridGeometry.T` (`XYZ`).

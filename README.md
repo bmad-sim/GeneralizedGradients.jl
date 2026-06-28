@@ -11,30 +11,8 @@ A copy of this paper is in the `papers` directory.
 Equations for the vector potential are described in papers/vector-potential/vector-potential.tex
 Here "the gg functions" refer to the functions `a(s)`, `b(s)`, and `bs(s)` and their derivatives.
 
-# Programs
-
-## src/create_gg_coef_table.jl
-
-Creates the `table/gg_coef_table.jl` table.
-The created table contains the functions needed to calculate the coefficients for the taylor map of the magnetic field and the vector potential from the gg functions.
-
-This table do not have to be recreated unless you want to extend the derivative range. Currently derivatives up to order 12 are tabulated. To run:
-```
-julia src/create_gg_coef_table.jl <deriv-cut>
-```
-where `<deriv-cut>` is the derivative cutoff number.
-
-## src/create_monomial_functions.jl
-
-Creates the `table/monomial_functions.jl` table.
-This table contains the coefficients needed to calculate the coefficients for the taylor map of the magnetic field and vector potential from the gg functions. 
-The information in this file is the same as the `gg_coef_table.jl` table except in a form that is useful for optimization and other calculations.
-
-This table do not have to be recreated unless you want to extend the derivative range. Currently derivatives up to order 12 are tabulated. To run:
-```
-julia src/create_monomial_functions.jl <deriv-cut>
-```
-where `<deriv-cut>` is the derivative cutoff number.
+<!-- ------------------------------------------------------------------------------------------- -->
+# Functions
 
 ## gg_fit (src/gg_fit.jl)
 
@@ -90,8 +68,6 @@ azimuthal-harmonic gradients C_{m,sin/cos} is documented in the `gg_to_bmad`
 docstring. The core writer `write_bmad_gen_grad_map(fit; ...)` is also exported and
 can be called directly.
 
-# Functions
-
 ## field_and_potential_evaluate_at(res, x::Real, y::Real, s::Real) ->
 
 Function in `src/gg_eval.jl`.
@@ -118,3 +94,30 @@ Function in `src/gg_eval.jl`
 Returns the generalized-gradient coefficients `(a, b, bs)` at an arbitrary s, Hermite-interpolated
 from the straddling grid planes (the same interpolation used by field_and_potential_evaluate_at). Returns the three
 dicts of scalar values as in gg_coefficients_at_plane.
+
+<!-- ------------------------------------------------------------------------------------------- -->
+# Programs
+
+## programs/create_gg_coef_table.jl
+
+Creates the `table/gg_coef_table.jl` table.
+The created table contains the functions needed to calculate the coefficients for the taylor map of the magnetic field and the vector potential from the gg functions.
+
+This table do not have to be recreated unless you want to extend the derivative range. Currently derivatives up to order 12 are tabulated. To run:
+```
+julia src/create_gg_coef_table.jl <deriv-cut>
+```
+where `<deriv-cut>` is the derivative cutoff number.
+
+## programs/create_monomial_functions.jl
+
+Creates the `table/monomial_functions.jl` table.
+This table contains the coefficients needed to calculate the coefficients for the taylor map of the magnetic field and vector potential from the gg functions. 
+The information in this file is the same as the `gg_coef_table.jl` table except in a form that is useful for optimization and other calculations.
+
+This table do not have to be recreated unless you want to extend the derivative range. Currently derivatives up to order 12 are tabulated. To run:
+```
+julia src/create_monomial_functions.jl <deriv-cut>
+```
+where `<deriv-cut>` is the derivative cutoff number.
+

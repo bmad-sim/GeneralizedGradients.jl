@@ -1,0 +1,40 @@
+version: 1
+
+# ---------------------------------------------------------------------------
+# MyST project: the narrative (general) documentation.
+#
+# The API reference (built separately by Documenter, see ../make.jl) is served
+# as a sibling sub-site at `/api/`; the "API Reference" nav entry below links to
+# it. The combined site is assembled and deployed by
+# ../../.github/workflows/docs.yml.
+#
+# Local preview:  cd docs/myst && myst start
+# Static build:   cd docs/myst && myst build --html   (output in _build/html/)
+# ---------------------------------------------------------------------------
+
+project:
+  id: generalizedgradients-jl
+  title: GeneralizedGradients.jl
+  description: >-
+    Calculate and manipulate generalized gradients for magnetic (and electric)
+    field modelling on straight and curved reference frames.
+  github: https://github.com/bmad-sim/GeneralizedGradients.jl
+  toc:
+    - file: index.md
+    - title: User Guide
+      children:
+        - file: guide/installation.md
+        - file: guide/fitting.md
+        - file: guide/evaluation.md
+        - file: guide/bmad-export.md
+        - file: guide/theory.md
+
+site:
+  template: book-theme
+  title: GeneralizedGradients.jl
+  nav:
+    - title: API Reference
+      url: https://bmad-sim.github.io/GeneralizedGradients.jl/api/
+  actions:
+    - title: GitHub
+      url: https://github.com/bmad-sim/GeneralizedGradients.jl

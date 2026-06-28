@@ -1,0 +1,39 @@
+name: Documentation preview cleanup
+
+# Remove a PR's documentation preview (previews/PR<n>/ on the gh-pages branch)
+# once the PR is closed or merged.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: docs-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+        continue-on-error: true   # nothing to do if gh-pages doesn't exist yet
+
+      - name: Remove preview directory
+        run: |
+          set -e
+          dir="previews/PR${{ github.event.number }}"
+          if [ -d "$dir" ]; then
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git rm -rf "$dir"
+            git commit -m "docs: remove preview for PR #${{ github.event.number }}"
+            git push
+          else
+            echo "No preview directory '$dir' to remove."
+          fi

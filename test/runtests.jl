@@ -1,8 +1,33 @@
 using GeneralizedGradients
 using Test
+using OffsetArrays
+using HDF5
 
 # Self-contained test fixture (HDF5 gg_fit result).
 const EXAMPLE = joinpath(@__DIR__, "data", "gg_fit_result.h5")
+
+# Run `f` with stdout suppressed (the writer/converter functions print a banner).
+quiet(f) = redirect_stdout(f, devnull)
+
+# Build a synthetic FieldGridTable with a smooth analytic field over an offset
+# (ix, iy, iz) grid. `magnetic[ix,iy,iz]` is the [Bx,By,Bz] 3-vector at the point
+# (x, y, z) = r0 + dr .* (ix, iy, iz). The on-axis Bz varies in z so the fit
+# produces a non-zero solenoid (b_s) term.
+function make_field(; g_ref = 0.0, ixr = -3:3, iyr = -3:3, izr = 0:5,
+                      r0 = [0.0, 0.0, 0.0], dr = [0.01, 0.01, 0.005])
+  nx, ny, nz = length(ixr), length(iyr), length(izr)
+  data = Array{Vector{Float64}}(undef, nx, ny, nz)
+  for (a, ix) in enumerate(ixr), (b, iy) in enumerate(iyr), (c, iz) in enumerate(izr)
+    x = r0[1] + dr[1] * ix
+    y = r0[2] + dr[2] * iy
+    z = r0[3] + dr[3] * iz
+    data[a, b, c] = [ 0.10 + 0.20x - 0.30y + 0.05x * z,
+                     -0.10 + 0.40y + 0.10x - 0.02y * z,
+                      0.30 + 0.05x - 0.04y + 0.01z]
+  end
+  return FieldGridTable{Float64}(; magnetic = OffsetArray(data, ixr, iyr, izr),
+      r0 = collect(float.(r0)), dr = collect(float.(dr)), g_ref = float(g_ref))
+end
 
 # Frenet–Serret curl of the vector potential.  Given A and its Jacobian
 # dA[i,j] = ∂A_i/∂u_j with u = (x, y, s), reconstruct B; this must equal the
@@ -123,5 +148,150 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
     B, A, dA = field_and_potential_evaluate(gg, ip, 0.004, 0.003)
     Bs, As, dAs = field_and_potential_evaluate_at(gg, 0.004, 0.003, s)
     @test Bs ≈ B && As ≈ A && dAs ≈ dA
+  end
+
+  @testset "gg_fit + show + write round-trip" begin
+    field = make_field()
+    p = GGFitParams()
+    p.n_planes_add = 1
+    res = gg_fit(field, p)
+    @test res isa GGFitResults
+    @test length(res.z_base) == size(field.magnetic, 3)
+    @test res.m_max == 2
+    @test length(res.rms_plane) == length(res.z_base)
+    @test all(isfinite, res.rms_plane)
+    @test !isempty(res.params)
+    quiet(() -> gg_fit_show_results(res, field, p))
+
+    mktempdir() do dir
+      p.output_file = joinpath(dir, "fit.h5")
+      out = quiet(() -> gg_fit_write_results(res, field, p))
+      @test out == p.output_file && isfile(out)
+      gg = gg_load_fit(out)
+      @test gg.m_max == res.m_max
+      @test gg.dz_grid ≈ field.dr[3]
+      @test length(gg.z_base) == length(res.z_base)
+      @test Set(keys(gg.a)) == Set(keys(res.res_a))
+      @test Set(keys(gg.bs)) == Set(keys(res.res_bs))
+      for (k, v) in res.res_a; @test gg.a[k] ≈ v; end
+      for (k, v) in res.res_b; @test gg.b[k] ≈ v; end
+      for (k, v) in res.res_bs; @test gg.bs[k] ≈ v; end
+    end
+  end
+
+  @testset "gg_fit weighting and n_planes_add=0 branches" begin
+    field = make_field()
+    # Non-default core/outer weights exercise the weighting branches.
+    p = GGFitParams()
+    p.n_planes_add = 1
+    p.core_weight = 2
+    p.outer_plane_weight = 2
+    res = gg_fit(field, p)
+    @test all(isfinite, res.rms_plane)
+    # n_planes_add = 0 (single-plane, m_max = 0) exercises the dzmax == 0 branch.
+    p0 = GGFitParams()
+    p0.n_planes_add = 0
+    res0 = gg_fit(field, p0)
+    @test res0.m_max == 0
+    @test all(isfinite, res0.rms_plane)
+  end
+
+  @testset "field grid HDF5 round-trip (mag + elec, curvature, RF)" begin
+    mktempdir() do dir
+      field = make_field(g_ref = 0.5)
+      ax = axes(field.magnetic)
+      edata = [field.magnetic[ix, iy, iz] .* 2.0 for ix in ax[1], iy in ax[2], iz in ax[3]]
+      field.electric = OffsetArray(edata, ax...)
+      field.RF_frequency = 1.3e9
+      field.RF_phase = 0.25
+      field.anchor_pt = GridAnchorPt.End
+
+      path = joinpath(dir, "grid.h5")
+      @test write_field_grid_hdf5(path, field) == path
+      fg = read_field_grid_hdf5(path)
+      @test fg.magnetic == field.magnetic
+      @test fg.electric == field.electric
+      @test fg.g_ref ≈ field.g_ref
+      @test fg.dr ≈ field.dr && fg.r0 ≈ field.r0
+      @test fg.RF_frequency ≈ field.RF_frequency
+      @test fg.RF_phase ≈ field.RF_phase
+      @test fg.anchor_pt == GridAnchorPt.End
+
+      # read_field_grid dispatches to the HDF5 reader for a .h5 path.
+      @test read_field_grid(path).magnetic == field.magnetic
+    end
+  end
+
+  @testset "field grid HDF5 errors" begin
+    mktempdir() do dir
+      @test_throws ErrorException write_field_grid_hdf5(joinpath(dir, "empty.h5"), FieldGridTable())
+      bad = joinpath(dir, "bad.h5")
+      h5open(bad, "w") do f
+        f["x"] = [1.0, 2.0]
+      end
+      @test_throws ErrorException read_field_grid_hdf5(bad)
+    end
+  end
+
+  @testset "field grid Julia-source round-trip" begin
+    mktempdir() do dir
+      field = make_field()
+      path = joinpath(dir, "grid.jl")
+      @test write_field_grid(path, field) == path
+      fg = read_field_grid(path)
+      @test fg == field
+      nofg = joinpath(dir, "nofg.jl")
+      write(nofg, "x = 1\n")
+      @test_throws ErrorException read_field_grid(nofg)
+    end
+  end
+
+  @testset "grid_to_bmad (text/hdf5, em_field/sbend)" begin
+    mktempdir() do dir
+      field = make_field()
+      gpath = joinpath(dir, "grid.h5")
+      write_field_grid_hdf5(gpath, field)
+
+      base = joinpath(dir, "out_text")
+      ele = quiet(() -> grid_to_bmad(gpath; output_base = base))
+      @test ele == base * ".bmad" && isfile(ele)
+      @test isfile(base * "_grid.bmad")
+      @test occursin("em_field", read(ele, String))
+
+      base2 = joinpath(dir, "out_h5")
+      ele2 = quiet(() -> grid_to_bmad(gpath; output_base = base2, hdf5 = true, g_ref = 0.4))
+      @test isfile(ele2) && isfile(base2 * "_grid.h5")
+      @test occursin("sbend", read(ele2, String))
+    end
+  end
+
+  @testset "gg_to_bmad (straight + bend/solenoid)" begin
+    mktempdir() do dir
+      # Straight reference (g_ref = 0) from the example fit file.
+      base = joinpath(dir, "gg_straight")
+      ele = quiet(() -> gg_to_bmad(EXAMPLE; output_base = base))
+      @test ele == base * ".bmad" && isfile(ele)
+      @test isfile(base * "_gg.bmad")
+      @test occursin("em_field", read(ele, String))
+
+      fit = gg_load_fit(EXAMPLE)
+      cs, cc, c0c, npl, mmax, kmax = GeneralizedGradients.gg_to_bmad_curves(fit)
+      @test npl == length(fit.z_base)
+      @test mmax == fit.m_max
+      @test kmax >= 1
+
+      # Curved reference (g_ref ≠ 0) with a solenoid term: fit a synthetic field,
+      # write it, then convert -> exercises the sbend + solenoid + cutoff paths.
+      field = make_field(g_ref = 0.3)
+      p = GGFitParams()
+      p.n_planes_add = 1
+      p.output_file = joinpath(dir, "curved_fit.h5")
+      res = gg_fit(field, p)
+      quiet(() -> gg_fit_write_results(res, field, p))
+      base2 = joinpath(dir, "gg_bend")
+      ele2 = quiet(() -> gg_to_bmad(p.output_file; output_base = base2, cutoff = 1e-6))
+      @test isfile(ele2) && isfile(base2 * "_gg.bmad")
+      @test occursin("sbend", read(ele2, String))
+    end
   end
 end

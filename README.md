@@ -1,5 +1,8 @@
 # Generalized Gradients Overview
 
+[![Documentation](https://img.shields.io/badge/docs-online-blue.svg)](https://bmad-sim.github.io/GeneralizedGradients.jl/)
+[![API Reference](https://img.shields.io/badge/docs-API-blue.svg)](https://bmad-sim.github.io/GeneralizedGradients.jl/api/)
+
 Julia based code to calculate and manipulate generalized gradients.
 
 Generalized gradients are functions that can be used to describe magnetic or electric fields.

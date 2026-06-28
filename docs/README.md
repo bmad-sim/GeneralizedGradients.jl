@@ -29,7 +29,38 @@ The published site will be at
 > requests opened from a *fork* have a read-only token and cannot deploy a
 > preview; PRs from branches within this repository work normally.
 
-## Building locally
+## Viewing the documentation locally
+
+The easiest way is the helper script [`docs/build_local.sh`](build_local.sh),
+which builds **both** engines, assembles the combined `site/` exactly as CI does,
+and serves it locally so the links between the narrative docs and the `/api/`
+reference work:
+
+```sh
+docs/build_local.sh
+```
+
+Then open the printed URL:
+
+- Narrative docs: <http://localhost:8000/>
+- API reference: <http://localhost:8000/api/>
+
+Press `Ctrl-C` to stop the server. Options:
+
+```sh
+docs/build_local.sh --port 9000   # serve on a different port
+docs/build_local.sh --no-serve    # just build site/, don't start a server
+```
+
+Requirements: `julia` and `mystmd` (`npm install -g mystmd`). The server uses
+`python3` if available, otherwise `npx serve`.
+
+> The "API Reference" entry in the site's top nav points at the *published* site;
+> to view the locally built API, browse to `http://localhost:8000/api/` directly.
+
+## Building each engine separately
+
+If you want to work on just one half of the docs, build them individually.
 
 ### Narrative docs (MyST)
 
@@ -43,6 +74,9 @@ myst start          # live-reloading preview at http://localhost:3000
 myst build --html   # output in docs/myst/_build/html/
 ```
 
+`myst start` is the fastest loop for editing narrative pages — it live-reloads on
+save and needs no assembly step.
+
 ### API reference (Documenter)
 
 Requires Julia:
@@ -53,12 +87,14 @@ julia --project=docs docs/make.jl
 # output in docs/build/ (open docs/build/index.html)
 ```
 
-### Combined site
+### Combined site (manual)
 
-To reproduce the deployed layout locally:
+To reproduce the deployed layout by hand (this is what `build_local.sh`
+automates):
 
 ```sh
 rm -rf site && mkdir -p site/api
 cp -r docs/myst/_build/html/. site/
 cp -r docs/build/. site/api/
+python3 -m http.server --directory site   # then open http://localhost:8000/
 ```

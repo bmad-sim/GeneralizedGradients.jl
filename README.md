@@ -36,10 +36,12 @@ julia src/create_monomial_functions.jl <deriv-cut>
 ```
 where `<deriv-cut>` is the derivative cutoff number.
 
-## src/gg_fit.jl
+## gg_fit (src/gg_fit.jl) and programs/run_gg_fit.jl
 
-Program to calculate values for the gg functions that fit a given field table.
-The program assumes that the field table is defined on an evenly spaced grid and 
+`gg_fit(param_file)` is a function in the `GeneralizedGradients` package that
+calculates values for the gg functions that fit a given field table.  It can be
+run from the shell with `julia programs/run_gg_fit.jl <param_file>`.
+The fit assumes that the field table is defined on an evenly spaced grid and 
 the gg function values are calculated on (x, y) planes coincident with the planes of the grid.
 
 Note: The restriction that the field table must be defined on a grid is not strictly necessary and, 

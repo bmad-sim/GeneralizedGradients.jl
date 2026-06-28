@@ -1,0 +1,111 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # One docs build per branch/PR; cancel superseded runs.
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write        # push the built site to the gh-pages branch
+  pull-requests: write   # post the preview-link comment on PRs
+
+jobs:
+  docs:
+    name: Build & deploy documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---- API reference: Documenter (Julia) -> docs/build ----
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v2
+      - name: Instantiate docs environment
+        run: |
+          julia --project=docs -e '
+            using Pkg
+            Pkg.develop(PackageSpec(path = pwd()))
+            Pkg.instantiate()'
+      - name: Build API reference (Documenter)
+        run: julia --project=docs docs/make.jl
+
+      # ---- Narrative docs: MyST (Node) -> docs/myst/_build/html ----
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install MyST
+        run: npm install -g mystmd
+
+      - name: Compute deploy paths
+        id: paths
+        run: |
+          repo="${{ github.event.repository.name }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "base_url=/$repo/previews/PR${{ github.event.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "base_url=/$repo" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build narrative docs (MyST)
+        working-directory: docs/myst
+        env:
+          # MyST needs the GitHub Pages sub-path so asset/links resolve.
+          BASE_URL: ${{ steps.paths.outputs.base_url }}
+        run: myst build --html
+
+      # ---- Assemble combined site: MyST at root, Documenter at /api ----
+      - name: Assemble site
+        run: |
+          set -e
+          rm -rf site
+          mkdir -p site/api
+          cp -r docs/myst/_build/html/. site/
+          cp -r docs/build/. site/api/
+          touch site/.nojekyll   # serve _-prefixed asset dirs verbatim
+
+      # ---- Deploy ----
+      - name: Deploy main site
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          keep_files: true   # preserve previews/ on main deploys
+
+      - name: Deploy PR preview
+        if: github.event_name == 'pull_request'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          destination_dir: previews/PR${{ github.event.number }}
+          keep_files: true
+
+      - name: Comment preview link
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo  = context.repo.repo;
+            const n     = context.issue.number;
+            const url   = `https://${owner.toLowerCase()}.github.io/${repo}/previews/PR${n}/`;
+            const marker = '<!-- docs-preview -->';
+            const body = `${marker}\n📖 **Documentation preview** for this PR: ${url}\n\n` +
+                         `_Rebuilt on every push; removed automatically when the PR closes._`;
+            const { data: comments } = await github.rest.issues.listComments(
+              { owner, repo, issue_number: n });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: n, body });
+            }

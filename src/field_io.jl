@@ -39,9 +39,13 @@ function read_field_grid(path::AbstractString)
   _is_hdf5_path(path) && return read_field_grid_hdf5(path)
   m = Module(:FieldGridInclude)
   Base.include(m, abspath(path))
-  isdefined(m, :fg) ||
+  # `Base.include` defines `fg` in a newer world age than this function. On Julia
+  # 1.12+ global bindings are world-age partitioned, so the new binding is not
+  # visible to `isdefined`/`getfield` here without crossing a world boundary;
+  # `invokelatest` does that (and is a harmless no-op on older versions).
+  Base.invokelatest(isdefined, m, :fg) ||
     error("Julia field-grid file did not define `fg`: $path")
-  fg = getfield(m, :fg)
+  fg = Base.invokelatest(getfield, m, :fg)
   fg isa FieldGridTable ||
     error("`fg` defined in $path is not a FieldGridTable.")
   return fg

@@ -1,0 +1,6 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+GeneralizedGradients = "b8c4a905-87fa-4014-a9ca-6bce8b2698a0"
+
+[compat]
+Documenter = "1"

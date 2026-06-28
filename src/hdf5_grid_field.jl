@@ -66,7 +66,7 @@ end
 _geometry_to_str(::GridGeometry.T) = "rectangular"   # only XYZ supported
 function _geometry_from_str(s)
     s == "rectangular" && return GridGeometry.XYZ
-    error("read_grid_field_hdf5 supports only 'rectangular' (xyz) grids, got: $s")
+    error("read_field_grid_hdf5 supports only 'rectangular' (xyz) grids, got: $s")
 end
 
 # ---------------------------------------------------------------------------
@@ -105,7 +105,7 @@ function _write_field_group(g1, name, field, unit_dim, unit_sym)
 end
 
 """
-    write_grid_field_hdf5(path, fg::FieldGridTable)
+    write_field_grid_hdf5(path, fg::FieldGridTable)
 
 Write a `FieldGridTable` as an openPMD HDF5 `grid_field` file matching Bmad's
 `hdf5_write_grid_field` (geometry = xyz).  The `fg.magnetic` and/or `fg.electric`
@@ -116,7 +116,7 @@ to start at zero) and `fg.r0` is written as `gridOriginOffset`, so a grid point
 `(ix,iy,iz)` is at `dr .* (ix,iy,iz) + r0` relative to the anchor.  A non-zero
 `fg.g_ref` sets `gridCurvatureRadius = 1/g_ref` so Bmad enables `curved_ref_frame`.
 """
-function write_grid_field_hdf5(path::AbstractString, fg::FieldGridTable)
+function write_field_grid_hdf5(path::AbstractString, fg::FieldGridTable)
     has_mag = !isempty(fg.magnetic)
     has_elec = !isempty(fg.electric)
     (has_mag || has_elec) ||
@@ -194,10 +194,10 @@ function _read_field_group(g1, name, lb, nx, ny, nz)
 end
 
 """
-    read_grid_field_hdf5(path; index = 1) -> FieldGridTable
+    read_field_grid_hdf5(path; index = 1) -> FieldGridTable
 
 Read a Bmad/openPMD `grid_field` HDF5 file (as written by
-`write_grid_field_hdf5`, or by Bmad itself) into a [`FieldGridTable`].  The
+`write_field_grid_hdf5`, or by Bmad itself) into a [`FieldGridTable`].  The
 `magnetic`/`electric` OffsetArrays are indexed `(ix_lo:ix_hi, …)` with each
 element a `[Bx,By,Bz]` 3-vector; the grid index ranges come from
 `gridLowerBound`/`gridSize` (the grid is not assumed to start at zero).  `r0` is
@@ -206,7 +206,7 @@ element a `[Bx,By,Bz]` 3-vector; the grid index ranges come from
 the struct default.  `index` selects which grid under `/ExternalFieldMesh/` to
 read (default 1).
 """
-function read_grid_field_hdf5(path::AbstractString; index::Integer = 1)
+function read_field_grid_hdf5(path::AbstractString; index::Integer = 1)
     h5open(path, "r") do f
         haskey(f, "ExternalFieldMesh") ||
             error("Not a Bmad grid_field HDF5 file (missing /ExternalFieldMesh): $path")

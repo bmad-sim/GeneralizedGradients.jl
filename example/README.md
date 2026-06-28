@@ -8,18 +8,19 @@ Note: All commands are executed in the `example` directory.
 ## Preliminary: Create a field data file for use in this example
 
 File created: `example/wsnk_fieldmap_reduced.h5`
-This is a reduced field map file containing the first 12 planes of the full field map.
-This speeds things up.
 
+To speed things up, this is a reduced field map file containing the first 12 planes of the full 
+field map for the AGS warm snake
 Field grids and GG fit results are stored as HDF5 files.
 
 Created via:
 ```
 julia> using GeneralizedGradients, OffsetArrays
-julia> include("ags-snakes/wsnk_fieldmap.jl")       # defines r0_grid, dr_grid, pt
-julia> pt = OffsetArray(pt[:, :, 0:11], 0, 0, -1)   # truncate to 12 planes; pt[ix,iy,iz]=[Bx,By,Bz]
-julia> fg = FieldGridTable{Float64}(; magnetic = pt, r0 = r0_grid, dr = dr_grid, g_ref = 0.0)
-julia> write_field_grid("wsnk_fieldmap_reduced.h5", fg)
+julia> field_file = "../ags-snakes/wsnk_fieldmap.hdf5"
+julia> fg = read_field_grid_hdf5(field_file);            # full field map
+julia> m = fg.magnetic;                                  # m[ix,iy,iz] = [Bx,By,Bz]
+julia> fg.magnetic = OffsetArray(m[:, :, 0:11], axes(m, 1), axes(m, 2), 0:11);   # keep first 12 z-planes
+julia> write_field_grid_hdf5("wsnk_fieldmap_reduced.h5", fg)
 ```
 
 To read back in use:
@@ -33,6 +34,7 @@ Fitting parameters for this example are in:
 ```
 example/fit_params.jl
 ```
+
 Fit:
 ```
 julia ../src/gg_fit.jl fit_params.jl

@@ -36,8 +36,9 @@ example/fit_params.jl
 ```
 To run the fit use the command:
 ```
-julia ../src/gg_fit.jl fit_params.jl
+julia ../programs/run_gg_fit.jl fit_params.jl
 ```
+or, from Julia, `using GeneralizedGradients; gg_fit("fit_params.jl")`.
 The data file produced is `gg_fit_result.h5` (HDF5). Loaded with `gg_load_fit`, it
 yields a NamedTuple with the following fields:
 ```

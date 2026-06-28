@@ -74,25 +74,25 @@ _num(x::Real) = iszero(x) ? "0" : @sprintf("%.15g", float(x))
 # [Bx,By,Bz] 3-vectors, using the grid's own indices (origin `r0`, spacing `dr`,
 # anchor = beginning).
 function _write_grid_field_text(path, mag, r0, dr, is_bend, field_scale)
-    ax = axes(mag)
-    open(path, "w") do io
-        println(io, "{")
-        println(io, "  geometry = xyz,")
-        println(io, "  field_type = magnetic,")
-        println(io, "  ele_anchor_pt = beginning,")
-        is_bend && println(io, "  curved_ref_frame = T,")
-        field_scale != 1 && println(io, "  field_scale = ", _num(field_scale), ",")
-        println(io, "  r0 = (", _num(r0[1]), ", ", _num(r0[2]), ", ", _num(r0[3]), "),")
-        println(io, "  dr = (", _num(dr[1]), ", ", _num(dr[2]), ", ", _num(dr[3]), "),")
-        println(io, "  {")
-        for iz in ax[3], iy in ax[2], ix in ax[1]
-            B = mag[ix, iy, iz]
-            @printf(io, "    %d %d %d: %s %s %s,\n",
-                    ix, iy, iz, _num(B[1]), _num(B[2]), _num(B[3]))
-        end
-        println(io, "  }")
-        println(io, "}")
+  ax = axes(mag)
+  open(path, "w") do io
+    println(io, "{")
+    println(io, "  geometry = xyz,")
+    println(io, "  field_type = magnetic,")
+    println(io, "  ele_anchor_pt = beginning,")
+    is_bend && println(io, "  curved_ref_frame = T,")
+    field_scale != 1 && println(io, "  field_scale = ", _num(field_scale), ",")
+    println(io, "  r0 = (", _num(r0[1]), ", ", _num(r0[2]), ", ", _num(r0[3]), "),")
+    println(io, "  dr = (", _num(dr[1]), ", ", _num(dr[2]), ", ", _num(dr[3]), "),")
+    println(io, "  {")
+    for iz in ax[3], iy in ax[2], ix in ax[1]
+      B = mag[ix, iy, iz]
+      @printf(io, "    %d %d %d: %s %s %s,\n",
+          ix, iy, iz, _num(B[1]), _num(B[2]), _num(B[3]))
     end
+    println(io, "  }")
+    println(io, "}")
+  end
 end
 
 """
@@ -117,64 +117,64 @@ function write_bmad_grid_field(field::FieldGridTable;
                                field_scale::Real = 1.0,
                                hdf5::Bool = false)
 
-    mag = field.magnetic
-    dr  = field.dr
-    dz  = dr[3]
-    zax = axes(mag, 3)
-    iz_lo = first(zax)
-    nz  = length(zax)
-    is_bend = g_ref != 0
-    L = dz * (nz - 1)                        # longitudinal span of the grid
+  mag = field.magnetic
+  dr  = field.dr
+  dz  = dr[3]
+  zax = axes(mag, 3)
+  iz_lo = first(zax)
+  nz  = length(zax)
+  is_bend = g_ref != 0
+  L = dz * (nz - 1)                        # longitudinal span of the grid
 
-    # Anchor the grid at the entrance of the element: shift z so the first plane
-    # lands at element z = 0. The transverse position of the grid is preserved,
-    # and the grid index ranges are kept as-is.
-    r0_out = [field.r0[1], field.r0[2], -dz * iz_lo]
+  # Anchor the grid at the entrance of the element: shift z so the first plane
+  # lands at element z = 0. The transverse position of the grid is preserved,
+  # and the grid index ranges are kept as-is.
+  r0_out = [field.r0[1], field.r0[2], -dz * iz_lo]
 
-    grid_file = output_base * (hdf5 ? "_grid.h5" : "_grid.bmad")
-    ele_file  = output_base * ".bmad"
-    grid_name = basename(grid_file)
+  grid_file = output_base * (hdf5 ? "_grid.h5" : "_grid.bmad")
+  ele_file  = output_base * ".bmad"
+  grid_name = basename(grid_file)
 
-    # ---- Write the grid_field --------------------------------------------
-    if hdf5
-        fg = FieldGridTable{Float64}(;
-            magnetic = mag,                  # keep offset indices -> gridLowerBound preserved
-            r0 = r0_out,
-            dr = collect(Float64, dr),
-            g_ref = float(g_ref),
-            scale = float(field_scale),
-            anchor_pt = GridAnchorPt.Beginning,
-            geometry = GridGeometry.XYZ)
-        write_field_grid_hdf5(grid_file, fg)
+  # ---- Write the grid_field --------------------------------------------
+  if hdf5
+    fg = FieldGridTable{Float64}(;
+      magnetic = mag,                  # keep offset indices -> gridLowerBound preserved
+      r0 = r0_out,
+      dr = collect(Float64, dr),
+      g_ref = float(g_ref),
+      scale = float(field_scale),
+      anchor_pt = GridAnchorPt.Beginning,
+      geometry = GridGeometry.XYZ)
+    write_field_grid_hdf5(grid_file, fg)
+  else
+    _write_grid_field_text(grid_file, mag, r0_out, dr, is_bend, field_scale)
+  end
+
+  # ---- Write the lattice element ---------------------------------------
+  open(ele_file, "w") do io
+    println(io, "! Bmad lattice element with attached field grid.")
+    println(io, "! Generated from a field grid by grid_to_bmad.jl.")
+    println(io, "!")
+    if is_bend
+      println(io, "! Reference curve is an arc (g = ", _num(g_ref),
+            " 1/m) => sbend; field grid is in the bend curvilinear frame.")
+      println(io)
+      println(io, ele_name, ": sbend,")
+      println(io, "  l = ", _num(L), ",")
+      println(io, "  g = ", _num(g_ref), ",")
     else
-        _write_grid_field_text(grid_file, mag, r0_out, dr, is_bend, field_scale)
+      println(io, "! Reference curve is straight => em_field.")
+      println(io)
+      println(io, ele_name, ": em_field,")
+      println(io, "  l = ", _num(L), ",")
     end
+    println(io, "  field_calc = fieldmap,")
+    println(io, "  tracking_method = runge_kutta,")
+    println(io, "  mat6_calc_method = tracking,")
+    println(io, "  grid_field = call::", grid_name)
+  end
 
-    # ---- Write the lattice element ---------------------------------------
-    open(ele_file, "w") do io
-        println(io, "! Bmad lattice element with attached field grid.")
-        println(io, "! Generated from a field grid by grid_to_bmad.jl.")
-        println(io, "!")
-        if is_bend
-            println(io, "! Reference curve is an arc (g = ", _num(g_ref),
-                        " 1/m) => sbend; field grid is in the bend curvilinear frame.")
-            println(io)
-            println(io, ele_name, ": sbend,")
-            println(io, "  l = ", _num(L), ",")
-            println(io, "  g = ", _num(g_ref), ",")
-        else
-            println(io, "! Reference curve is straight => em_field.")
-            println(io)
-            println(io, ele_name, ": em_field,")
-            println(io, "  l = ", _num(L), ",")
-        end
-        println(io, "  field_calc = fieldmap,")
-        println(io, "  tracking_method = runge_kutta,")
-        println(io, "  mat6_calc_method = tracking,")
-        println(io, "  grid_field = call::", grid_name)
-    end
-
-    return ele_file
+  return ele_file
 end
 
 # ---------------------------------------------------------------------------
@@ -182,34 +182,34 @@ end
 # ---------------------------------------------------------------------------
 
 function main(args)
-    hdf5 = "--hdf5" in args
-    args = filter(!startswith("--"), args)
-    isempty(args) && error("Usage: julia grid_to_bmad.jl <field_grid.h5> [output_base] [g_ref] [--hdf5]")
-    input = args[1]
-    output_base = length(args) >= 2 ? args[2] :
-                  joinpath(dirname(input), first(splitext(basename(input))))
-    ele_name = basename(output_base)
+  hdf5 = "--hdf5" in args
+  args = filter(!startswith("--"), args)
+  isempty(args) && error("Usage: julia grid_to_bmad.jl <field_grid.h5> [output_base] [g_ref] [--hdf5]")
+  input = args[1]
+  output_base = length(args) >= 2 ? args[2] :
+                joinpath(dirname(input), first(splitext(basename(input))))
+  ele_name = basename(output_base)
 
-    field = read_field_grid(input)
-    g_ref = length(args) >= 3 ? parse(Float64, args[3]) : field.g_ref
+  field = read_field_grid(input)
+  g_ref = length(args) >= 3 ? parse(Float64, args[3]) : field.g_ref
 
-    ele_file = write_bmad_grid_field(field; ele_name, output_base, g_ref, hdf5)
+  ele_file = write_bmad_grid_field(field; ele_name, output_base, g_ref, hdf5)
 
-    nx, ny, nz = size(field.magnetic, 1), size(field.magnetic, 2), size(field.magnetic, 3)
-    println("="^72)
-    println("Field grid -> Bmad grid_field")
-    println("  input file   : ", input)
-    println("  grid size    : ", nx, " x ", ny, " x ", nz, "  (ix, iy, iz)")
-    println("  reference    : ", g_ref == 0 ? "straight (em_field)" :
-            @sprintf("arc, g = %.6g 1/m (sbend)", g_ref))
-    println("  format       : ", hdf5 ? "HDF5 (openPMD)" : "text")
-    println("  element      : ", ele_name)
-    println("  lattice file : ", ele_file)
-    println("  grid file    : ", output_base * (hdf5 ? "_grid.h5" : "_grid.bmad"))
-    println("="^72)
-    return ele_file
+  nx, ny, nz = size(field.magnetic, 1), size(field.magnetic, 2), size(field.magnetic, 3)
+  println("="^72)
+  println("Field grid -> Bmad grid_field")
+  println("  input file   : ", input)
+  println("  grid size    : ", nx, " x ", ny, " x ", nz, "  (ix, iy, iz)")
+  println("  reference    : ", g_ref == 0 ? "straight (em_field)" :
+      @sprintf("arc, g = %.6g 1/m (sbend)", g_ref))
+  println("  format       : ", hdf5 ? "HDF5 (openPMD)" : "text")
+  println("  element      : ", ele_name)
+  println("  lattice file : ", ele_file)
+  println("  grid file    : ", output_base * (hdf5 ? "_grid.h5" : "_grid.bmad"))
+  println("="^72)
+  return ele_file
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    main(ARGS)
+  main(ARGS)
 end

@@ -51,15 +51,15 @@ Coefficient-array builder.  `K[p+1,q+1]` = coefficient of xᵖ yᵠ.
 `valfun(key)` returns the GG function value multiplying that table entry.
 """
 function _accum(tdict, valfun, g_ref)
-    K = _newK()
-    for (key, terms) in tdict
-        v = valfun(key)
-        v == 0.0 && continue
-        for (c, p, q, k) in terms
-            K[p+1, q+1] += float(c) * (k == 0 ? 1.0 : float(g_ref)^k) * v
-        end
+  K = _newK()
+  for (key, terms) in tdict
+    v = valfun(key)
+    v == 0.0 && continue
+    for (c, p, q, k) in terms
+      K[p+1, q+1] += float(c) * (k == 0 ? 1.0 : float(g_ref)^k) * v
     end
-    return K
+  end
+  return K
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -71,9 +71,9 @@ Combined coefficient array of a component: sum of its a, b and bs parts.
 `Ta`/`Tb` are keyed by (n,m) and `Tbs` by m.
 """
 function _comp_array(Ta, Tb, Tbs, aval, bval, bsval, g_ref)
-    return _accum(Ta, k -> aval(k...), g_ref) .+
-           _accum(Tb, k -> bval(k...), g_ref) .+
-           _accum(Tbs, m -> bsval(m), g_ref)
+  return _accum(Ta, k -> aval(k...), g_ref) .+
+         _accum(Tb, k -> bval(k...), g_ref) .+
+         _accum(Tbs, m -> bsval(m), g_ref)
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -84,16 +84,16 @@ end
 Value and (x,y) partials of the plain polynomial Σ K_{i,j} xⁱ yʲ.
 """
 function _polyval(K, x, y)
-    val = 0.0; dvx = 0.0; dvy = 0.0
-    for i in 0:_NMAX-1, j in 0:_NMAX-1
-        c = K[i+1, j+1]
-        c == 0.0 && continue
-        xi = x^i; yj = y^j
-        val += c * xi * yj
-        i > 0 && (dvx += c * i * x^(i-1) * yj)
-        j > 0 && (dvy += c * j * xi * y^(j-1))
-    end
-    return val, dvx, dvy
+  val = 0.0; dvx = 0.0; dvy = 0.0
+  for i in 0:_NMAX-1, j in 0:_NMAX-1
+    c = K[i+1, j+1]
+    c == 0.0 && continue
+    xi = x^i; yj = y^j
+    val += c * xi * yj
+    i > 0 && (dvx += c * i * x^(i-1) * yj)
+    j > 0 && (dvy += c * j * xi * y^(j-1))
+  end
+  return val, dvx, dvy
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -118,42 +118,42 @@ Returns (B, A, dA) where
        and (u_1,u_2,u_3)=(x,y,s).
 """
 function field_and_potential_evaluate(gg_fit, ip::Integer, x::Real, y::Real)
-    g_ref = gg_fit.g_ref
-    # Shift absolute coordinates onto the GG expansion axis.
-    x = float(x) - gg_fit.origin[1]
-    y = float(y) - gg_fit.origin[2]
+  g_ref = gg_fit.g_ref
+  # Shift absolute coordinates onto the GG expansion axis.
+  x = float(x) - gg_fit.origin[1]
+  y = float(y) - gg_fit.origin[2]
 
-    # GG value getters at this plane (0 when an order is unavailable).
-    aval(n, m)  = (m >= 0 && haskey(gg_fit.a, (n, m)))  ? gg_fit.a[(n, m)][ip]  : 0.0
-    bval(n, m)  = (m >= 0 && haskey(gg_fit.b, (n, m)))  ? gg_fit.b[(n, m)][ip]  : 0.0
-    bsval(m)    = (m >= 0 && haskey(gg_fit.bs, m))      ? gg_fit.bs[m][ip]      : 0.0
+  # GG value getters at this plane (0 when an order is unavailable).
+  aval(n, m)  = (m >= 0 && haskey(gg_fit.a, (n, m)))  ? gg_fit.a[(n, m)][ip]  : 0.0
+  bval(n, m)  = (m >= 0 && haskey(gg_fit.b, (n, m)))  ? gg_fit.b[(n, m)][ip]  : 0.0
+  bsval(m)    = (m >= 0 && haskey(gg_fit.bs, m))      ? gg_fit.bs[m][ip]      : 0.0
 
-    # Bumped (s-derivative) getters:  ∂_s a(n,m) = a(n,m+1), etc.
-    avalp(n, m) = aval(n, m + 1)
-    bvalp(n, m) = bval(n, m + 1)
-    bsvalp(m)   = bsval(m + 1)
+  # Bumped (s-derivative) getters:  ∂_s a(n,m) = a(n,m+1), etc.
+  avalp(n, m) = aval(n, m + 1)
+  bvalp(n, m) = bval(n, m + 1)
+  bsvalp(m)   = bsval(m + 1)
 
-    # --- field ---
-    Bx = _polyval(_comp_array(Bx_a, Bx_b, Bx_bs, aval, bval, bsval, g_ref), x, y)[1]
-    By = _polyval(_comp_array(By_a, By_b, By_bs, aval, bval, bsval, g_ref), x, y)[1]
-    Bs = _polyval(_comp_array(Bs_a, Bs_b, Bs_bs, aval, bval, bsval, g_ref), x, y)[1]
+  # --- field ---
+  Bx = _polyval(_comp_array(Bx_a, Bx_b, Bx_bs, aval, bval, bsval, g_ref), x, y)[1]
+  By = _polyval(_comp_array(By_a, By_b, By_bs, aval, bval, bsval, g_ref), x, y)[1]
+  Bs = _polyval(_comp_array(Bs_a, Bs_b, Bs_bs, aval, bval, bsval, g_ref), x, y)[1]
 
-    # --- vector potential: value and (x,y) partials straight from the tables ---
-    Axv, Axx, Axy = _polyval(_comp_array(Ax_a, Ax_b, Ax_bs, aval, bval, bsval, g_ref), x, y)
-    Ayv, Ayx, Ayy = _polyval(_comp_array(Ay_a, Ay_b, Ay_bs, aval, bval, bsval, g_ref), x, y)
-    Asv, Asx, Asy = _polyval(_comp_array(As_a, As_b, As_bs, aval, bval, bsval, g_ref), x, y)
+  # --- vector potential: value and (x,y) partials straight from the tables ---
+  Axv, Axx, Axy = _polyval(_comp_array(Ax_a, Ax_b, Ax_bs, aval, bval, bsval, g_ref), x, y)
+  Ayv, Ayx, Ayy = _polyval(_comp_array(Ay_a, Ay_b, Ay_bs, aval, bval, bsval, g_ref), x, y)
+  Asv, Asx, Asy = _polyval(_comp_array(As_a, As_b, As_bs, aval, bval, bsval, g_ref), x, y)
 
-    # ∂A/∂s: same tables evaluated with bumped GG derivative orders.
-    dAxv = _polyval(_comp_array(Ax_a, Ax_b, Ax_bs, avalp, bvalp, bsvalp, g_ref), x, y)[1]
-    dAyv = _polyval(_comp_array(Ay_a, Ay_b, Ay_bs, avalp, bvalp, bsvalp, g_ref), x, y)[1]
-    dAsv = _polyval(_comp_array(As_a, As_b, As_bs, avalp, bvalp, bsvalp, g_ref), x, y)[1]
+  # ∂A/∂s: same tables evaluated with bumped GG derivative orders.
+  dAxv = _polyval(_comp_array(Ax_a, Ax_b, Ax_bs, avalp, bvalp, bsvalp, g_ref), x, y)[1]
+  dAyv = _polyval(_comp_array(Ay_a, Ay_b, Ay_bs, avalp, bvalp, bsvalp, g_ref), x, y)[1]
+  dAsv = _polyval(_comp_array(As_a, As_b, As_bs, avalp, bvalp, bsvalp, g_ref), x, y)[1]
 
-    B  = [Bx, By, Bs]
-    A  = [Axv, Ayv, Asv]
-    dA = [Axx Axy dAxv;
-          Ayx Ayy dAyv;
-          Asx Asy dAsv]
-    return B, A, dA
+  B  = [Bx, By, Bs]
+  A  = [Axv, Ayv, Asv]
+  dA = [Axx Axy dAxv;
+        Ayx Ayy dAyv;
+        Asx Asy dAsv]
+  return B, A, dA
 end
 
 # ---------------------------------------------------------------------------
@@ -177,17 +177,17 @@ Single-point Taylor tower: from f and its derivatives at z0, return
 [P⁽ᵐ⁾(sq) for m=0..N] with P the Taylor series, i.e. f extrapolated to sq.
 """
 function _taylor_derivs(z0, f0, sq)
-    N = length(f0) - 1
-    u = sq - z0
-    out = zeros(Float64, N + 1)
-    for m in 0:N
-        acc = 0.0
-        for j in m:N
-            acc += f0[j+1] * u^(j-m) / _fct(j-m)
-        end
-        out[m+1] = acc
+  N = length(f0) - 1
+  u = sq - z0
+  out = zeros(Float64, N + 1)
+  for m in 0:N
+    acc = 0.0
+    for j in m:N
+      acc += f0[j+1] * u^(j-m) / _fct(j-m)
     end
-    return out
+    out[m+1] = acc
+  end
+  return out
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -201,57 +201,57 @@ Built via confluent Newton divided differences in the local coordinate
 u = s - zL (nodes: 0 with multiplicity N+1, hstep with multiplicity N+1).
 """
 function _hermite_derivs(zL, zR, fL, fR, sq)
-    N = length(fL) - 1
-    K = 2N + 1                       # polynomial degree = (#nodes) - 1
-    hstep = zR - zL
-    fval(i, j) = (i <= N ? fL : fR)[j+1]    # j-th derivative at node i's plane
-    isR(i) = i > N                          # node i (0-based) in the R block?
+  N = length(fL) - 1
+  K = 2N + 1                       # polynomial degree = (#nodes) - 1
+  hstep = zR - zL
+  fval(i, j) = (i <= N ? fL : fR)[j+1]    # j-th derivative at node i's plane
+  isR(i) = i > N                          # node i (0-based) in the R block?
 
-    memo = Dict{Tuple{Int,Int},Float64}()
-    function dd(i, k)                # divided difference f[t_i, …, t_{i+k}]
-        haskey(memo, (i, k)) && return memo[(i, k)]
-        v = isR(i) == isR(i + k) ? fval(i, k) / _fct(k) :       # one block: f⁽ᵏ⁾/k!
-            (dd(i + 1, k - 1) - dd(i, k - 1)) / hstep           # spans both blocks
-        memo[(i, k)] = v
-        return v
+  memo = Dict{Tuple{Int,Int},Float64}()
+  function dd(i, k)                # divided difference f[t_i, …, t_{i+k}]
+    haskey(memo, (i, k)) && return memo[(i, k)]
+    v = isR(i) == isR(i + k) ? fval(i, k) / _fct(k) :       # one block: f⁽ᵏ⁾/k!
+      (dd(i + 1, k - 1) - dd(i, k - 1)) / hstep           # spans both blocks
+    memo[(i, k)] = v
+    return v
+  end
+
+  c = [dd(0, k) for k in 0:K]                 # Newton coefficients
+  tnode(i) = i <= N ? 0.0 : hstep             # node positions in u
+
+  # Accumulate the Newton form into monomial coefficients in u.
+  poly  = zeros(Float64, K + 1)               # poly[d+1] = coeff of u^d
+  basis = [1.0]                               # current ∏ (u - t_j)
+  for k in 0:K
+    @inbounds for d in 1:length(basis)
+      poly[d] += c[k+1] * basis[d]
     end
-
-    c = [dd(0, k) for k in 0:K]                 # Newton coefficients
-    tnode(i) = i <= N ? 0.0 : hstep             # node positions in u
-
-    # Accumulate the Newton form into monomial coefficients in u.
-    poly  = zeros(Float64, K + 1)               # poly[d+1] = coeff of u^d
-    basis = [1.0]                               # current ∏ (u - t_j)
-    for k in 0:K
-        @inbounds for d in 1:length(basis)
-            poly[d] += c[k+1] * basis[d]
-        end
-        if k < K                                # multiply basis by (u - t_k)
-            tk = tnode(k)
-            nb = zeros(Float64, length(basis) + 1)
-            @inbounds for d in 1:length(basis)
-                nb[d+1] += basis[d]
-                nb[d]   -= tk * basis[d]
-            end
-            basis = nb
-        end
+    if k < K                                # multiply basis by (u - t_k)
+      tk = tnode(k)
+      nb = zeros(Float64, length(basis) + 1)
+      @inbounds for d in 1:length(basis)
+        nb[d+1] += basis[d]
+        nb[d]   -= tk * basis[d]
+      end
+      basis = nb
     end
+  end
 
-    # Evaluate H and its derivatives at uq.
-    uq = sq - zL
-    out = zeros(Float64, N + 1)
-    for m in 0:N
-        acc = 0.0
-        for d in m:K
-            ff = 1.0                            # falling factorial d·(d-1)···(d-m+1)
-            for r in 0:m-1
-                ff *= (d - r)
-            end
-            acc += poly[d+1] * ff * uq^(d-m)
-        end
-        out[m+1] = acc
+  # Evaluate H and its derivatives at uq.
+  uq = sq - zL
+  out = zeros(Float64, N + 1)
+  for m in 0:N
+    acc = 0.0
+    for d in m:K
+      ff = 1.0                            # falling factorial d·(d-1)···(d-m+1)
+      for r in 0:m-1
+        ff *= (d - r)
+      end
+      acc += poly[d+1] * ff * uq^(d-m)
     end
-    return out
+    out[m+1] = acc
+  end
+  return out
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -262,7 +262,7 @@ end
 Interpolate one GG function's derivative tower onto sq (Hermite, or Taylor if single).
 """
 _interp_tower(fL, fR, zL, zR, sq, single) =
-    single ? _taylor_derivs(zL, fL, sq) : _hermite_derivs(zL, zR, fL, fR, sq)
+  single ? _taylor_derivs(zL, fL, sq) : _hermite_derivs(zL, zR, fL, fR, sq)
 
 #---------------------------------------------------------------------------------------------------
 
@@ -272,11 +272,11 @@ _interp_tower(fL, fR, zL, zR, sq, single) =
 Largest N such that orders 0,1,…,N are all present in `orders` (sorted).
 """
 function _contiguous_order(orders)
-    N = -1
-    for (idx, m) in enumerate(orders)
-        m == idx - 1 ? (N = m) : break
-    end
-    return N
+  N = -1
+  for (idx, m) in enumerate(orders)
+    m == idx - 1 ? (N = m) : break
+  end
+  return N
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -287,25 +287,25 @@ end
 Interpolate an (n,m)-keyed dict (a, b): build one Hermite per multipole n.
 """
 function _interp_nm_dict(d, iL, iR, zL, zR, sq, single)
-    out = Dict{Tuple{Int,Int},Vector{Float64}}()
-    byn = Dict{Int,Vector{Int}}()
-    for (n, m) in keys(d)
-        push!(get!(byn, n, Int[]), m)
+  out = Dict{Tuple{Int,Int},Vector{Float64}}()
+  byn = Dict{Int,Vector{Int}}()
+  for (n, m) in keys(d)
+    push!(get!(byn, n, Int[]), m)
+  end
+  for (n, ms) in byn
+    sort!(ms)
+    N  = _contiguous_order(ms)
+    fL = [d[(n, j)][iL] for j in 0:N]
+    fR = [d[(n, j)][iR] for j in 0:N]
+    vals = _interp_tower(fL, fR, zL, zR, sq, single)
+    for j in 0:N
+      out[(n, j)] = [vals[j+1]]
     end
-    for (n, ms) in byn
-        sort!(ms)
-        N  = _contiguous_order(ms)
-        fL = [d[(n, j)][iL] for j in 0:N]
-        fR = [d[(n, j)][iR] for j in 0:N]
-        vals = _interp_tower(fL, fR, zL, zR, sq, single)
-        for j in 0:N
-            out[(n, j)] = [vals[j+1]]
-        end
-        for m in ms                              # any non-contiguous order: nearest plane
-            m > N && (out[(n, m)] = [d[(n, m)][iL]])
-        end
+    for m in ms                              # any non-contiguous order: nearest plane
+      m > N && (out[(n, m)] = [d[(n, m)][iL]])
     end
-    return out
+  end
+  return out
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -316,19 +316,19 @@ end
 Interpolate an m-keyed dict (bs): a single Hermite tower.
 """
 function _interp_m_dict(d, iL, iR, zL, zR, sq, single)
-    out = Dict{Int,Vector{Float64}}()
-    ms  = sort(collect(keys(d)))
-    N   = _contiguous_order(ms)
-    fL  = [d[j][iL] for j in 0:N]
-    fR  = [d[j][iR] for j in 0:N]
-    vals = _interp_tower(fL, fR, zL, zR, sq, single)
-    for j in 0:N
-        out[j] = [vals[j+1]]
-    end
-    for m in ms
-        m > N && (out[m] = [d[m][iL]])
-    end
-    return out
+  out = Dict{Int,Vector{Float64}}()
+  ms  = sort(collect(keys(d)))
+  N   = _contiguous_order(ms)
+  fL  = [d[j][iL] for j in 0:N]
+  fR  = [d[j][iR] for j in 0:N]
+  vals = _interp_tower(fL, fR, zL, zR, sq, single)
+  for j in 0:N
+    out[j] = [vals[j+1]]
+  end
+  for m in ms
+    m > N && (out[m] = [d[m][iL]])
+  end
+  return out
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -348,27 +348,27 @@ Build a single virtual plane at s by Hermite-interpolating every GG derivative t
 from the two straddling grid planes (one-plane Taylor if only one plane).
 """
 function _interp_gg_fit(gg_fit, s::Real)
-    z  = gg_fit.z_base
-    P  = length(z)
-    sq = float(s)
+  z  = gg_fit.z_base
+  P  = length(z)
+  sq = float(s)
 
-    if P == 1
-        iL = iR = 1
-    else
-        i0 = searchsortedlast(z, sq)             # z[i0] <= s < z[i0+1]
-        iL = clamp(i0, 1, P - 1)                 # straddling pair (extrapolates at ends)
-        iR = iL + 1
-    end
-    single = iL == iR
-    zL = z[iL]; zR = z[iR]
+  if P == 1
+    iL = iR = 1
+  else
+    i0 = searchsortedlast(z, sq)             # z[i0] <= s < z[i0+1]
+    iL = clamp(i0, 1, P - 1)                 # straddling pair (extrapolates at ends)
+    iR = iL + 1
+  end
+  single = iL == iR
+  zL = z[iL]; zR = z[iR]
 
-    a2  = _interp_nm_dict(gg_fit.a,  iL, iR, zL, zR, sq, single)
-    b2  = _interp_nm_dict(gg_fit.b,  iL, iR, zL, zR, sq, single)
-    bs2 = _interp_m_dict(gg_fit.bs, iL, iR, zL, zR, sq, single)
+  a2  = _interp_nm_dict(gg_fit.a,  iL, iR, zL, zR, sq, single)
+  b2  = _interp_nm_dict(gg_fit.b,  iL, iR, zL, zR, sq, single)
+  bs2 = _interp_m_dict(gg_fit.bs, iL, iR, zL, zR, sq, single)
 
-    return (; z_base = [sq], a = a2, b = b2, bs = bs2,
-              g_ref = gg_fit.g_ref, origin = gg_fit.origin, dz_grid = gg_fit.dz_grid,
-              m_max = gg_fit.m_max, rms_plane = [NaN])
+  return (; z_base = [sq], a = a2, b = b2, bs = bs2,
+            g_ref = gg_fit.g_ref, origin = gg_fit.origin, dz_grid = gg_fit.dz_grid,
+            m_max = gg_fit.m_max, rms_plane = [NaN])
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -401,7 +401,7 @@ interpolated field.  The curl identity B = ∇×A holds at s as before.
 Returns (B, A, dA) exactly as field_and_potential_evaluate.
 """
 function field_and_potential_evaluate_at(gg_fit, x::Real, y::Real, s::Real)
-    return field_and_potential_evaluate(_interp_gg_fit(gg_fit, s), 1, x, y)
+  return field_and_potential_evaluate(_interp_gg_fit(gg_fit, s), 1, x, y)
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -412,14 +412,14 @@ Field-expansion coefficients  B_c(x,y,s) = Σ_{i,j} CB_{c,i,j}(s) xⁱ yʲ.
 Returns full _NMAX×_NMAX arrays summed over the a, b, bs parts.
 """
 function _field_CB(gg_fit, ip::Integer)
-    g_ref = gg_fit.g_ref
-    aval(n, m) = (m >= 0 && haskey(gg_fit.a, (n, m))) ? gg_fit.a[(n, m)][ip] : 0.0
-    bval(n, m) = (m >= 0 && haskey(gg_fit.b, (n, m))) ? gg_fit.b[(n, m)][ip] : 0.0
-    bsval(m)   = (m >= 0 && haskey(gg_fit.bs, m))     ? gg_fit.bs[m][ip]     : 0.0
-    CBx = _accum(Bx_a, k -> aval(k...), g_ref) .+ _accum(Bx_b, k -> bval(k...), g_ref) .+ _accum(Bx_bs, m -> bsval(m), g_ref)
-    CBy = _accum(By_a, k -> aval(k...), g_ref) .+ _accum(By_b, k -> bval(k...), g_ref) .+ _accum(By_bs, m -> bsval(m), g_ref)
-    CBs = _accum(Bs_a, k -> aval(k...), g_ref) .+ _accum(Bs_b, k -> bval(k...), g_ref) .+ _accum(Bs_bs, m -> bsval(m), g_ref)
-    return CBx, CBy, CBs
+  g_ref = gg_fit.g_ref
+  aval(n, m) = (m >= 0 && haskey(gg_fit.a, (n, m))) ? gg_fit.a[(n, m)][ip] : 0.0
+  bval(n, m) = (m >= 0 && haskey(gg_fit.b, (n, m))) ? gg_fit.b[(n, m)][ip] : 0.0
+  bsval(m)   = (m >= 0 && haskey(gg_fit.bs, m))     ? gg_fit.bs[m][ip]     : 0.0
+  CBx = _accum(Bx_a, k -> aval(k...), g_ref) .+ _accum(Bx_b, k -> bval(k...), g_ref) .+ _accum(Bx_bs, m -> bsval(m), g_ref)
+  CBy = _accum(By_a, k -> aval(k...), g_ref) .+ _accum(By_b, k -> bval(k...), g_ref) .+ _accum(By_bs, m -> bsval(m), g_ref)
+  CBs = _accum(Bs_a, k -> aval(k...), g_ref) .+ _accum(Bs_b, k -> bval(k...), g_ref) .+ _accum(Bs_bs, m -> bsval(m), g_ref)
+  return CBx, CBy, CBs
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -430,13 +430,13 @@ Trim three coefficient arrays to the smallest (x,y) extent holding every
 nonzero entry, so the returned matrices are indexed CB[i+1, j+1] = CB_{c,i,j}.
 """
 function _trim3(CBx, CBy, CBs)
-    pmax = 1; qmax = 1
-    for K in (CBx, CBy, CBs), j in 1:_NMAX, i in 1:_NMAX
-        if K[i, j] != 0.0
-            pmax = max(pmax, i); qmax = max(qmax, j)
-        end
+  pmax = 1; qmax = 1
+  for K in (CBx, CBy, CBs), j in 1:_NMAX, i in 1:_NMAX
+    if K[i, j] != 0.0
+      pmax = max(pmax, i); qmax = max(qmax, j)
     end
-    return CBx[1:pmax, 1:qmax], CBy[1:pmax, 1:qmax], CBs[1:pmax, 1:qmax]
+  end
+  return CBx[1:pmax, 1:qmax], CBy[1:pmax, 1:qmax], CBs[1:pmax, 1:qmax]
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -452,7 +452,7 @@ Returns (CBx, CBy, CBs); each is a matrix with CB[i+1, j+1] = CB_{c,i,j}, the
 coefficient of xⁱ yʲ in that field component at the plane.
 """
 function field_coefficients_at_plane(gg_fit, ip::Integer)
-    return _trim3(_field_CB(gg_fit, ip)...)
+  return _trim3(_field_CB(gg_fit, ip)...)
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -465,7 +465,7 @@ interpolation of the GG quantities used by `field_and_potential_evaluate_at`.  R
 coefficient of xⁱ yʲ in that field component at the plane.
 """
 function field_coefficients_at_s(gg_fit, s::Real)
-    return _trim3(_field_CB(_interp_gg_fit(gg_fit, s), 1)...)
+  return _trim3(_field_CB(_interp_gg_fit(gg_fit, s), 1)...)
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -482,10 +482,10 @@ keyed by (n,m) with a(n,m)=dᵐaₙ/dsᵐ, b(n,m)=dᵐbₙ/dsᵐ; and `bs` keyed
 bs(m)=dᵐ⁺¹a_0/dsᵐ⁺¹ = dᵐb_s/dsᵐ.
 """
 function gg_coefficients_at_plane(gg_fit, ip::Integer)
-    a  = Dict{Tuple{Int,Int},Float64}((nm => v[ip]) for (nm, v) in gg_fit.a)
-    b  = Dict{Tuple{Int,Int},Float64}((nm => v[ip]) for (nm, v) in gg_fit.b)
-    bs = Dict{Int,Float64}((m => v[ip]) for (m, v) in gg_fit.bs)
-    return a, b, bs
+  a  = Dict{Tuple{Int,Int},Float64}((nm => v[ip]) for (nm, v) in gg_fit.a)
+  b  = Dict{Tuple{Int,Int},Float64}((nm => v[ip]) for (nm, v) in gg_fit.b)
+  bs = Dict{Int,Float64}((m => v[ip]) for (m, v) in gg_fit.bs)
+  return a, b, bs
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -497,5 +497,5 @@ the straddling grid planes (the same interpolation used by `field_and_potential_
 Returns the three GG-function dicts of scalar values, as in `gg_coefficients_at_plane`.
 """
 function gg_coefficients_at_s(gg_fit, s::Real)
-    return gg_coefficients_at_plane(_interp_gg_fit(gg_fit, s), 1)
+  return gg_coefficients_at_plane(_interp_gg_fit(gg_fit, s), 1)
 end

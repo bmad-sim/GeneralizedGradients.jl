@@ -1,3 +1,17 @@
+"""
+    run_gg_fit
+
+Example of a command file to run gg_fit which fits generalized gradient (GG) coefficients to
+a 3D magnetic field table plane by plane.
+
+## Usage
+
+Run with command:
+  julia run_gg_fit.jl
+
+See the documentation for the gg_fit function for more details.
+"""
+
 using GeneralizedGradients
 
 #---------------------------------------------------------------------------------------------------
@@ -20,44 +34,17 @@ field = read_field_grid(grid_file)
 #---------------------------------------------------------------------------------------------------
 # Other parameters
 
-origin = [-0.0, 0.0]      # (x, y) origin about which the generalized gradients coefs are computed
-n_planes_add = 1            # Number of z-planes added.
-core_weight = 1             # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
-outer_plane_weight = 1      # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).
-output_file = "gg_fit_result.h5"
-# Parameter Documentation
+p = GGFitParams()
 
-"""
-    origin = [x0, y0]
+p.origin = [0.0, 0.0]      # (x, y) origin about which the generalized gradients coefs are computed
+p.n_planes_add = 1            # Number of z-planes added.
+p.core_weight = 1             # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
+p.outer_plane_weight = 1      # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).
+p.output_file = "gg_fit_result.h5"
 
-Defines the line [x0, y0, z] about which the generalized gradient coefficients are computed.
-If h is non-zero, origin must be [0, 0].
-
-    n_planes_add = Int
-
-This parameter sets the number of z-planes added to either side of the base z-plane to
-be used in the analysis of the derivatives at any given base z-plane (see "How the GG Calculation
-Works" section). For example, for n_planes_add = 2, two planes would be added to either side of the
-base plane making the total number of planes used in the analysis equal to five.
-
-  core_weight = Float
-
-Merit function weight for "core" points (field table points whose transverse (x,y)
-position is near (0,0)). Default is 1.0 which gives an equal weight for all points of a given
-z-plane. See the "How the GG Calculation Works" section below for documentation on the optimizer
-merit function.
-
-  outer_plane_weight = Float
-
-Merit function weight for z-planes away from the base z-plane when n_planes_add
-is non-zero. See the "How the GG Calculation Works" section below for documentation on the optimizer
-merit function.
-
-  output_file
-
-Name of the output file.
-
-"""
+results = gg_fit(field, p)
+gg_fit_show_results(results, field, p)
+gg_fit_write_results(results, field, p)
 
 #---------------------------------------------------------------------------------------------------
 """

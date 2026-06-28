@@ -197,7 +197,7 @@ end
     read_field_grid_hdf5(path; index = 1) -> FieldGridTable
 
 Read a Bmad/openPMD `field_grid` HDF5 file (as written by
-`write_field_grid_hdf5`, or by Bmad itself) into a [`FieldGridTable`].  The
+`write_field_grid_hdf5`, or by Bmad itself) into a `FieldGridTable`.  The
 `magnetic`/`electric` OffsetArrays are indexed `(ix_lo:ix_hi, …)` with each
 element a `[Bx,By,Bz]` 3-vector; the grid index ranges come from
 `gridLowerBound`/`gridSize` (the grid is not assumed to start at zero).  `r0` is

@@ -30,15 +30,16 @@ julia> field = read_field_grid("wsnk_fieldmap_reduced.h5")   # a FieldGridTable
 
 ## Create a GG fit file.
 
-Fitting parameters for this example are in:
+The fit for this example is driven by the script:
 ```
-example/fit_params.jl
+example/run_gg_fit.jl
 ```
-To run the fit use the command:
+It reads the field grid, builds a `GGFitParams` with the fit settings, runs
+`gg_fit`, prints a summary with `gg_fit_show_results`, and writes the results
+with `gg_fit_write_results`. To run it use the command:
 ```
-julia ../programs/run_gg_fit.jl fit_params.jl
+julia run_gg_fit.jl
 ```
-or, from Julia, `using GeneralizedGradients; gg_fit("fit_params.jl")`.
 The data file produced is `gg_fit_result.h5` (HDF5). Loaded with `gg_load_fit`, it
 yields a NamedTuple with the following fields:
 ```
@@ -46,7 +47,6 @@ yields a NamedTuple with the following fields:
   rms_plane            [4.17469e-6, 6.421e-6,  …                  # Per plane fit RMS
   b                    Dict((1, 2)=>[-0.00317784, -0.00341029, …  # b function fit values
   m_max                2                                          # max order
-  input_file           ".../example/fit_params.jl"
   a                    Dict((1, 2)=>[-0.0046122, -0.00615161, …   # a function fit values
   g_ref                0                                          # Curvilinear curvature
   core_weight          1                                          # Fit input parameter

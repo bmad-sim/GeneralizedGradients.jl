@@ -1,91 +1,100 @@
 # ---------------------------------------------------------------------------
 # field_io.jl
 #
-# HDF5 storage for the project's two native data products:
-#   * field grids       -- read_field_grid / write_field_grid
+# HDF5 storage for the project's native data products:
+#   * field grids       -- read_field_grid / write_field_grid (the Bmad openPMD
+#                          grid_field format; thin aliases for the functions in
+#                          hdf5_grid_field.jl, so field grids are also Bmad files)
 #   * GG fit results     -- gg_load_fit / gg_save_fit
 #
 # These replace the former JLD2 `load`/`save`/`jldsave` storage.  Plain HDF5 has
-# no notion of Julia Dicts or OffsetArrays, so the schemas below store the index
-# bounds / dictionary keys explicitly alongside the numeric data.
+# no notion of Julia Dicts, so the GG-fit-result schema below stores the
+# dictionary keys explicitly alongside the numeric data.
 # ---------------------------------------------------------------------------
 
 using HDF5, OffsetArrays
 
 # ===========================================================================
-# Field grid  (stored / returned as a FieldGridTable)
+# Field grid
 #
-# HDF5 schema:
-#   root attributes : g_ref (Float64, bending strength = 1/rho; 0 for straight)
-#   root datasets   : r0_grid     (Float64[3])   grid origin (gridOriginOffset)
-#                     dr_grid     (Float64[3])   grid spacing
-#                     lower_bound (Int[3])        grid index of the first point
-#                     B           (Float64[3,nx,ny,nz])  B[:,a,b,c] = [Bx,By,Bz]
+# The storage format is chosen by file extension:
+#   * ".h5" / ".hdf5"  -> Bmad openPMD `grid_field` HDF5 (read_field_grid_hdf5 /
+#                         write_field_grid_hdf5 in hdf5_grid_field.jl), so the file
+#                         is also a valid Bmad grid_field file.
+#   * anything else    -> a Julia source file (like ags-snakes/wsnk_fieldmap.jl)
+#                         that, when `include`d, defines `fg::FieldGridTable`.
 # ===========================================================================
+
+# True if `path` should be treated as an HDF5 file (".h5" or ".hdf5" suffix).
+_is_hdf5_path(path) = lowercase(splitext(path)[2]) in (".h5", ".hdf5")
 
 """
     read_field_grid(path) -> FieldGridTable
 
-Load a field-grid HDF5 file into a [`FieldGridTable`].  `fg.magnetic` is an
-OffsetArray indexed `(ix_lo:ix_hi, …)` (from the stored `lower_bound`; the grid is
-not assumed to start at zero) with each element a `[Bx,By,Bz]` 3-vector; a point
-`(ix,iy,iz)` is at `r0 + dr .* (ix,iy,iz)`.  `fg.dr` and `fg.g_ref` are the grid
-spacing and bending strength.
+Load a field grid into a [`FieldGridTable`].  If `path` ends in `.h5`/`.hdf5` it is
+read as a Bmad openPMD `grid_field` HDF5 file ([`read_field_grid_hdf5`]); otherwise
+it is read as a Julia source file (`include`d) that defines `fg::FieldGridTable`.
 """
 function read_field_grid(path::AbstractString)
-    h5open(path, "r") do f
-        for name in ("r0_grid", "dr_grid", "B")
-            haskey(f, name) || error("Field grid file is missing the \"$name\" dataset: $path")
-        end
-        r0_grid = collect(Float64, read(f["r0_grid"]))
-        dr_grid = collect(Float64, read(f["dr_grid"]))
-        lb      = haskey(f, "lower_bound") ? Int.(read(f["lower_bound"])) : [0, 0, 0]
-        B       = Float64.(read(f["B"]))             # (3, nx, ny, nz)
-        g_ref   = haskey(attributes(f), "g_ref") ? read_attribute(f, "g_ref") : 0.0
-
-        length(r0_grid) == 3 || error("\"r0_grid\" must be a 3-vector.")
-        length(dr_grid) == 3 || error("\"dr_grid\" must be a 3-vector.")
-        (ndims(B) == 4 && size(B, 1) == 3) ||
-            error("\"B\" must have shape (3, nx, ny, nz).")
-        nx, ny, nz = size(B, 2), size(B, 3), size(B, 4)
-
-        field = [Float64[B[1, a, b, k], B[2, a, b, k], B[3, a, b, k]]
-                 for a in 1:nx, b in 1:ny, k in 1:nz]
-        magnetic = OffsetArray(field, lb[1]:lb[1]+nx-1, lb[2]:lb[2]+ny-1, lb[3]:lb[3]+nz-1)
-        return FieldGridTable{Float64}(;
-            magnetic = magnetic,
-            r0 = r0_grid,
-            dr = dr_grid,
-            g_ref = Float64(g_ref),
-            scale = 1.0,
-            geometry = GridGeometry.XYZ)
-    end
+    _is_hdf5_path(path) && return read_field_grid_hdf5(path)
+    m = Module(:FieldGridInclude)
+    Base.include(m, abspath(path))
+    isdefined(m, :fg) ||
+        error("Julia field-grid file did not define `fg`: $path")
+    fg = getfield(m, :fg)
+    fg isa FieldGridTable ||
+        error("`fg` defined in $path is not a FieldGridTable.")
+    return fg
 end
 
 """
     write_field_grid(path, fg::FieldGridTable)
 
-Write a [`FieldGridTable`] to an HDF5 field-grid file readable by
-[`read_field_grid`].  `fg.magnetic` must be an `(ix, iy, iz)` OffsetArray of
-`[Bx,By,Bz]` 3-vectors; its grid index ranges are stored in `lower_bound`.
+Write a [`FieldGridTable`].  If `path` ends in `.h5`/`.hdf5` it is written as a
+Bmad openPMD `grid_field` HDF5 file ([`write_field_grid_hdf5`], readable by Bmad);
+otherwise it is written as a Julia source file (like `ags-snakes/wsnk_fieldmap.jl`)
+that defines `fg` when `include`d.
 """
 function write_field_grid(path::AbstractString, fg::FieldGridTable)
+    _is_hdf5_path(path) && return write_field_grid_hdf5(path, fg)
     ndims(fg.magnetic) == 3 ||
         error("fg.magnetic must be a 3D (ix, iy, iz) array of [Bx,By,Bz] 3-vectors.")
-    ax = axes(fg.magnetic)
-    nx, ny, nz = length(ax[1]), length(ax[2]), length(ax[3])
-    B = Array{Float64}(undef, 3, nx, ny, nz)
-    for (a, ix) in enumerate(ax[1]), (b, iy) in enumerate(ax[2]), (k, iz) in enumerate(ax[3])
-        B[:, a, b, k] = fg.magnetic[ix, iy, iz]
-    end
-    h5open(path, "w") do f
-        attributes(f)["g_ref"] = Float64(fg.g_ref)
-        f["r0_grid"]     = Float64[fg.r0...]
-        f["dr_grid"]     = Float64[fg.dr...]
-        f["lower_bound"] = Int[first(ax[1]), first(ax[2]), first(ax[3])]
-        f["B"]           = B
+    open(path, "w") do io
+        println(io, "# Field grid for GeneralizedGradients. `include` this file to define `fg`.")
+        println(io, "# A point fg.magnetic[ix, iy, iz] is at (x, y, z) = r0 + dr .* (ix, iy, iz)")
+        println(io)
+        println(io, "using OffsetArrays")
+        println(io, "using GeneralizedGradients")
+        println(io)
+        println(io, "fg = FieldGridTable()")
+        println(io)
+        println(io, "fg.r0           = ", fg.r0, "     # Grid origin")
+        println(io, "fg.dr           = ", fg.dr, "     # Grid spacing")
+        println(io, "fg.g_ref        = ", fg.g_ref, "     # curvilinear coordinates 1 / bending_radius")
+        println(io, "fg.scale        = ", fg.scale, "     # field scale factor")
+        println(io, "fg.RF_frequency = ", fg.RF_frequency)
+        println(io, "fg.RF_phase     = ", fg.RF_phase)
+        println(io, "fg.anchor_pt    = GridAnchorPt.", fg.anchor_pt)
+        println(io, "fg.geometry     = GridGeometry.", fg.geometry)
+        _write_field_component_jl(io, "magnetic", fg.magnetic)
+        isempty(fg.electric) || _write_field_component_jl(io, "electric", fg.electric)
     end
     return path
+end
+
+# Write the `fg.<name>` OffsetArray of [Bx,By,Bz] 3-vectors as include-able Julia.
+function _write_field_component_jl(io, name, field)
+    ax = axes(field)
+    nx, ny, nz = length.(ax)
+    ox, oy, oz = first(ax[1]) - 1, first(ax[2]) - 1, first(ax[3]) - 1
+    println(io)
+    println(io, "temp = Array{Vector{Float64}}(undef, $nx, $ny, $nz);")
+    println(io, "fg.$name = OffsetArray(temp, $ox, $oy, $oz);")
+    println(io)
+    for ix in ax[1], iy in ax[2], iz in ax[3]
+        b = field[ix, iy, iz]
+        println(io, "fg.$name[$ix, $iy, $iz] = [", b[1], ", ", b[2], ", ", b[3], "]")
+    end
 end
 
 # ===========================================================================

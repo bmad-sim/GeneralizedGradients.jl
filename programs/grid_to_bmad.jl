@@ -59,7 +59,7 @@ is set. For a straight reference curve (g_ref == 0) the element is an `em_field`
 
 using OffsetArrays, Printf, GeneralizedGradients
 
-# `read_field_grid` (HDF5 field-grid reader) and `write_grid_field_hdf5` come
+# `read_field_grid` (HDF5 field-grid reader) and `write_field_grid_hdf5` come
 # from the GeneralizedGradients package.
 
 # ---------------------------------------------------------------------------
@@ -145,7 +145,7 @@ function write_bmad_grid_field(field::FieldGridTable;
             scale = float(field_scale),
             anchor_pt = GridAnchorPt.Beginning,
             geometry = GridGeometry.XYZ)
-        write_grid_field_hdf5(grid_file, fg)
+        write_field_grid_hdf5(grid_file, fg)
     else
         _write_grid_field_text(grid_file, mag, r0_out, dr, is_bend, field_scale)
     end

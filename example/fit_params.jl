@@ -11,6 +11,9 @@ using GeneralizedGradients
 #   field.g_ref                    Curvilinear coordinate system bending strength = 1 / bending_radius.
 # A grid point (ix, iy, iz) is at (x, y, z) = r0 + dr .* (ix, iy, iz).
 
+# Since gg_fit will include this file but gg_fit.jl is not in this directory, we need to be
+# careful about the field file path name.
+
 grid_file = joinpath(@__DIR__, "wsnk_fieldmap_reduced.h5")
 field = read_field_grid(grid_file)
 

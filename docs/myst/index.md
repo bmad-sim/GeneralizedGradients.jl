@@ -63,7 +63,7 @@ Complete docstring reference for every exported function and type.
 ```julia
 using GeneralizedGradients
 
-field  = read_field_grid("wsnk_fieldmap_reduced.h5")  # a FieldGridTable
+field  = read_field_grid_hdf5("wsnk_fieldmap_reduced.h5")  # a FieldGridTable
 params = GGFitParams()
 params.n_planes_add = 1
 params.output_file  = "gg_fit_result.h5"

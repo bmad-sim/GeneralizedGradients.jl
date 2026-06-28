@@ -15,24 +15,28 @@ an `em_field`. Each element is anchored at its entrance
 
 ## Field grid → `grid_field`
 
-`grid_to_bmad` reads a field grid and writes it as a Bmad `grid_field`:
+`field_grid_to_bmad` writes a field grid as a Bmad `grid_field`. Its `input` is
+either a `FieldGridTable` or the path to a `field_grid` HDF5 file:
 
 ```julia
 using GeneralizedGradients
-grid_to_bmad("field_grid.h5")                      # text grid block
-grid_to_bmad("field_grid.h5"; hdf5 = true)         # openPMD HDF5 grid (faster)
-grid_to_bmad("field_grid.h5"; g_ref = 0.01)        # force an sbend
+field_grid_to_bmad("field_grid.h5")                  # openPMD HDF5 grid (default)
+field_grid_to_bmad("field_grid.h5"; hdf5 = false)    # plain-text grid block
+field_grid_to_bmad(field)                             # from a FieldGridTable
 ```
 
+The reference frame is determined by the grid's own `g_ref`: non-zero gives an
+`sbend`, zero an `em_field`.
+
 Two files are written: `<output_base>.bmad` (the lattice element) and the grid,
-either `<output_base>_grid.bmad` (plain text) or `<output_base>_grid.h5`
-(HDF5). The core writer `write_bmad_field_grid(field; ...)` is also exported and
-can be called directly on a `FieldGridTable`.
+either `<output_base>_grid.h5` (HDF5, the default) or `<output_base>_grid.bmad`
+(plain text). The core writer `write_bmad_field_grid(field; ...)` is also exported
+and can be called directly on a `FieldGridTable`.
 
 From the shell:
 
 ```
-julia programs/run_grid_to_bmad.jl <field_grid.h5> [output_base] [g_ref] [--hdf5]
+julia programs/run_grid_to_bmad.jl <field_grid.h5> [output_base] [--text]
 ```
 
 ## GG fit → `gen_grad_map`

@@ -2,9 +2,9 @@
 # field_io.jl
 #
 # HDF5 storage for the project's native data products:
-#   * field grids       -- read_field_grid / write_field_grid (the Bmad openPMD
-#                          field_grid format; thin aliases for the functions in
-#                          hdf5_field_grid.jl, so field grids are also Bmad files)
+#   * field grids       -- write_field_grid (the Bmad openPMD field_grid format;
+#                          a thin wrapper over hdf5_field_grid.jl, so field grids
+#                          are also Bmad files). Read them with read_field_grid_hdf5.
 #   * GG fit results     -- gg_load_fit (written by gg_fit_write_results)
 #
 # These replace the former JLD2 `load`/`save`/`jldsave` storage.  Plain HDF5 has
@@ -27,29 +27,6 @@ using HDF5, OffsetArrays
 
 # True if `path` should be treated as an HDF5 file (".h5" or ".hdf5" suffix).
 _is_hdf5_path(path) = lowercase(splitext(path)[2]) in (".h5", ".hdf5")
-
-"""
-    read_field_grid(path) -> FieldGridTable
-
-Load a field grid into a `FieldGridTable`.  If `path` ends in `.h5`/`.hdf5` it is
-read as a Bmad openPMD `field_grid` HDF5 file (`read_field_grid_hdf5`); otherwise
-it is read as a Julia source file (`include`d) that defines `fg::FieldGridTable`.
-"""
-function read_field_grid(path::AbstractString)
-  _is_hdf5_path(path) && return read_field_grid_hdf5(path)
-  m = Module(:FieldGridInclude)
-  Base.include(m, abspath(path))
-  # `Base.include` defines `fg` in a newer world age than this function. On Julia
-  # 1.12+ global bindings are world-age partitioned, so the new binding is not
-  # visible to `isdefined`/`getfield` here without crossing a world boundary;
-  # `invokelatest` does that (and is a harmless no-op on older versions).
-  Base.invokelatest(isdefined, m, :fg) ||
-    error("Julia field-grid file did not define `fg`: $path")
-  fg = Base.invokelatest(getfield, m, :fg)
-  fg isa FieldGridTable ||
-    error("`fg` defined in $path is not a FieldGridTable.")
-  return fg
-end
 
 """
     write_field_grid(path, fg::FieldGridTable)

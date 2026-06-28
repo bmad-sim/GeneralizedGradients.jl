@@ -25,7 +25,7 @@ julia> write_field_grid_hdf5("wsnk_fieldmap_reduced.h5", fg)
 
 To read back in use:
 ```
-julia> field = read_field_grid("wsnk_fieldmap_reduced.h5")   # a FieldGridTable
+julia> field = read_field_grid_hdf5("wsnk_fieldmap_reduced.h5")   # a FieldGridTable
 ```
 
 ## Create a GG fit file.

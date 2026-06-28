@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
-# hdf5_grid_field.jl
+# hdf5_field_grid.jl
 #
-# Read and write Bmad `grid_field` field maps (as a `FieldGridTable`) in openPMD
+# Read and write Bmad `field_grid` field maps (as a `FieldGridTable`) in openPMD
 # HDF5 format, matching Bmad's hdf5_write_grid_field.f90 / hdf5_read_grid_field.f90.
 # Currently supports `geometry = xyz` (rectangular) grids.
 #
@@ -107,7 +107,7 @@ end
 """
     write_field_grid_hdf5(path, fg::FieldGridTable)
 
-Write a `FieldGridTable` as an openPMD HDF5 `grid_field` file matching Bmad's
+Write a `FieldGridTable` as an openPMD HDF5 `field_grid` file matching Bmad's
 `hdf5_write_grid_field` (geometry = xyz).  The `fg.magnetic` and/or `fg.electric`
 OffsetArrays are indexed `(ix_lo:ix_hi, iy_lo:iy_hi, iz_lo:iz_hi)` with each
 element a `[Bx,By,Bz]` 3-vector; an empty array means that field type is omitted.
@@ -172,7 +172,7 @@ _attr(obj, name, default) = haskey(attributes(obj), name) ? read_attribute(obj, 
 # Read a field group ("magneticField"/"electricField") into an (ix, iy, iz)
 # OffsetArray of [Bx,By,Bz] 3-vectors indexed from `lb`, or `nothing` if absent.
 #
-# In a Bmad grid_field file each component dataset is written Fortran-order
+# In a Bmad field_grid file each component dataset is written Fortran-order
 # (logical dims [nx,ny,nz]; on-disk C-dims (nz,ny,nx)).  HDF5.jl reverses dims on
 # read, so it hands back a 1-based (nx, ny, nz) array that is already the field --
 # no transpose needed.
@@ -184,8 +184,8 @@ function _read_field_group(g1, name, lb, nx, ny, nz)
     haskey(grp, axis) || continue       # missing component => zero field
     comp = read(grp[axis])
     size(comp) == (nx, ny, nz) ||
-      error("grid_field dataset $name/$axis has size $(size(comp)), expected ($nx, $ny, $nz) " *
-            "-- not a Bmad-format (Fortran-order) grid_field file.")
+      error("field_grid dataset $name/$axis has size $(size(comp)), expected ($nx, $ny, $nz) " *
+            "-- not a Bmad-format (Fortran-order) field_grid file.")
     comps[c] .= real.(comp)
   end
   field = [Float64[comps[1][a, b, k], comps[2][a, b, k], comps[3][a, b, k]]
@@ -196,7 +196,7 @@ end
 """
     read_field_grid_hdf5(path; index = 1) -> FieldGridTable
 
-Read a Bmad/openPMD `grid_field` HDF5 file (as written by
+Read a Bmad/openPMD `field_grid` HDF5 file (as written by
 `write_field_grid_hdf5`, or by Bmad itself) into a [`FieldGridTable`].  The
 `magnetic`/`electric` OffsetArrays are indexed `(ix_lo:ix_hi, …)` with each
 element a `[Bx,By,Bz]` 3-vector; the grid index ranges come from
@@ -209,7 +209,7 @@ read (default 1).
 function read_field_grid_hdf5(path::AbstractString; index::Integer = 1)
   h5open(path, "r") do f
     haskey(f, "ExternalFieldMesh") ||
-      error("Not a Bmad grid_field HDF5 file (missing /ExternalFieldMesh): $path")
+      error("Not a Bmad field_grid HDF5 file (missing /ExternalFieldMesh): $path")
     g1 = f["ExternalFieldMesh"][string(index)]
 
     geometry = _geometry_from_str(_attr(g1, "gridGeometry", "rectangular"))

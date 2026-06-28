@@ -3,8 +3,8 @@
 #
 # HDF5 storage for the project's native data products:
 #   * field grids       -- read_field_grid / write_field_grid (the Bmad openPMD
-#                          grid_field format; thin aliases for the functions in
-#                          hdf5_grid_field.jl, so field grids are also Bmad files)
+#                          field_grid format; thin aliases for the functions in
+#                          hdf5_field_grid.jl, so field grids are also Bmad files)
 #   * GG fit results     -- gg_load_fit / gg_save_fit
 #
 # These replace the former JLD2 `load`/`save`/`jldsave` storage.  Plain HDF5 has
@@ -18,9 +18,9 @@ using HDF5, OffsetArrays
 # Field grid
 #
 # The storage format is chosen by file extension:
-#   * ".h5" / ".hdf5"  -> Bmad openPMD `grid_field` HDF5 (read_field_grid_hdf5 /
-#                         write_field_grid_hdf5 in hdf5_grid_field.jl), so the file
-#                         is also a valid Bmad grid_field file.
+#   * ".h5" / ".hdf5"  -> Bmad openPMD `field_grid` HDF5 (read_field_grid_hdf5 /
+#                         write_field_grid_hdf5 in hdf5_field_grid.jl), so the file
+#                         is also a valid Bmad field_grid file.
 #   * anything else    -> a Julia source file (like ags-snakes/wsnk_fieldmap.jl)
 #                         that, when `include`d, defines `fg::FieldGridTable`.
 # ===========================================================================
@@ -32,7 +32,7 @@ _is_hdf5_path(path) = lowercase(splitext(path)[2]) in (".h5", ".hdf5")
     read_field_grid(path) -> FieldGridTable
 
 Load a field grid into a [`FieldGridTable`].  If `path` ends in `.h5`/`.hdf5` it is
-read as a Bmad openPMD `grid_field` HDF5 file ([`read_field_grid_hdf5`]); otherwise
+read as a Bmad openPMD `field_grid` HDF5 file ([`read_field_grid_hdf5`]); otherwise
 it is read as a Julia source file (`include`d) that defines `fg::FieldGridTable`.
 """
 function read_field_grid(path::AbstractString)
@@ -51,7 +51,7 @@ end
     write_field_grid(path, fg::FieldGridTable)
 
 Write a [`FieldGridTable`].  If `path` ends in `.h5`/`.hdf5` it is written as a
-Bmad openPMD `grid_field` HDF5 file ([`write_field_grid_hdf5`], readable by Bmad);
+Bmad openPMD `field_grid` HDF5 file ([`write_field_grid_hdf5`], readable by Bmad);
 otherwise it is written as a Julia source file (like `ags-snakes/wsnk_fieldmap.jl`)
 that defines `fg` when `include`d.
 """

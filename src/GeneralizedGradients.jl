@@ -15,6 +15,7 @@ module GeneralizedGradients
        GridAnchorPt,
        GridGeometry,
        GGFitParams,
+       GGFitResults,
        gg_fit,
        gg_fit_show_results,
        gg_fit_write_results,

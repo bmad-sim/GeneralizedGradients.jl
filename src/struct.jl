@@ -102,3 +102,32 @@ Name of the output file.
   outer_plane_weight::Int = 1            # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).
   output_file::String = "gg_fit_results.h5"
 end
+
+#---------------------------------------------------------------------------------------------------
+"""
+    mutable struct GGFitResults
+
+Holds the result of a `gg_fit` fit: the fitted generalized-gradient (GG)
+coefficient functions sampled at the base planes plus per-plane diagnostics.
+Returned by `gg_fit` and consumed by `gg_fit_show_results` and
+`gg_fit_write_results`.
+
+Fields:
+- `z_base` — `z` position of each base plane [m].
+- `params` — list of fitted unknowns as `(type, n, m)` tuples, where `type` is
+  one of `:a`, `:b`, `:bs` (`bs` uses `n = 0`).
+- `res_a` — fitted `a(n,m)` functions, `Dict (n,m) => values_over_planes`.
+- `res_b` — fitted `b(n,m)` functions, `Dict (n,m) => values_over_planes`.
+- `res_bs` — fitted `bs(m)` functions, `Dict m => values_over_planes`.
+- `rms_plane` — weighted RMS fit residual at each base plane.
+- `m_max` — highest derivative order resolved (`2 * n_planes_add`).
+"""
+@kwdef mutable struct GGFitResults
+  z_base::Vector{Float64} = Float64[]
+  params::Vector{Tuple{Symbol,Int,Int}} = Tuple{Symbol,Int,Int}[]
+  res_a::Dict{Tuple{Int,Int},Vector{Float64}} = Dict{Tuple{Int,Int},Vector{Float64}}()
+  res_b::Dict{Tuple{Int,Int},Vector{Float64}} = Dict{Tuple{Int,Int},Vector{Float64}}()
+  res_bs::Dict{Int,Vector{Float64}} = Dict{Int,Vector{Float64}}()
+  rms_plane::Vector{Float64} = Float64[]
+  m_max::Int = 0
+end

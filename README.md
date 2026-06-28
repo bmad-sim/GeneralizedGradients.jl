@@ -41,9 +41,10 @@ where `<deriv-cut>` is the derivative cutoff number.
 `gg_fit(field, params)` is a function in the `GeneralizedGradients` package that
 calculates values for the gg functions that fit a given field table. It takes a
 `FieldGridTable` (`field`, typically from `read_field_grid`) and a `GGFitParams`
-(`params`) and returns the fit results. Use `gg_fit_show_results` to print a
-summary and `gg_fit_write_results` to write the results to an HDF5 file
-(readable by `gg_load_fit`). See `example/run_gg_fit.jl` for a runnable example.
+(`params`) and returns a `GGFitResults` holding the fitted coefficients and
+per-plane diagnostics. Use `gg_fit_show_results` to print a summary and
+`gg_fit_write_results` to write the results to an HDF5 file (readable by
+`gg_load_fit`). See `examples/run_gg_fit.jl` for a runnable example.
 The fit assumes that the field table is defined on an evenly spaced grid and 
 the gg function values are calculated on (x, y) planes coincident with the planes of the grid.
 

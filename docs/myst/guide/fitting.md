@@ -10,13 +10,12 @@ generalized-gradient functions `a_n(s)`, `b_n(s)`, `b_s(s)` and their
 
 ## 1. Read a field grid
 
-A field grid is held in a `FieldGridTable`. Read one with `read_field_grid`,
-which dispatches on the file extension (`.h5`/`.hdf5` → Bmad openPMD
-`field_grid` HDF5; anything else → a Julia source file that defines `fg`):
+A field grid is held in a `FieldGridTable`. Read one from a Bmad openPMD
+`field_grid` HDF5 file with `read_field_grid_hdf5`:
 
 ```julia
 using GeneralizedGradients
-field = read_field_grid("examples/wsnk_fieldmap_reduced.h5")
+field = read_field_grid_hdf5("examples/wsnk_fieldmap_reduced.h5")
 ```
 
 In a `FieldGridTable`, `field.magnetic[ix, iy, iz]` is the `[Bx, By, Bz]`
@@ -79,7 +78,7 @@ The complete script lives at `examples/run_gg_fit.jl`:
 ```julia
 using GeneralizedGradients
 
-field = read_field_grid("wsnk_fieldmap_reduced.h5")
+field = read_field_grid_hdf5("wsnk_fieldmap_reduced.h5")
 
 params = GGFitParams()
 params.n_planes_add = 1

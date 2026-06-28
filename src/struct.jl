@@ -25,7 +25,7 @@ Fields:
 - `geometry` — grid geometry, a `GridGeometry.T` (`XYZ`).
 
 `FieldGridTable()` builds an empty table with `T = Float64`; read one from a
-file with `read_field_grid`.
+file with `read_field_grid_hdf5`.
 """
 @kwdef mutable struct FieldGridTable{T}
   # `magnetic`/`electric` are 3D grids whose elements are field 3-vectors:

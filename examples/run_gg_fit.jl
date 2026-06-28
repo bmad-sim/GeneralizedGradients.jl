@@ -17,7 +17,7 @@ using GeneralizedGradients
 #---------------------------------------------------------------------------------------------------
 # Field grid
 
-# read_field_grid returns a FieldGridTable with:
+# read_field_grid_hdf5 returns a FieldGridTable with:
 #   field.magnetic[ix, iy, iz]     Field 3-vector [Bx, By, Bz] at the grid point,
 #                                  an OffsetArray (indices need not start at 0/1).
 #   field.r0                       Grid origin (3-vector)
@@ -29,7 +29,7 @@ using GeneralizedGradients
 # careful about the field file path name.
 
 grid_file = joinpath(@__DIR__, "wsnk_fieldmap_reduced.h5")
-field = read_field_grid(grid_file)
+field = read_field_grid_hdf5(grid_file)
 
 #---------------------------------------------------------------------------------------------------
 # Other parameters

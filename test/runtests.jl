@@ -216,9 +216,6 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
       @test fg.RF_frequency ≈ field.RF_frequency
       @test fg.RF_phase ≈ field.RF_phase
       @test fg.anchor_pt == GridAnchorPt.End
-
-      # read_field_grid dispatches to the HDF5 reader for a .h5 path.
-      @test read_field_grid(path).magnetic == field.magnetic
     end
   end
 
@@ -233,35 +230,43 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
     end
   end
 
-  @testset "field grid Julia-source round-trip" begin
+  @testset "field grid Julia-source write" begin
     mktempdir() do dir
       field = make_field()
       path = joinpath(dir, "grid.jl")
       @test write_field_grid(path, field) == path
-      fg = read_field_grid(path)
-      @test fg == field
-      nofg = joinpath(dir, "nofg.jl")
-      write(nofg, "x = 1\n")
-      @test_throws ErrorException read_field_grid(nofg)
+      src = read(path, String)
+      @test occursin("fg = FieldGridTable()", src)
+      @test occursin("fg.magnetic", src)
     end
   end
 
-  @testset "grid_to_bmad (text/hdf5, em_field/sbend)" begin
+  @testset "field_grid_to_bmad (string/FieldGridTable, text/hdf5, em_field/sbend)" begin
     mktempdir() do dir
-      field = make_field()
+      field = make_field()                       # g_ref = 0 -> em_field
       gpath = joinpath(dir, "grid.h5")
       write_field_grid_hdf5(gpath, field)
 
-      base = joinpath(dir, "out_text")
-      ele = quiet(() -> grid_to_bmad(gpath; output_base = base))
-      @test ele == base * ".bmad" && isfile(ele)
-      @test isfile(base * "_grid.bmad")
+      # String input, default output_base (from file name) and default hdf5 = true.
+      ele = quiet(() -> field_grid_to_bmad(gpath))
+      stem = joinpath(dir, "grid")
+      @test ele == stem * ".bmad" && isfile(ele)
+      @test isfile(stem * "_grid.h5")
       @test occursin("em_field", read(ele, String))
 
-      base2 = joinpath(dir, "out_h5")
-      ele2 = quiet(() -> grid_to_bmad(gpath; output_base = base2, hdf5 = true, g_ref = 0.4))
-      @test isfile(ele2) && isfile(base2 * "_grid.h5")
-      @test occursin("sbend", read(ele2, String))
+      # String input, explicit output_base, text grid (hdf5 = false).
+      base = joinpath(dir, "out_text")
+      ele2 = quiet(() -> field_grid_to_bmad(gpath; output_base = base, hdf5 = false))
+      @test isfile(base * "_grid.bmad")
+      @test occursin("em_field", read(ele2, String))
+
+      # FieldGridTable input (curved frame -> sbend), default output_base + hdf5.
+      cd(dir) do
+        bfield = make_field(g_ref = 0.4)
+        ele3 = quiet(() -> field_grid_to_bmad(bfield))
+        @test isfile("field_grid.bmad") && isfile("field_grid_grid.h5")
+        @test occursin("sbend", read("field_grid.bmad", String))
+      end
     end
   end
 

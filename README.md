@@ -21,7 +21,7 @@ Here "the gg functions" refer to the functions `a(s)`, `b(s)`, and `bs(s)` and t
 
 `gg_fit(field, params)` is a function in the `GeneralizedGradients` package that
 calculates values for the gg functions that fit a given field table. It takes a
-`FieldGridTable` (`field`, typically from `read_field_grid`) and a `GGFitParams`
+`FieldGridTable` (`field`, typically from `read_field_grid_hdf5`) and a `GGFitParams`
 (`params`) and returns a `GGFitResults` holding the fitted coefficients and
 per-plane diagnostics. Use `gg_fit_show_results` to print a summary and
 `gg_fit_write_results` to write the results to an HDF5 file (readable by
@@ -36,22 +36,23 @@ fundamental requirement. In fact, it may be advantageous to have unequal spacing
 the field of a magnet body is fairly uniform, so that a coarse spacing is adequate, but the fringe
 regions need a fine spacing.
 
-## grid_to_bmad (src/grid_to_bmad.jl) and programs/run_grid_to_bmad.jl
+## field_grid_to_bmad (src/field_grid_to_bmad.jl) and programs/run_field_grid_to_bmad.jl
 
-`grid_to_bmad(input; output_base, g_ref, hdf5)` is a function in the
-`GeneralizedGradients` package that reads a 3D field grid and writes it out in
-Bmad `grid_field` format, producing a Bmad lattice element with the field grid
+`field_grid_to_bmad(input; output_base, hdf5)` is a function in the
+`GeneralizedGradients` package that writes a 3D field grid out in Bmad
+`grid_field` format, producing a Bmad lattice element with the field grid
 attached. It can be run from the shell with
 ```
-julia programs/run_grid_to_bmad.jl <field_grid.h5> [output_base] [g_ref] [--hdf5]
+julia programs/run_field_grid_to_bmad.jl <field_grid.h5> [output_base] [--text]
 ```
-The input is read by `read_field_grid` into a `FieldGridTable`. Two files are
-written: `<output_base>.bmad` (the lattice element) and the attached grid, either
-`<output_base>_grid.bmad` (plain-text block) or `<output_base>_grid.h5` (openPMD
-HDF5, with `--hdf5`). The reference-curve bending strength `g_ref` = `1/bend_radius`
-[1/m] defaults to the input grid's `g_ref`; if non-zero the element is an `sbend`,
-otherwise an `em_field`. The core writer `write_bmad_field_grid(field; ...)` is also
-exported and can be called directly.
+`input` is either a `FieldGridTable` or the path to a Bmad openPMD `field_grid`
+HDF5 file (read by `read_field_grid_hdf5`). Two files are written:
+`<output_base>.bmad` (the lattice element) and the attached grid, either
+`<output_base>_grid.h5` (openPMD HDF5, the default) or `<output_base>_grid.bmad`
+(plain-text block, with `--text` / `hdf5 = false`). The reference-curve bending
+strength is taken from the field grid's `g_ref` = `1/bend_radius` [1/m]; if
+non-zero the element is an `sbend`, otherwise an `em_field`. The core writer
+`write_bmad_field_grid(field; ...)` is also exported and can be called directly.
 
 ## gg_to_bmad (src/gg_to_bmad.jl) and programs/run_gg_to_bmad.jl
 

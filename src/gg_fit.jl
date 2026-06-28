@@ -21,7 +21,7 @@ diagnostics. Use `gg_fit_show_results` to print a summary and
 
 ```julia
 using GeneralizedGradients
-field = read_field_grid("wsnk_fieldmap_reduced.h5")
+field = read_field_grid_hdf5("wsnk_fieldmap_reduced.h5")
 params = GGFitParams()
 params.n_planes_add = 1
 results = gg_fit(field, params)
@@ -33,7 +33,7 @@ See `examples/run_gg_fit.jl` for a complete, runnable example.
 
 ## Arguments
 
-- `field` — a `FieldGridTable` (typically from `read_field_grid`).
+- `field` — a `FieldGridTable` (typically from `read_field_grid_hdf5`).
   `field.magnetic[ix,iy,iz]` is the `[Bx,By,Bz]` 3-vector at the grid point,
   whose `(x, y, z)` position is `field.r0 + field.dr .* (ix, iy, iz)`.
 - `params` — a `GGFitParams` holding the fit controls (`origin`,

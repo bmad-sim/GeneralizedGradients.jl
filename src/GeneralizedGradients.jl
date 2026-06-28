@@ -5,11 +5,11 @@ module GeneralizedGradients
 
   include("struct.jl")
   include("gg_eval.jl")
-  include("field_io.jl")
-  include("hdf5_field_grid.jl")
   include("gg_fit.jl")
-  include("grid_to_bmad.jl")
   include("gg_to_bmad.jl")
+  include("field_grid_to_bmad.jl")
+  include("field_grid_io.jl")
+  include("field_grid_hdf5.jl")
 
   export FieldGridTable,
        GridAnchorPt,
@@ -20,11 +20,10 @@ module GeneralizedGradients
        gg_fit_show_results,
        gg_fit_write_results,
        gg_load_fit,
-       grid_to_bmad,
+       field_grid_to_bmad,
        gg_to_bmad,
        write_bmad_field_grid,
        write_bmad_gen_grad_map,
-       read_field_grid,
        write_field_grid,
        read_field_grid_hdf5,
        write_field_grid_hdf5,

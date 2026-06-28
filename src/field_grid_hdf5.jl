@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# hdf5_field_grid.jl
+# field_grid_hdf5.jl
 #
 # Read and write Bmad `field_grid` field maps (as a `FieldGridTable`) in openPMD
 # HDF5 format, matching Bmad's hdf5_write_grid_field.f90 / hdf5_read_grid_field.f90.

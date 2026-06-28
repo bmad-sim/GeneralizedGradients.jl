@@ -5,7 +5,7 @@
 #   * field grids       -- read_field_grid / write_field_grid (the Bmad openPMD
 #                          field_grid format; thin aliases for the functions in
 #                          hdf5_field_grid.jl, so field grids are also Bmad files)
-#   * GG fit results     -- gg_load_fit / gg_save_fit
+#   * GG fit results     -- gg_load_fit (written by gg_fit_write_results)
 #
 # These replace the former JLD2 `load`/`save`/`jldsave` storage.  Plain HDF5 has
 # no notion of Julia Dicts, so the GG-fit-result schema below stores the
@@ -31,8 +31,8 @@ _is_hdf5_path(path) = lowercase(splitext(path)[2]) in (".h5", ".hdf5")
 """
     read_field_grid(path) -> FieldGridTable
 
-Load a field grid into a [`FieldGridTable`].  If `path` ends in `.h5`/`.hdf5` it is
-read as a Bmad openPMD `field_grid` HDF5 file ([`read_field_grid_hdf5`]); otherwise
+Load a field grid into a `FieldGridTable`.  If `path` ends in `.h5`/`.hdf5` it is
+read as a Bmad openPMD `field_grid` HDF5 file (`read_field_grid_hdf5`); otherwise
 it is read as a Julia source file (`include`d) that defines `fg::FieldGridTable`.
 """
 function read_field_grid(path::AbstractString)
@@ -50,8 +50,8 @@ end
 """
     write_field_grid(path, fg::FieldGridTable)
 
-Write a [`FieldGridTable`].  If `path` ends in `.h5`/`.hdf5` it is written as a
-Bmad openPMD `field_grid` HDF5 file ([`write_field_grid_hdf5`], readable by Bmad);
+Write a `FieldGridTable`.  If `path` ends in `.h5`/`.hdf5` it is written as a
+Bmad openPMD `field_grid` HDF5 file (`write_field_grid_hdf5`, readable by Bmad);
 otherwise it is written as a Julia source file (like `ags-snakes/wsnk_fieldmap.jl`)
 that defines `fg` when `include`d.
 """
@@ -100,10 +100,10 @@ end
 # ===========================================================================
 # GG fit result
 #
-# HDF5 schema:
+# HDF5 schema (written by gg_fit_write_results, read by gg_load_fit):
 #   root datasets   : z_base, rms_plane, origin            (Float64[])
 #   root attributes : g_ref, dz_grid (Float64); m_max, n_planes_add (Int);
-#                     core_weight, outer_plane_weight (Float64); input_file (String)
+#                     core_weight, outer_plane_weight (Float64)
 #   groups a, b     : n (Int[]), m (Int[]), values (Float64[nkeys, nplanes])
 #                     -- reconstruct Dict{(n,m) => values[i,:]}
 #   group  bs       : m (Int[]), values (Float64[nkeys, nplanes])
@@ -143,36 +143,11 @@ end
 _opt_attr(f, name) = haskey(attributes(f), name) ? read_attribute(f, name) : missing
 
 """
-    gg_save_fit(path; z_base, a, b, bs, rms_plane, m_max, g_ref, origin, dz_grid,
-                n_planes_add, core_weight, outer_plane_weight, input_file)
-
-Write a `gg_fit` result to an HDF5 file readable by [`gg_load_fit`].
-"""
-function gg_save_fit(path::AbstractString; z_base, a, b, bs, rms_plane, m_max, g_ref,
-          origin, dz_grid, n_planes_add, core_weight, outer_plane_weight, input_file)
-  h5open(path, "w") do f
-    f["z_base"]    = collect(Float64, z_base)
-    f["rms_plane"] = collect(Float64, rms_plane)
-    f["origin"]    = collect(Float64, origin)
-    attributes(f)["m_max"]              = Int(m_max)
-    attributes(f)["g_ref"]              = Float64(g_ref)
-    attributes(f)["dz_grid"]            = Float64(dz_grid)
-    attributes(f)["n_planes_add"]       = Int(n_planes_add)
-    attributes(f)["core_weight"]        = Float64(core_weight)
-    attributes(f)["outer_plane_weight"] = Float64(outer_plane_weight)
-    attributes(f)["input_file"]         = String(input_file)
-    _write_coef_group(f, "a", a)
-    _write_coef_group(f, "b", b)
-    _write_coef_group(f, "bs", bs; single = true)
-  end
-  return path
-end
-
-"""
     gg_load_fit(path::AbstractString) -> NamedTuple
 
-Load a `gg_fit` result HDF5 file (see [`gg_save_fit`]) into a NamedTuple with the
-GG coefficient dictionaries `a`, `b`, `bs` and the associated metadata.
+Load a `gg_fit` result HDF5 file (written by `gg_fit_write_results`) into a
+NamedTuple with the GG coefficient dictionaries `a`, `b`, `bs` and the
+associated metadata.
 """
 function gg_load_fit(path::AbstractString)
   h5open(path, "r") do f
@@ -188,7 +163,6 @@ function gg_load_fit(path::AbstractString)
               # Fit-control metadata (absent in older files → missing).
               n_planes_add       = _opt_attr(f, "n_planes_add"),
               core_weight        = _opt_attr(f, "core_weight"),
-              outer_plane_weight = _opt_attr(f, "outer_plane_weight"),
-              input_file         = _opt_attr(f, "input_file"))
+              outer_plane_weight = _opt_attr(f, "outer_plane_weight"))
   end
 end

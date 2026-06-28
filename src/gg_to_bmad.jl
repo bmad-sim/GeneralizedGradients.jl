@@ -19,11 +19,13 @@ _fac(k::Integer) = k <= 1 ? 1.0 : prod(2.0:k)
 Compute the Bmad azimuthal-harmonic GG derivative towers from a loaded
 `gg_fit` result. Returns
 
-  cs[(m,j)]  :: Vector  -- C^{[j]}_{m,sin}(plane)  (normal multipole m)
-  cc[(m,j)]  :: Vector  -- C^{[j]}_{m,cos}(plane)  (skew multipole m)
-  c0c[j]     :: Vector  -- C^{[j]}_{0,cos}(plane)  (solenoid, j ≥ 1)
+```
+cs[(m,j)]  :: Vector  -- C^{[j]}_{m,sin}(plane)  (normal multipole m)
+cc[(m,j)]  :: Vector  -- C^{[j]}_{m,cos}(plane)  (skew multipole m)
+c0c[j]     :: Vector  -- C^{[j]}_{0,cos}(plane)  (solenoid, j ≥ 1)
+```
 
-each a per-plane vector, for j = 0 … m_max.
+each a per-plane vector, for `j = 0 … m_max`.
 """
 function gg_to_bmad_curves(fit)
   mmax = fit.m_max
@@ -119,11 +121,12 @@ Convert a loaded `gg_fit` result to a Bmad `gen_grad_map` and write the element
 and map files. Returns the path of the lattice-element file.
 
 Keyword arguments:
-  ele_name     Name of the Bmad lattice element. Default "gen_grad_ele".
-  output_base  Base path for the two output files. Default `ele_name`.
-  g_ref        Reference coordinates bending "strength" = 1/bend_radius [1/m]. Default `fit.g_ref`.
-               Non-zero => the element is an `sbend` with `curved_ref_frame = T`.
-  cutoff       Relative cutoff for pruning negligible curves. Default 0.
+- `ele_name` — name of the Bmad lattice element. Default `"gen_grad_ele"`.
+- `output_base` — base path for the two output files. Default `ele_name`.
+- `g_ref` — reference-coordinates bending "strength" = `1/bend_radius` [1/m].
+  Default `fit.g_ref`. Non-zero => the element is an `sbend` with
+  `curved_ref_frame = T`.
+- `cutoff` — relative cutoff for pruning negligible curves. Default `0`.
 """
 function write_bmad_gen_grad_map(fit;
                 ele_name::AbstractString = "gen_grad_ele",
@@ -228,59 +231,64 @@ julia programs/run_gg_to_bmad.jl <gg_fit_result.h5> [output_base] [cutoff]
 ```
 
 Arguments:
-  input        Input GG-fit file (output of `gg_fit`/`gg_save_fit`).
-  output_base  Base name for the output files. Default: input name without
-               extension. Two files are written:
-                 <output_base>.bmad      -- the lattice element
-                 <output_base>_gg.bmad   -- the attached gen_grad_map
-  cutoff       Relative magnitude cutoff for pruning negligible multipole curves.
-               A curve is dropped if its peak |GG| is below cutoff * (largest
-               peak |GG| of any curve). Default 0 (keep every non-zero curve).
+- `input` — input GG-fit file (output of `gg_fit_write_results`).
+- `output_base` — base name for the output files. Default: input name without
+  extension. Two files are written: `<output_base>.bmad` (the lattice element)
+  and `<output_base>_gg.bmad` (the attached `gen_grad_map`).
+- `cutoff` — relative magnitude cutoff for pruning negligible multipole curves.
+  A curve is dropped if its peak `|GG|` is below `cutoff * (largest peak |GG| of
+  any curve)`. Default `0` (keep every non-zero curve).
 
 ## Background: the two GG conventions
 
 This project (Van der Schueren / Sagan) characterizes the field by midplane-
-derivative generalized gradients a_n(s), b_n(s), b_s(s):
+derivative generalized gradients `a_n(s)`, `b_n(s)`, `b_s(s)`:
 
-  B_x(x,0,s) = Σ_{n≥1} a_n(s) x^{n-1}/(n-1)!     (skew / "cos" family)
-  B_y(x,0,s) = Σ_{n≥1} b_n(s) x^{n-1}/(n-1)!     (normal / "sin" family)
-  B_s(0,0,s) = b_s(s)                            (solenoidal, m = 0)
+```
+B_x(x,0,s) = Σ_{n≥1} a_n(s) x^{n-1}/(n-1)!     (skew / "cos" family)
+B_y(x,0,s) = Σ_{n≥1} b_n(s) x^{n-1}/(n-1)!     (normal / "sin" family)
+B_s(0,0,s) = b_s(s)                            (solenoidal, m = 0)
+```
 
 Bmad's `gen_grad_map` (Venturini-Dragt) instead uses azimuthal-harmonic
-gradients C_{m,α}(z), α ∈ {sin, cos}, where the field is (Sagan, IPAC23 Eq. 4)
+gradients `C_{m,α}(z)`, `α ∈ {sin, cos}`, where the field is (Sagan, IPAC23 Eq. 4)
 
-  B_ρ = Σ_{m≥1,n} f(m,n)(2n+m) ρ^{2n+m-1}[C^{[2n]}_{m,s} sin mθ + C^{[2n]}_{m,c} cos mθ]
-        + Σ_{n≥1} f(0,n)(2n) ρ^{2n-1} C^{[2n]}_{0,c}
-  B_θ = Σ_{m≥1,n} f(m,n) m ρ^{2n+m-1}[C^{[2n]}_{m,s} cos mθ - C^{[2n]}_{m,c} sin mθ]
-  B_z = Σ_{m≥0,n} f(m,n) ρ^{2n+m}[C^{[2n+1]}_{m,s} sin mθ + C^{[2n+1]}_{m,c} cos mθ]
+```
+B_ρ = Σ_{m≥1,n} f(m,n)(2n+m) ρ^{2n+m-1}[C^{[2n]}_{m,s} sin mθ + C^{[2n]}_{m,c} cos mθ]
+      + Σ_{n≥1} f(0,n)(2n) ρ^{2n-1} C^{[2n]}_{0,c}
+B_θ = Σ_{m≥1,n} f(m,n) m ρ^{2n+m-1}[C^{[2n]}_{m,s} cos mθ - C^{[2n]}_{m,c} sin mθ]
+B_z = Σ_{m≥0,n} f(m,n) ρ^{2n+m}[C^{[2n+1]}_{m,s} sin mθ + C^{[2n+1]}_{m,c} cos mθ]
+```
 
-with f(m,n) = (-1)^n m!/(4^n n!(n+m)!), sin = normal, cos = skew.
+with `f(m,n) = (-1)^n m!/(4^n n!(n+m)!)`, sin = normal, cos = skew.
 
 Equating the two on the midplane gives the exact relations used here. For each
-azimuthal m and derivative order j (with k ≡ m):
+azimuthal `m` and derivative order `j` (with `k ≡ m`):
 
-  C^{[j]}_{m,s} = (1/m!)[ b^{[j]}_m - (m-1)! Σ_{n≥1, m-2n≥1} Wn(m,n) C^{[j+2n]}_{m-2n,s} ]
-  C^{[j]}_{m,c} = (1/m!)[ a^{[j]}_m - (m-1)! Σ_{n≥1, m-2n≥1} Wc(m,n) C^{[j+2n]}_{m-2n,c}
-                                   - (m even) (m-1)! Us(m) b_s^{[m+j-1]} ]
-  C^{[j]}_{0,c} = b_s^{[j-1]}                                            (j ≥ 1)
+```
+C^{[j]}_{m,s} = (1/m!)[ b^{[j]}_m - (m-1)! Σ_{n≥1, m-2n≥1} Wn(m,n) C^{[j+2n]}_{m-2n,s} ]
+C^{[j]}_{m,c} = (1/m!)[ a^{[j]}_m - (m-1)! Σ_{n≥1, m-2n≥1} Wc(m,n) C^{[j+2n]}_{m-2n,c}
+                                 - (m even) (m-1)! Us(m) b_s^{[m+j-1]} ]
+C^{[j]}_{0,c} = b_s^{[j-1]}                                            (j ≥ 1)
 
-  Wn(m,n) = (-1)^n (m-2n)!(m-2n)/(4^n n!(m-n)!)     (normal radial mixing)
-  Wc(m,n) = (-1)^n (m-2n)! m   /(4^n n!(m-n)!)       (skew radial mixing)
-  Us(m)   = (-1)^{m/2} m /(4^{m/2} ((m/2)!)^2)        (skew↔solenoid coupling)
+Wn(m,n) = (-1)^n (m-2n)!(m-2n)/(4^n n!(m-n)!)     (normal radial mixing)
+Wc(m,n) = (-1)^n (m-2n)! m   /(4^n n!(m-n)!)       (skew radial mixing)
+Us(m)   = (-1)^{m/2} m /(4^{m/2} ((m/2)!)^2)        (skew↔solenoid coupling)
+```
 
-where x^{[j]} ≡ dʲx/dsʲ is supplied directly by the fit (a[(n,j)], b[(n,j)],
-bs[j]). These recursions are solved in order of increasing m, reusing the
-lower-m towers. Truncation at the fit's maximum derivative order m_max bounds
-the radial-correction sums exactly as the fit itself is bounded, so the
-resulting `gen_grad_map` reproduces the project field to machine precision.
+where `x^{[j]} ≡ dʲx/dsʲ` is supplied directly by the fit (`a[(n,j)]`,
+`b[(n,j)]`, `bs[j]`). These recursions are solved in order of increasing `m`,
+reusing the lower-`m` towers. Truncation at the fit's maximum derivative order
+`m_max` bounds the radial-correction sums exactly as the fit itself is bounded,
+so the resulting `gen_grad_map` reproduces the project field to machine precision.
 
 ## Output
 
 A Bmad `gen_grad_map` (`field_type = magnetic`) attached to a lattice element.
 As with grid fields, the map is anchored at the entrance of the element
-(`ele_anchor_pt = beginning`), z-positions run 0, dz, 2dz, … and the element
-length is L = (n_planes - 1) * dz. The transverse anchor `r0` is the GG
-expansion axis (`origin`). For a curved reference (g_ref ≠ 0) the element is an
+(`ele_anchor_pt = beginning`), z-positions run `0, dz, 2dz, …` and the element
+length is `L = (n_planes - 1) * dz`. The transverse anchor `r0` is the GG
+expansion axis (`origin`). For a curved reference (`g_ref ≠ 0`) the element is an
 `sbend` with `g = g_ref` and `curved_ref_frame = T`; otherwise it is an `em_field`.
 """
 function gg_to_bmad(input::AbstractString;

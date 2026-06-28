@@ -1,9 +1,9 @@
 # ---------------------------------------------------------------------------
-# field_io.jl
+# field_grid_io.jl
 #
 # HDF5 storage for the project's native data products:
 #   * field grids       -- write_field_grid (the Bmad openPMD field_grid format;
-#                          a thin wrapper over hdf5_field_grid.jl, so field grids
+#                          a thin wrapper over field_grid_hdf5.jl, so field grids
 #                          are also Bmad files). Read them with read_field_grid_hdf5.
 #   * GG fit results     -- gg_load_fit (written by gg_fit_write_results)
 #
@@ -19,7 +19,7 @@ using HDF5, OffsetArrays
 #
 # The storage format is chosen by file extension:
 #   * ".h5" / ".hdf5"  -> Bmad openPMD `field_grid` HDF5 (read_field_grid_hdf5 /
-#                         write_field_grid_hdf5 in hdf5_field_grid.jl), so the file
+#                         write_field_grid_hdf5 in field_grid_hdf5.jl), so the file
 #                         is also a valid Bmad field_grid file.
 #   * anything else    -> a Julia source file (like ags-snakes/wsnk_fieldmap.jl)
 #                         that, when `include`d, defines `fg::FieldGridTable`.

@@ -36,7 +36,7 @@ and can be called directly on a `FieldGridTable`.
 From the shell:
 
 ```
-julia programs/run_grid_to_bmad.jl <field_grid.h5> [output_base] [--text]
+julia programs/run_field_grid_to_bmad.jl <field_grid.h5> [output_base] [--text]
 ```
 
 ## GG fit → `gen_grad_map`

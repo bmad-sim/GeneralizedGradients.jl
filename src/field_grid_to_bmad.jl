@@ -1,9 +1,9 @@
 # ---------------------------------------------------------------------------
-# grid_to_bmad.jl
+# field_grid_to_bmad.jl
 #
 # Read a 3D field grid and write it out in Bmad `grid_field` format (a lattice
 # element with the field grid attached).  `field_grid_to_bmad` is the public
-# function; programs/run_grid_to_bmad.jl is a shell wrapper.
+# function; programs/run_field_grid_to_bmad.jl is a shell wrapper.
 # ---------------------------------------------------------------------------
 
 # Format a real for a Bmad lattice file: compact but lossless. `iszero` guard
@@ -131,9 +131,9 @@ using GeneralizedGradients
 field_grid_to_bmad("field_grid.h5")          # from an HDF5 file
 field_grid_to_bmad(field)                     # from a FieldGridTable in memory
 ```
-From the shell (see `programs/run_grid_to_bmad.jl`):
+From the shell (see `programs/run_field_grid_to_bmad.jl`):
 ```
-julia programs/run_grid_to_bmad.jl <field_grid.h5> [output_base] [--text]
+julia programs/run_field_grid_to_bmad.jl <field_grid.h5> [output_base] [--text]
 ```
 
 Arguments:

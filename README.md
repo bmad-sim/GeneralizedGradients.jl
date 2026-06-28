@@ -36,14 +36,14 @@ fundamental requirement. In fact, it may be advantageous to have unequal spacing
 the field of a magnet body is fairly uniform, so that a coarse spacing is adequate, but the fringe
 regions need a fine spacing.
 
-## field_grid_to_bmad (src/grid_to_bmad.jl) and programs/run_grid_to_bmad.jl
+## field_grid_to_bmad (src/field_grid_to_bmad.jl) and programs/run_field_grid_to_bmad.jl
 
 `field_grid_to_bmad(input; output_base, hdf5)` is a function in the
 `GeneralizedGradients` package that writes a 3D field grid out in Bmad
 `grid_field` format, producing a Bmad lattice element with the field grid
 attached. It can be run from the shell with
 ```
-julia programs/run_grid_to_bmad.jl <field_grid.h5> [output_base] [--text]
+julia programs/run_field_grid_to_bmad.jl <field_grid.h5> [output_base] [--text]
 ```
 `input` is either a `FieldGridTable` or the path to a Bmad openPMD `field_grid`
 HDF5 file (read by `read_field_grid_hdf5`). Two files are written:

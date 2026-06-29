@@ -1,7 +1,3 @@
----
-title: Exporting to Bmad
----
-
 # Exporting to Bmad
 
 The package can write two kinds of [Bmad](https://www.classe.cornell.edu/bmad/)
@@ -67,7 +63,6 @@ julia programs/run_gg_to_bmad.jl <gg_fit_result.h5> [output_base] [cutoff]
 Bmad's `gen_grad_map` uses azimuthal-harmonic gradients `C_{m,sin/cos}`, a
 different convention from this project's midplane-derivative GGs
 (`a_n`, `b_n`, `b_s`). `gg_to_bmad` performs the exact conversion between the two;
-the derivation is given in the `gg_to_bmad` docstring in the
-[API Reference](https://bmad-sim.github.io/GeneralizedGradients.jl/api/) and
-summarized under [Theory](theory.md).
+the derivation is given in the `gg_to_bmad` docstring (see the **API Reference**)
+and summarized under [Theory](theory.md).
 ```

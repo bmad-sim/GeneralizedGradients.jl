@@ -23,53 +23,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ---- API reference: Documenter (Julia) -> docs/build ----
+      # Toolchains: Julia (Documenter API) + Python (Sphinx + Furo narrative).
       - uses: julia-actions/setup-julia@v2
         with:
           version: '1'
       - uses: julia-actions/cache@v2
-      - name: Instantiate docs environment
-        run: |
-          julia --project=docs -e '
-            using Pkg
-            Pkg.develop(PackageSpec(path = pwd()))
-            Pkg.instantiate()'
-      - name: Build API reference (Documenter)
-        run: julia --project=docs docs/make.jl
-
-      # ---- Narrative docs: MyST (Node) -> docs/myst/_build/html ----
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-python@v5
         with:
-          node-version: '20'
-      - name: Install MyST
-        run: npm install -g mystmd
+          python-version: '3.12'
 
-      - name: Compute deploy paths
-        id: paths
-        run: |
-          repo="${{ github.event.repository.name }}"
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "base_url=/$repo/previews/PR${{ github.event.number }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "base_url=/$repo" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Build narrative docs (MyST)
-        working-directory: docs/myst
-        env:
-          # MyST needs the GitHub Pages sub-path so asset/links resolve.
-          BASE_URL: ${{ steps.paths.outputs.base_url }}
-        run: myst build --html
-
-      # ---- Assemble combined site: MyST at root, Documenter at /api ----
-      - name: Assemble site
-        run: |
-          set -e
-          rm -rf site
-          mkdir -p site/api
-          cp -r docs/myst/_build/html/. site/
-          cp -r docs/build/. site/api/
-          touch site/.nojekyll   # serve _-prefixed asset dirs verbatim
+      # docs/build.py instantiates the Julia env, builds Documenter -> docs/api/build,
+      # pip-installs the Sphinx toolchain, builds Sphinx -> docs/build/html, and
+      # combines both into ./gh-pages (Sphinx at root, Documenter under api/).
+      - name: Build combined documentation
+        run: python docs/build.py
 
       # ---- Deploy ----
       - name: Deploy main site
@@ -77,7 +44,7 @@ jobs:
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./site
+          publish_dir: ./gh-pages
           keep_files: true   # preserve previews/ on main deploys
 
       - name: Deploy PR preview
@@ -85,7 +52,7 @@ jobs:
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./site
+          publish_dir: ./gh-pages
           destination_dir: previews/PR${{ github.event.number }}
           keep_files: true
 

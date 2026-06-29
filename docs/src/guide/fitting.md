@@ -1,10 +1,6 @@
----
-title: Fitting a field grid
----
-
 # Fitting a field grid to generalized gradients
 
-The central operation is {func}`gg_fit`, which fits a 3D magnetic field grid to
+The central operation is `gg_fit`, which fits a 3D magnetic field grid to
 generalized-gradient functions `a_n(s)`, `b_n(s)`, `b_s(s)` and their
 `s`-derivatives, **plane by plane**.
 

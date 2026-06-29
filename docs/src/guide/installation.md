@@ -1,7 +1,3 @@
----
-title: Installation
----
-
 # Installation
 
 GeneralizedGradients.jl targets Julia **1.10 or newer** (see the `[compat]`

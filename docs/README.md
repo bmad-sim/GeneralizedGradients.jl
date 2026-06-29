@@ -1,100 +1,69 @@
 # Documentation
 
-The documentation site is built from **two engines** and combined into one site:
+The documentation site is built from **two engines** and combined into one site,
+mirroring the [SciBmad.jl](https://bmad-sim.github.io/SciBmad.jl/) docs:
 
-- **MyST** ([mystmd](https://mystmd.org)) renders the narrative/general docs in
-  `docs/myst/` — this becomes the site root.
+- **Sphinx + MyST + Furo** renders the narrative/general docs in `docs/src/`
+  (MyST Markdown, `conf.py`) — this becomes the site root.
 - **Documenter.jl** renders the API reference from the package docstrings
-  (`docs/make.jl`, `docs/src/`) — this becomes the `/api/` sub-site.
+  (`docs/api/make.jl`, `docs/api/src/`) — this becomes the `/api/` sub-site.
 
-`.github/workflows/docs.yml` builds both, assembles them
-(`site/` = MyST at root + Documenter at `site/api/`), and publishes to the
-`gh-pages` branch. Pull requests get a full preview at
+`docs/build.py` builds both and combines them into `gh-pages/` (Sphinx at the
+root, Documenter under `gh-pages/api/`). The unified look comes from the Furo
+theme plus an **"API Reference →"** link in the Furo sidebar
+(`docs/src/_templates/sidebar-external-links.html`) and a **"← Documentation"**
+back-link in the Documenter site (`docs/api/src/main-docs.md`).
+
+`.github/workflows/docs.yml` runs `docs/build.py` and publishes `gh-pages/` to
+the `gh-pages` branch. Pull requests get a full preview at
 `previews/PR<number>/` with a link posted as a PR comment; the preview is
 deleted on PR close by `.github/workflows/docs-cleanup.yml`.
 
 ## One-time repository setup
 
 1. In **Settings → Pages**, set the source to **Deploy from a branch**, branch
-   **`gh-pages`**, folder **`/ (root)`**. (The first push to `main` creates the
-   branch.)
+   **`gh-pages`**, folder **`/ (root)`**.
 2. Ensure **Settings → Actions → General → Workflow permissions** is set to
    **Read and write permissions** so the workflow can push to `gh-pages` and
    comment on PRs.
 
-The published site will be at
-<https://bmad-sim.github.io/GeneralizedGradients.jl/>.
+The published site is at <https://bmad-sim.github.io/GeneralizedGradients.jl/>.
 
-> **Note on fork PRs:** previews are deployed by pushing to `gh-pages`. Pull
-> requests opened from a *fork* have a read-only token and cannot deploy a
-> preview; PRs from branches within this repository work normally.
+> **Note on fork PRs:** previews deploy by pushing to `gh-pages`; PRs opened from
+> a *fork* have a read-only token and cannot deploy a preview. PRs from branches
+> within this repository work normally.
 
 ## Viewing the documentation locally
 
 The easiest way is the helper script [`docs/build_local.sh`](build_local.sh),
-which builds **both** engines, assembles the combined `site/` exactly as CI does,
-and serves it locally so the links between the narrative docs and the `/api/`
-reference work:
+which builds the combined site and serves it:
 
 ```sh
 docs/build_local.sh
 ```
 
-Then open the printed URL:
+Then open:
 
 - Narrative docs: <http://localhost:8000/>
 - API reference: <http://localhost:8000/api/>
 
-Press `Ctrl-C` to stop the server. Options:
+Press `Ctrl-C` to stop. Options: `--port 9000`, `--no-serve`. Requirements:
+`julia` and `python3` (the Sphinx toolchain is pip-installed automatically from
+`requirements.txt`).
+
+## Building manually
 
 ```sh
-docs/build_local.sh --port 9000   # serve on a different port
-docs/build_local.sh --no-serve    # just build site/, don't start a server
+python docs/build.py        # builds both engines -> gh-pages/
 ```
 
-Requirements: `julia` and `mystmd` (`npm install -g mystmd`). The server uses
-`python3` if available, otherwise `npx serve`.
-
-> The "API Reference" entry in the site's top nav points at the *published* site;
-> to view the locally built API, browse to `http://localhost:8000/api/` directly.
-
-## Building each engine separately
-
-If you want to work on just one half of the docs, build them individually.
-
-### Narrative docs (MyST)
-
-Requires [Node.js](https://nodejs.org) and `mystmd`:
+To work on just one half:
 
 ```sh
-npm install -g mystmd
-cd docs/myst
-myst start          # live-reloading preview at http://localhost:3000
-# or a static build:
-myst build --html   # output in docs/myst/_build/html/
-```
-
-`myst start` is the fastest loop for editing narrative pages — it live-reloads on
-save and needs no assembly step.
-
-### API reference (Documenter)
-
-Requires Julia:
-
-```sh
+# API reference (Documenter):
 julia --project=docs -e 'using Pkg; Pkg.develop(path="."); Pkg.instantiate()'
-julia --project=docs docs/make.jl
-# output in docs/build/ (open docs/build/index.html)
-```
+julia --project=docs docs/api/make.jl          # -> docs/api/build/
 
-### Combined site (manual)
-
-To reproduce the deployed layout by hand (this is what `build_local.sh`
-automates):
-
-```sh
-rm -rf site && mkdir -p site/api
-cp -r docs/myst/_build/html/. site/
-cp -r docs/build/. site/api/
-python3 -m http.server --directory site   # then open http://localhost:8000/
+# Narrative docs (Sphinx): from docs/, after pip-installing requirements.txt
+cd docs && sphinx-build -b html src build/html  # -> docs/build/html/
 ```

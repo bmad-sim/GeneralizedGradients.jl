@@ -1,0 +1,4 @@
+sphinx>=7.0
+myst-parser>=2.0     # MyST Markdown for Sphinx
+furo                  # documentation theme
+linkify-it-py         # MyST "linkify" extension (auto-link bare URLs)

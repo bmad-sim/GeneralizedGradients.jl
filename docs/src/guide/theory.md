@@ -1,12 +1,8 @@
----
-title: Theory
----
-
 # How the GG calculation works
 
-This page summarizes the mathematics behind {func}`gg_fit`. The field-expansion
-table is linear in the GG functions and their `s`-derivatives, which makes the
-fit a (weighted) linear least-squares problem.
+This page summarizes the mathematics behind `gg_fit`. The field-expansion table
+is linear in the GG functions and their `s`-derivatives, which makes the fit a
+(weighted) linear least-squares problem.
 
 ## The field expansion
 
@@ -101,8 +97,7 @@ C^{[j]}_{0,c} = b_s^{[j-1]} \quad (j \ge 1),
 
 where $x^{[j]} \equiv \mathrm{d}^j x/\mathrm{d}s^j$ is supplied directly by the
 fit. The full derivation, including the mixing weights $W_n$, $W_c$, and $U_s$,
-is in the `gg_to_bmad` docstring in the
-[API Reference](https://bmad-sim.github.io/GeneralizedGradients.jl/api/).
+is in the `gg_to_bmad` docstring (see the **API Reference**).
 
 ## References
 

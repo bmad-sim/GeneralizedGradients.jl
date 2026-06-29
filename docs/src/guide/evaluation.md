@@ -1,7 +1,3 @@
----
-title: Evaluating the fitted field
----
-
 # Evaluating the fitted field
 
 Once a fit has been written with `gg_fit_write_results`, load it back with
@@ -62,5 +58,4 @@ a, b, bs = gg_coefficients_at_s(fit, s)        # at arbitrary s
 `a` and `b` are keyed by `(n, m)` with `a(n,m) = dᵐaₙ/dsᵐ`; `bs` is keyed by `m`
 with `bs(m) = dᵐb_s/dsᵐ`.
 
-See the [API Reference](https://bmad-sim.github.io/GeneralizedGradients.jl/api/)
-for the full signatures and return types.
+See the **API Reference** (sidebar) for the full signatures and return types.

@@ -1,16 +1,16 @@
 <!doctype html>
-<html class="no-js" lang="en" data-content_root="./">
+<html class="no-js" lang="en" data-content_root="../">
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Installation" href="guide/installation.html">
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="next" title="How the GG calculation works" href="theory.html"><link rel="prev" title="Evaluating the fitted field" href="evaluation.html">
 
     <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>GeneralizedGradients.jl</title>
-      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
-    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
-    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
-    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=60deee05" />
+        <title>Exporting to Bmad - GeneralizedGradients.jl</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=60deee05" />
     
     
 
@@ -162,7 +162,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="#"><div class="brand">GeneralizedGradients.jl</div></a>
+      <a href="../index.html"><div class="brand">GeneralizedGradients.jl</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -181,30 +181,30 @@
   <aside class="sidebar-drawer">
     <div class="sidebar-container">
       
-      <div class="sidebar-sticky"><a class="sidebar-brand" href="#">
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
   
   <span class="sidebar-brand-text">GeneralizedGradients.jl</span>
   
-</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
   <input type="hidden" name="check_keywords" value="yes">
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
   <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="guide/installation.html">Installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="guide/fitting.html">Fitting a field grid to generalized gradients</a></li>
-<li class="toctree-l1"><a class="reference internal" href="guide/evaluation.html">Evaluating the fitted field</a></li>
-<li class="toctree-l1"><a class="reference internal" href="guide/bmad-export.html">Exporting to Bmad</a></li>
-<li class="toctree-l1"><a class="reference internal" href="guide/theory.html">How the GG calculation works</a></li>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fitting.html">Fitting a field grid to generalized gradients</a></li>
+<li class="toctree-l1"><a class="reference internal" href="evaluation.html">Evaluating the fitted field</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Exporting to Bmad</a></li>
+<li class="toctree-l1"><a class="reference internal" href="theory.html">How the GG calculation works</a></li>
 </ul>
 
 </div><div class="sidebar-tree">
   <ul>
     <li class="toctree-l1">
       <a class="reference internal"
-         href="api/index.html">API Reference →</a>
+         href="../api/index.html">API Reference →</a>
     </li>
   </ul>
 </div></div>
@@ -223,12 +223,12 @@
         </a>
         <div class="content-icon-container">
           <div class="view-this-page">
-  <a class="muted-link" href="https://github.com/bmad-sim/GeneralizedGradients.jl/blob/main/docs/src/index.md?plain=true" title="View this page">
+  <a class="muted-link" href="https://github.com/bmad-sim/GeneralizedGradients.jl/blob/main/docs/src/guide/bmad-export.md?plain=true" title="View this page">
     <svg><use href="#svg-eye"></use></svg>
     <span class="visually-hidden">View this page</span>
   </a>
 </div><div class="edit-this-page">
-  <a class="muted-link" href="https://github.com/bmad-sim/GeneralizedGradients.jl/edit/main/docs/src/index.md" rel="edit" title="Edit this page">
+  <a class="muted-link" href="https://github.com/bmad-sim/GeneralizedGradients.jl/edit/main/docs/src/guide/bmad-export.md" rel="edit" title="Edit this page">
     <svg><use href="#svg-pencil"></use></svg>
     <span class="visually-hidden">Edit this page</span>
   </a>
@@ -245,51 +245,62 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section class="tex2jax_ignore mathjax_ignore" id="generalizedgradients-jl">
-<h1>GeneralizedGradients.jl<a class="headerlink" href="#generalizedgradients-jl" title="Link to this heading">¶</a></h1>
-<p>Julia code to calculate and manipulate <strong>generalized gradients</strong> (GGs): functions
-that compactly describe magnetic (and electric) fields. The package is currently
-geared toward magnetic fields and supports both straight and curved (<code class="docutils literal notranslate"><span class="pre">sbend</span></code>)
-reference frames.</p>
-<p>The notation follows S. Van der Schueren <em>et al.</em>, <em>“Magnetic Field Modelling and
-Symplectic Integration of Magnetic Fields on Curved Reference Frames for Improved
-Synchrotron Design: First Steps”</em> (a copy is in the <code class="docutils literal notranslate"><span class="pre">papers</span></code> directory of the
-repository). Here the <strong>gg functions</strong> are <code class="docutils literal notranslate"><span class="pre">a(s)</span></code>, <code class="docutils literal notranslate"><span class="pre">b(s)</span></code>, and <code class="docutils literal notranslate"><span class="pre">b_s(s)</span></code> together
-with their <code class="docutils literal notranslate"><span class="pre">s</span></code>-derivatives.</p>
-<div class="toctree-wrapper compound">
-</div>
-<section id="what-it-does">
-<h2>What it does<a class="headerlink" href="#what-it-does" title="Link to this heading">¶</a></h2>
-<p>Starting from a 3D field grid (e.g. from a magnet solver or a measurement), the
-package can:</p>
-<ol class="arabic simple">
-<li><p><strong>Fit</strong> the grid to generalized gradients, plane by plane — see
-<a class="reference internal" href="guide/fitting.html"><span class="std std-doc">Fitting a field grid</span></a>.</p></li>
-<li><p><strong>Evaluate</strong> the field, vector potential, and its derivatives anywhere from
-the fitted GGs — see <a class="reference internal" href="guide/evaluation.html"><span class="std std-doc">Evaluating the fitted field</span></a>.</p></li>
-<li><p><strong>Export</strong> to <a class="reference external" href="https://www.classe.cornell.edu/bmad/">Bmad</a> as either a
-<code class="docutils literal notranslate"><span class="pre">grid_field</span></code> or a <code class="docutils literal notranslate"><span class="pre">gen_grad_map</span></code> element — see
-<a class="reference internal" href="guide/bmad-export.html"><span class="std std-doc">Exporting to Bmad</span></a>.</p></li>
-</ol>
-<p>The complete docstring reference is in the <strong>API Reference</strong> (linked in the
-sidebar).</p>
-</section>
-<section id="quick-example">
-<h2>Quick example<a class="headerlink" href="#quick-example" title="Link to this heading">¶</a></h2>
+          <section class="tex2jax_ignore mathjax_ignore" id="exporting-to-bmad">
+<h1>Exporting to Bmad<a class="headerlink" href="#exporting-to-bmad" title="Link to this heading">¶</a></h1>
+<p>The package can write two kinds of <a class="reference external" href="https://www.classe.cornell.edu/bmad/">Bmad</a>
+lattice elements: a <code class="docutils literal notranslate"><span class="pre">grid_field</span></code> element (the raw field grid) and a
+<code class="docutils literal notranslate"><span class="pre">gen_grad_map</span></code> element (the fitted generalized gradients).</p>
+<p>In both cases a non-zero reference bending strength <code class="docutils literal notranslate"><span class="pre">g_ref</span> <span class="pre">=</span> <span class="pre">1/bend_radius</span></code>
+[1/m] makes the element an <code class="docutils literal notranslate"><span class="pre">sbend</span></code> with <code class="docutils literal notranslate"><span class="pre">curved_ref_frame</span> <span class="pre">=</span> <span class="pre">T</span></code>; otherwise it is
+an <code class="docutils literal notranslate"><span class="pre">em_field</span></code>. Each element is anchored at its entrance
+(<code class="docutils literal notranslate"><span class="pre">ele_anchor_pt</span> <span class="pre">=</span> <span class="pre">beginning</span></code>).</p>
+<section id="field-grid-grid-field">
+<h2>Field grid → <code class="docutils literal notranslate"><span class="pre">grid_field</span></code><a class="headerlink" href="#field-grid-grid-field" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">field_grid_to_bmad</span></code> writes a field grid as a Bmad <code class="docutils literal notranslate"><span class="pre">grid_field</span></code>. Its <code class="docutils literal notranslate"><span class="pre">input</span></code> is
+either a <code class="docutils literal notranslate"><span class="pre">FieldGridTable</span></code> or the path to a <code class="docutils literal notranslate"><span class="pre">field_grid</span></code> HDF5 file:</p>
 <div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="k">using</span><span class="w"> </span><span class="n">GeneralizedGradients</span>
-
-<span class="n">field</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">read_field_grid_hdf5</span><span class="p">(</span><span class="s">&quot;wsnk_fieldmap_reduced.h5&quot;</span><span class="p">)</span><span class="w">  </span><span class="c"># a FieldGridTable</span>
-<span class="n">params</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">GGFitParams</span><span class="p">()</span>
-<span class="n">params</span><span class="o">.</span><span class="n">n_planes_add</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
-<span class="n">params</span><span class="o">.</span><span class="n">output_file</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;gg_fit_result.h5&quot;</span>
-
-<span class="n">results</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gg_fit</span><span class="p">(</span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span><span class="w">                </span><span class="c"># fit GGs plane by plane</span>
-<span class="n">gg_fit_show_results</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span><span class="w">    </span><span class="c"># print a summary</span>
-<span class="n">gg_fit_write_results</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span><span class="w">   </span><span class="c"># save to HDF5</span>
-
-<span class="c"># Convert the fit to a Bmad gen_grad_map element:</span>
-<span class="n">gg_to_bmad</span><span class="p">(</span><span class="s">&quot;gg_fit_result.h5&quot;</span><span class="p">)</span>
+<span class="n">field_grid_to_bmad</span><span class="p">(</span><span class="s">&quot;field_grid.h5&quot;</span><span class="p">)</span><span class="w">                  </span><span class="c"># openPMD HDF5 grid (default)</span>
+<span class="n">field_grid_to_bmad</span><span class="p">(</span><span class="s">&quot;field_grid.h5&quot;</span><span class="p">;</span><span class="w"> </span><span class="n">hdf5</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">)</span><span class="w">    </span><span class="c"># plain-text grid block</span>
+<span class="n">field_grid_to_bmad</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="w">                             </span><span class="c"># from a FieldGridTable</span>
 </pre></div>
+</div>
+<p>The reference frame is determined by the grid’s own <code class="docutils literal notranslate"><span class="pre">g_ref</span></code>: non-zero gives an
+<code class="docutils literal notranslate"><span class="pre">sbend</span></code>, zero an <code class="docutils literal notranslate"><span class="pre">em_field</span></code>.</p>
+<p>Two files are written: <code class="docutils literal notranslate"><span class="pre">&lt;output_base&gt;.bmad</span></code> (the lattice element) and the grid,
+either <code class="docutils literal notranslate"><span class="pre">&lt;output_base&gt;_grid.h5</span></code> (HDF5, the default) or <code class="docutils literal notranslate"><span class="pre">&lt;output_base&gt;_grid.bmad</span></code>
+(plain text). The core writer <code class="docutils literal notranslate"><span class="pre">write_bmad_field_grid(field;</span> <span class="pre">...)</span></code> is also exported
+and can be called directly on a <code class="docutils literal notranslate"><span class="pre">FieldGridTable</span></code>.</p>
+<p>From the shell:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">julia</span> <span class="n">programs</span><span class="o">/</span><span class="n">run_field_grid_to_bmad</span><span class="o">.</span><span class="n">jl</span> <span class="o">&lt;</span><span class="n">field_grid</span><span class="o">.</span><span class="n">h5</span><span class="o">&gt;</span> <span class="p">[</span><span class="n">output_base</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">text</span><span class="p">]</span>
+</pre></div>
+</div>
+</section>
+<section id="gg-fit-gen-grad-map">
+<h2>GG fit → <code class="docutils literal notranslate"><span class="pre">gen_grad_map</span></code><a class="headerlink" href="#gg-fit-gen-grad-map" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">gg_to_bmad</span></code> converts a GG fit file (the output of <code class="docutils literal notranslate"><span class="pre">gg_fit_write_results</span></code>) into a
+Bmad <code class="docutils literal notranslate"><span class="pre">gen_grad_map</span></code>:</p>
+<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="k">using</span><span class="w"> </span><span class="n">GeneralizedGradients</span>
+<span class="n">gg_to_bmad</span><span class="p">(</span><span class="s">&quot;gg_fit_result.h5&quot;</span><span class="p">)</span>
+<span class="n">gg_to_bmad</span><span class="p">(</span><span class="s">&quot;gg_fit_result.h5&quot;</span><span class="p">;</span><span class="w"> </span><span class="n">cutoff</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1e-6</span><span class="p">)</span><span class="w">   </span><span class="c"># prune negligible multipoles</span>
+</pre></div>
+</div>
+<p>Two files are written: <code class="docutils literal notranslate"><span class="pre">&lt;output_base&gt;.bmad</span></code> (the lattice element) and
+<code class="docutils literal notranslate"><span class="pre">&lt;output_base&gt;_gg.bmad</span></code> (the attached <code class="docutils literal notranslate"><span class="pre">gen_grad_map</span></code>). <code class="docutils literal notranslate"><span class="pre">cutoff</span></code> is a relative
+magnitude threshold: a multipole curve is dropped if its peak <code class="docutils literal notranslate"><span class="pre">|GG|</span></code> is below
+<code class="docutils literal notranslate"><span class="pre">cutoff</span> <span class="pre">×</span> <span class="pre">(largest</span> <span class="pre">peak</span> <span class="pre">|GG|</span> <span class="pre">of</span> <span class="pre">any</span> <span class="pre">curve)</span></code>. The default <code class="docutils literal notranslate"><span class="pre">0</span></code> keeps every
+non-zero curve. The core writer <code class="docutils literal notranslate"><span class="pre">write_bmad_gen_grad_map(fit;</span> <span class="pre">...)</span></code> is exported
+too.</p>
+<p>From the shell:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">julia</span> <span class="n">programs</span><span class="o">/</span><span class="n">run_gg_to_bmad</span><span class="o">.</span><span class="n">jl</span> <span class="o">&lt;</span><span class="n">gg_fit_result</span><span class="o">.</span><span class="n">h5</span><span class="o">&gt;</span> <span class="p">[</span><span class="n">output_base</span><span class="p">]</span> <span class="p">[</span><span class="n">cutoff</span><span class="p">]</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Bmad’s <code class="docutils literal notranslate"><span class="pre">gen_grad_map</span></code> uses azimuthal-harmonic gradients <code class="docutils literal notranslate"><span class="pre">C_{m,sin/cos}</span></code>, a
+different convention from this project’s midplane-derivative GGs
+(<code class="docutils literal notranslate"><span class="pre">a_n</span></code>, <code class="docutils literal notranslate"><span class="pre">b_n</span></code>, <code class="docutils literal notranslate"><span class="pre">b_s</span></code>). <code class="docutils literal notranslate"><span class="pre">gg_to_bmad</span></code> performs the exact conversion between the two;
+the derivation is given in the <code class="docutils literal notranslate"><span class="pre">gg_to_bmad</span></code> docstring (see the <strong>API Reference</strong>)
+and summarized under <a class="reference internal" href="theory.html"><span class="std std-doc">Theory</span></a>.</p>
 </div>
 </section>
 </section>
@@ -299,16 +310,26 @@ sidebar).</p>
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="guide/installation.html">
+          <a class="next-page" href="theory.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Installation</div>
+                <div class="title">How the GG calculation works</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          
+          <a class="prev-page" href="evaluation.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">Evaluating the fitted field</div>
+                
+              </div>
+            </a>
         </div>
         <div class="bottom-of-page">
           <div class="left-details">
@@ -339,9 +360,9 @@ sidebar).</p>
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">GeneralizedGradients.jl</a><ul>
-<li><a class="reference internal" href="#what-it-does">What it does</a></li>
-<li><a class="reference internal" href="#quick-example">Quick example</a></li>
+<li><a class="reference internal" href="#">Exporting to Bmad</a><ul>
+<li><a class="reference internal" href="#field-grid-grid-field">Field grid → <code class="docutils literal notranslate"><span class="pre">grid_field</span></code></a></li>
+<li><a class="reference internal" href="#gg-fit-gen-grad-map">GG fit → <code class="docutils literal notranslate"><span class="pre">gen_grad_map</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -353,9 +374,9 @@ sidebar).</p>
       
     </aside>
   </div>
-</div><script src="_static/documentation_options.js?v=8a448e45"></script>
-    <script src="_static/doctools.js?v=fd6eb6e6"></script>
-    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
-    <script src="_static/scripts/furo.js?v=46bd48cc"></script>
+</div><script src="../_static/documentation_options.js?v=8a448e45"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
     </body>
 </html>

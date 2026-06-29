@@ -2,12 +2,10 @@
 <html class="no-js" lang="en" data-content_root="./">
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Installation" href="guide/installation.html">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="#"><link rel="search" title="Search" href="search.html">
 
-    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>GeneralizedGradients.jl</title>
-      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 --><title>Index - GeneralizedGradients.jl</title>
+<link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
     <link rel="stylesheet" type="text/css" href="_static/custom.css?v=60deee05" />
@@ -162,7 +160,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="#"><div class="brand">GeneralizedGradients.jl</div></a>
+      <a href="index.html"><div class="brand">GeneralizedGradients.jl</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -173,7 +171,7 @@
           <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
         </button>
       </div>
-      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
         <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
       </label>
     </div>
@@ -181,7 +179,7 @@
   <aside class="sidebar-drawer">
     <div class="sidebar-container">
       
-      <div class="sidebar-sticky"><a class="sidebar-brand" href="#">
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
   
   <span class="sidebar-brand-text">GeneralizedGradients.jl</span>
   
@@ -222,17 +220,7 @@
           <span>Back to top</span>
         </a>
         <div class="content-icon-container">
-          <div class="view-this-page">
-  <a class="muted-link" href="https://github.com/bmad-sim/GeneralizedGradients.jl/blob/main/docs/src/index.md?plain=true" title="View this page">
-    <svg><use href="#svg-eye"></use></svg>
-    <span class="visually-hidden">View this page</span>
-  </a>
-</div><div class="edit-this-page">
-  <a class="muted-link" href="https://github.com/bmad-sim/GeneralizedGradients.jl/edit/main/docs/src/index.md" rel="edit" title="Edit this page">
-    <svg><use href="#svg-pencil"></use></svg>
-    <span class="visually-hidden">Edit this page</span>
-  </a>
-</div><div class="theme-toggle-container theme-toggle-content">
+          <div class="theme-toggle-container theme-toggle-content">
             <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
               <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
               <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
@@ -240,58 +228,15 @@
               <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
             </button>
           </div>
-          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
             <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section class="tex2jax_ignore mathjax_ignore" id="generalizedgradients-jl">
-<h1>GeneralizedGradients.jl<a class="headerlink" href="#generalizedgradients-jl" title="Link to this heading">¶</a></h1>
-<p>Julia code to calculate and manipulate <strong>generalized gradients</strong> (GGs): functions
-that compactly describe magnetic (and electric) fields. The package is currently
-geared toward magnetic fields and supports both straight and curved (<code class="docutils literal notranslate"><span class="pre">sbend</span></code>)
-reference frames.</p>
-<p>The notation follows S. Van der Schueren <em>et al.</em>, <em>“Magnetic Field Modelling and
-Symplectic Integration of Magnetic Fields on Curved Reference Frames for Improved
-Synchrotron Design: First Steps”</em> (a copy is in the <code class="docutils literal notranslate"><span class="pre">papers</span></code> directory of the
-repository). Here the <strong>gg functions</strong> are <code class="docutils literal notranslate"><span class="pre">a(s)</span></code>, <code class="docutils literal notranslate"><span class="pre">b(s)</span></code>, and <code class="docutils literal notranslate"><span class="pre">b_s(s)</span></code> together
-with their <code class="docutils literal notranslate"><span class="pre">s</span></code>-derivatives.</p>
-<div class="toctree-wrapper compound">
-</div>
-<section id="what-it-does">
-<h2>What it does<a class="headerlink" href="#what-it-does" title="Link to this heading">¶</a></h2>
-<p>Starting from a 3D field grid (e.g. from a magnet solver or a measurement), the
-package can:</p>
-<ol class="arabic simple">
-<li><p><strong>Fit</strong> the grid to generalized gradients, plane by plane — see
-<a class="reference internal" href="guide/fitting.html"><span class="std std-doc">Fitting a field grid</span></a>.</p></li>
-<li><p><strong>Evaluate</strong> the field, vector potential, and its derivatives anywhere from
-the fitted GGs — see <a class="reference internal" href="guide/evaluation.html"><span class="std std-doc">Evaluating the fitted field</span></a>.</p></li>
-<li><p><strong>Export</strong> to <a class="reference external" href="https://www.classe.cornell.edu/bmad/">Bmad</a> as either a
-<code class="docutils literal notranslate"><span class="pre">grid_field</span></code> or a <code class="docutils literal notranslate"><span class="pre">gen_grad_map</span></code> element — see
-<a class="reference internal" href="guide/bmad-export.html"><span class="std std-doc">Exporting to Bmad</span></a>.</p></li>
-</ol>
-<p>The complete docstring reference is in the <strong>API Reference</strong> (linked in the
-sidebar).</p>
-</section>
-<section id="quick-example">
-<h2>Quick example<a class="headerlink" href="#quick-example" title="Link to this heading">¶</a></h2>
-<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="k">using</span><span class="w"> </span><span class="n">GeneralizedGradients</span>
-
-<span class="n">field</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">read_field_grid_hdf5</span><span class="p">(</span><span class="s">&quot;wsnk_fieldmap_reduced.h5&quot;</span><span class="p">)</span><span class="w">  </span><span class="c"># a FieldGridTable</span>
-<span class="n">params</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">GGFitParams</span><span class="p">()</span>
-<span class="n">params</span><span class="o">.</span><span class="n">n_planes_add</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
-<span class="n">params</span><span class="o">.</span><span class="n">output_file</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;gg_fit_result.h5&quot;</span>
-
-<span class="n">results</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gg_fit</span><span class="p">(</span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span><span class="w">                </span><span class="c"># fit GGs plane by plane</span>
-<span class="n">gg_fit_show_results</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span><span class="w">    </span><span class="c"># print a summary</span>
-<span class="n">gg_fit_write_results</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span><span class="w">   </span><span class="c"># save to HDF5</span>
-
-<span class="c"># Convert the fit to a Bmad gen_grad_map element:</span>
-<span class="n">gg_to_bmad</span><span class="p">(</span><span class="s">&quot;gg_fit_result.h5&quot;</span><span class="p">)</span>
-</pre></div>
-</div>
-</section>
+          
+<section class="genindex-section">
+  <h1 id="index">Index</h1>
+  <div class="genindex-jumpbox"></div>
 </section>
 
         </article>
@@ -299,15 +244,7 @@ sidebar).</p>
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="guide/installation.html">
-              <div class="page-info">
-                <div class="context">
-                  <span>Next</span>
-                </div>
-                <div class="title">Installation</div>
-              </div>
-              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
-            </a>
+          
           
         </div>
         <div class="bottom-of-page">
@@ -327,28 +264,8 @@ sidebar).</p>
         
       </footer>
     </div>
-    <aside class="toc-drawer">
+    <aside class="toc-drawer no-toc">
       
-      
-      <div class="toc-sticky toc-scroll">
-        <div class="toc-title-container">
-          <span class="toc-title">
-            On this page
-          </span>
-        </div>
-        <div class="toc-tree-container">
-          <div class="toc-tree">
-            <ul>
-<li><a class="reference internal" href="#">GeneralizedGradients.jl</a><ul>
-<li><a class="reference internal" href="#what-it-does">What it does</a></li>
-<li><a class="reference internal" href="#quick-example">Quick example</a></li>
-</ul>
-</li>
-</ul>
-
-          </div>
-        </div>
-      </div>
       
       
     </aside>

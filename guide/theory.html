@@ -1,16 +1,16 @@
 <!doctype html>
-<html class="no-js" lang="en" data-content_root="./">
+<html class="no-js" lang="en" data-content_root="../">
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="next" title="Installation" href="guide/installation.html">
+<link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html"><link rel="prev" title="Exporting to Bmad" href="bmad-export.html">
 
     <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
-        <title>GeneralizedGradients.jl</title>
-      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
-    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
-    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
-    <link rel="stylesheet" type="text/css" href="_static/custom.css?v=60deee05" />
+        <title>How the GG calculation works - GeneralizedGradients.jl</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=60deee05" />
     
     
 
@@ -162,7 +162,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="#"><div class="brand">GeneralizedGradients.jl</div></a>
+      <a href="../index.html"><div class="brand">GeneralizedGradients.jl</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -181,30 +181,30 @@
   <aside class="sidebar-drawer">
     <div class="sidebar-container">
       
-      <div class="sidebar-sticky"><a class="sidebar-brand" href="#">
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
   
   <span class="sidebar-brand-text">GeneralizedGradients.jl</span>
   
-</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
   <input type="hidden" name="check_keywords" value="yes">
   <input type="hidden" name="area" value="default">
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
   <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="guide/installation.html">Installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="guide/fitting.html">Fitting a field grid to generalized gradients</a></li>
-<li class="toctree-l1"><a class="reference internal" href="guide/evaluation.html">Evaluating the fitted field</a></li>
-<li class="toctree-l1"><a class="reference internal" href="guide/bmad-export.html">Exporting to Bmad</a></li>
-<li class="toctree-l1"><a class="reference internal" href="guide/theory.html">How the GG calculation works</a></li>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fitting.html">Fitting a field grid to generalized gradients</a></li>
+<li class="toctree-l1"><a class="reference internal" href="evaluation.html">Evaluating the fitted field</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bmad-export.html">Exporting to Bmad</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">How the GG calculation works</a></li>
 </ul>
 
 </div><div class="sidebar-tree">
   <ul>
     <li class="toctree-l1">
       <a class="reference internal"
-         href="api/index.html">API Reference →</a>
+         href="../api/index.html">API Reference →</a>
     </li>
   </ul>
 </div></div>
@@ -223,12 +223,12 @@
         </a>
         <div class="content-icon-container">
           <div class="view-this-page">
-  <a class="muted-link" href="https://github.com/bmad-sim/GeneralizedGradients.jl/blob/main/docs/src/index.md?plain=true" title="View this page">
+  <a class="muted-link" href="https://github.com/bmad-sim/GeneralizedGradients.jl/blob/main/docs/src/guide/theory.md?plain=true" title="View this page">
     <svg><use href="#svg-eye"></use></svg>
     <span class="visually-hidden">View this page</span>
   </a>
 </div><div class="edit-this-page">
-  <a class="muted-link" href="https://github.com/bmad-sim/GeneralizedGradients.jl/edit/main/docs/src/index.md" rel="edit" title="Edit this page">
+  <a class="muted-link" href="https://github.com/bmad-sim/GeneralizedGradients.jl/edit/main/docs/src/guide/theory.md" rel="edit" title="Edit this page">
     <svg><use href="#svg-pencil"></use></svg>
     <span class="visually-hidden">Edit this page</span>
   </a>
@@ -245,52 +245,111 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section class="tex2jax_ignore mathjax_ignore" id="generalizedgradients-jl">
-<h1>GeneralizedGradients.jl<a class="headerlink" href="#generalizedgradients-jl" title="Link to this heading">¶</a></h1>
-<p>Julia code to calculate and manipulate <strong>generalized gradients</strong> (GGs): functions
-that compactly describe magnetic (and electric) fields. The package is currently
-geared toward magnetic fields and supports both straight and curved (<code class="docutils literal notranslate"><span class="pre">sbend</span></code>)
-reference frames.</p>
-<p>The notation follows S. Van der Schueren <em>et al.</em>, <em>“Magnetic Field Modelling and
-Symplectic Integration of Magnetic Fields on Curved Reference Frames for Improved
-Synchrotron Design: First Steps”</em> (a copy is in the <code class="docutils literal notranslate"><span class="pre">papers</span></code> directory of the
-repository). Here the <strong>gg functions</strong> are <code class="docutils literal notranslate"><span class="pre">a(s)</span></code>, <code class="docutils literal notranslate"><span class="pre">b(s)</span></code>, and <code class="docutils literal notranslate"><span class="pre">b_s(s)</span></code> together
-with their <code class="docutils literal notranslate"><span class="pre">s</span></code>-derivatives.</p>
-<div class="toctree-wrapper compound">
+          <section class="tex2jax_ignore mathjax_ignore" id="how-the-gg-calculation-works">
+<h1>How the GG calculation works<a class="headerlink" href="#how-the-gg-calculation-works" title="Link to this heading">¶</a></h1>
+<p>This page summarizes the mathematics behind <code class="docutils literal notranslate"><span class="pre">gg_fit</span></code>. The field-expansion table
+is linear in the GG functions and their <code class="docutils literal notranslate"><span class="pre">s</span></code>-derivatives, which makes the fit a
+(weighted) linear least-squares problem.</p>
+<section id="the-field-expansion">
+<h2>The field expansion<a class="headerlink" href="#the-field-expansion" title="Link to this heading">¶</a></h2>
+<p>For each field component <span class="math notranslate nohighlight">\(c \in \{B_x, B_y, B_s\}\)</span>,</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[B_c(x,y,z) = \sum_{(n,m)} CS_{c,b}(n,m; x,y)\, b_{(n,m)}(z)
+           + \sum_{(n,m)} CS_{c,a}(n,m; x,y)\, a_{(n,m)}(z)
+           + \sum_{m}     CS_{c,bs}(m; x,y)\, bs_{(m)}(z),\]</div>
 </div>
-<section id="what-it-does">
-<h2>What it does<a class="headerlink" href="#what-it-does" title="Link to this heading">¶</a></h2>
-<p>Starting from a 3D field grid (e.g. from a magnet solver or a measurement), the
-package can:</p>
-<ol class="arabic simple">
-<li><p><strong>Fit</strong> the grid to generalized gradients, plane by plane — see
-<a class="reference internal" href="guide/fitting.html"><span class="std std-doc">Fitting a field grid</span></a>.</p></li>
-<li><p><strong>Evaluate</strong> the field, vector potential, and its derivatives anywhere from
-the fitted GGs — see <a class="reference internal" href="guide/evaluation.html"><span class="std std-doc">Evaluating the fitted field</span></a>.</p></li>
-<li><p><strong>Export</strong> to <a class="reference external" href="https://www.classe.cornell.edu/bmad/">Bmad</a> as either a
-<code class="docutils literal notranslate"><span class="pre">grid_field</span></code> or a <code class="docutils literal notranslate"><span class="pre">gen_grad_map</span></code> element — see
-<a class="reference internal" href="guide/bmad-export.html"><span class="std std-doc">Exporting to Bmad</span></a>.</p></li>
-</ol>
-<p>The complete docstring reference is in the <strong>API Reference</strong> (linked in the
-sidebar).</p>
+<p>where each coefficient is a polynomial in the transverse coordinates,</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[CS_{c,f}(n,m; x,y) = \sum (\text{coeff}\cdot g_{\text{ref}}^{\,k}\, x^p\, y^q),\]</div>
+</div>
+<p>and the derivative towers are
+<span class="math notranslate nohighlight">\(b_{(n,m)} = \mathrm{d}^m b_n/\mathrm{d}z^m\)</span>,
+<span class="math notranslate nohighlight">\(a_{(n,m)} = \mathrm{d}^m a_n/\mathrm{d}z^m\)</span>, and
+<span class="math notranslate nohighlight">\(bs_{(m)} = \mathrm{d}^{m+1} a_0/\mathrm{d}z^{m+1}\)</span>.</p>
 </section>
-<section id="quick-example">
-<h2>Quick example<a class="headerlink" href="#quick-example" title="Link to this heading">¶</a></h2>
-<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="k">using</span><span class="w"> </span><span class="n">GeneralizedGradients</span>
-
-<span class="n">field</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">read_field_grid_hdf5</span><span class="p">(</span><span class="s">&quot;wsnk_fieldmap_reduced.h5&quot;</span><span class="p">)</span><span class="w">  </span><span class="c"># a FieldGridTable</span>
-<span class="n">params</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">GGFitParams</span><span class="p">()</span>
-<span class="n">params</span><span class="o">.</span><span class="n">n_planes_add</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
-<span class="n">params</span><span class="o">.</span><span class="n">output_file</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;gg_fit_result.h5&quot;</span>
-
-<span class="n">results</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gg_fit</span><span class="p">(</span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span><span class="w">                </span><span class="c"># fit GGs plane by plane</span>
-<span class="n">gg_fit_show_results</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span><span class="w">    </span><span class="c"># print a summary</span>
-<span class="n">gg_fit_write_results</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span><span class="w">   </span><span class="c"># save to HDF5</span>
-
-<span class="c"># Convert the fit to a Bmad gen_grad_map element:</span>
-<span class="n">gg_to_bmad</span><span class="p">(</span><span class="s">&quot;gg_fit_result.h5&quot;</span><span class="p">)</span>
-</pre></div>
+<section id="plane-by-plane-least-squares">
+<h2>Plane-by-plane least squares<a class="headerlink" href="#plane-by-plane-least-squares" title="Link to this heading">¶</a></h2>
+<p>The unknowns at a base plane <span class="math notranslate nohighlight">\(z_0\)</span> are the function values and their derivatives
+<span class="math notranslate nohighlight">\(f_{(n,m)}(z_0)\)</span> for <span class="math notranslate nohighlight">\(m = 0 \ldots m_{\max}\)</span>. The field on a neighbouring plane at
+offset <span class="math notranslate nohighlight">\(\mathrm{d}z = z - z_0\)</span> is obtained by Taylor-extrapolating each
+derivative,</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[f_{(n,m)}(z_0 + \mathrm{d}z) = \sum_{j \ge m}
+   \frac{\mathrm{d}z^{\,j-m}}{(j-m)!}\, f_{(n,j)}(z_0),\]</div>
 </div>
+<p>which makes the model linear in the base-plane unknowns. Each base plane is then
+solved by weighted linear least squares over all field points lying within
+<code class="docutils literal notranslate"><span class="pre">n_planes_add</span></code> planes of it. Adding planes (<code class="docutils literal notranslate"><span class="pre">m_max</span> <span class="pre">=</span> <span class="pre">2·n_planes_add</span></code>) lets the
+fit resolve higher derivatives and smooths the result; past some point, using
+more planes makes the polynomial approximation <em>less</em> accurate, so there is an
+optimum.</p>
+</section>
+<section id="the-merit-function-and-weights">
+<h2>The merit function and weights<a class="headerlink" href="#the-merit-function-and-weights" title="Link to this heading">¶</a></h2>
+<p>For a base plane, the merit function minimized is</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[\text{Merit} = \sum \text{weight}\,(B_{\text{table}} - B_{\text{GG}})^2 ,\]</div>
+</div>
+<p>with a per-point weight that factors as
+<span class="math notranslate nohighlight">\(\text{weight}(x,y,\mathrm{d}z) = w_{\text{core}}(x,y)\, w_{\text{plane}}(\mathrm{d}z)\)</span>:</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[w_{\text{core}}(x,y) = \texttt{core\_weight}\,
+   \frac{r_{\max}^2}{r_{\max}^2 + r^2(\texttt{core\_weight}-1)},
+\qquad r^2 = x^2 + y^2,\]</div>
+</div>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[w_{\text{plane}}(\mathrm{d}z) = 1 +
+   (\texttt{outer\_plane\_weight}-1)\,\frac{|\mathrm{d}z|}{\mathrm{d}z_{\max}} .\]</div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">core_weight</span> <span class="pre">=</span> <span class="pre">1</span></code> (the default) weights all transverse points equally; a value</p>
+<blockquote>
+<div><p>1 favours near-axis points, which is usually desirable since a beam spends most
+of its time near the core. <code class="docutils literal notranslate"><span class="pre">outer_plane_weight</span> <span class="pre">=</span> <span class="pre">1</span></code> weights all planes equally;
+a value below 1 (but non-negative) down-weights the outer planes. When
+<code class="docutils literal notranslate"><span class="pre">n_planes_add</span> <span class="pre">=</span> <span class="pre">0</span></code> (so <span class="math notranslate nohighlight">\(\mathrm{d}z_{\max} = 0\)</span>), <span class="math notranslate nohighlight">\(w_{\text{plane}}\)</span> is taken to
+be 1.</p>
+</div></blockquote>
+</section>
+<section id="conversion-to-bmad-s-convention">
+<h2>Conversion to Bmad’s convention<a class="headerlink" href="#conversion-to-bmad-s-convention" title="Link to this heading">¶</a></h2>
+<p>Bmad’s <code class="docutils literal notranslate"><span class="pre">gen_grad_map</span></code> uses <strong>azimuthal-harmonic</strong> gradients <span class="math notranslate nohighlight">\(C_{m,\alpha}(z)\)</span>,
+<span class="math notranslate nohighlight">\(\alpha \in \{\sin, \cos\}\)</span>, rather than this project’s midplane-derivative GGs.
+Equating the two expansions on the midplane gives exact recursions (solved in
+order of increasing <span class="math notranslate nohighlight">\(m\)</span>):</p>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[C^{[j]}_{m,s} = \frac{1}{m!}\Big[ b^{[j]}_m
+   - (m-1)! \sum_{n\ge 1,\, m-2n\ge 1} W_n(m,n)\, C^{[j+2n]}_{m-2n,s} \Big],\]</div>
+</div>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[C^{[j]}_{m,c} = \frac{1}{m!}\Big[ a^{[j]}_m
+   - (m-1)! \sum_{n\ge 1,\, m-2n\ge 1} W_c(m,n)\, C^{[j+2n]}_{m-2n,c}
+   - [m \text{ even}]\,(m-1)!\,U_s(m)\, b_s^{[m+j-1]} \Big],\]</div>
+</div>
+<div class="math-wrapper docutils container">
+<div class="math notranslate nohighlight">
+\[C^{[j]}_{0,c} = b_s^{[j-1]} \quad (j \ge 1),\]</div>
+</div>
+<p>where <span class="math notranslate nohighlight">\(x^{[j]} \equiv \mathrm{d}^j x/\mathrm{d}s^j\)</span> is supplied directly by the
+fit. The full derivation, including the mixing weights <span class="math notranslate nohighlight">\(W_n\)</span>, <span class="math notranslate nohighlight">\(W_c\)</span>, and <span class="math notranslate nohighlight">\(U_s\)</span>,
+is in the <code class="docutils literal notranslate"><span class="pre">gg_to_bmad</span></code> docstring (see the <strong>API Reference</strong>).</p>
+</section>
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>S. Van der Schueren <em>et al.</em>, <em>“Magnetic Field Modelling and Symplectic
+Integration of Magnetic Fields on Curved Reference Frames for Improved
+Synchrotron Design: First Steps”</em> (copy in the <code class="docutils literal notranslate"><span class="pre">papers/</span></code> directory).</p></li>
+<li><p>D. Sagan, IPAC’23 — the Venturini–Dragt azimuthal-harmonic field expansion
+used by Bmad.</p></li>
+</ul>
 </section>
 </section>
 
@@ -299,16 +358,18 @@ sidebar).</p>
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="guide/installation.html">
+          
+          <a class="prev-page" href="bmad-export.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
-                  <span>Next</span>
+                  <span>Previous</span>
                 </div>
-                <div class="title">Installation</div>
+                
+                <div class="title">Exporting to Bmad</div>
+                
               </div>
-              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          
         </div>
         <div class="bottom-of-page">
           <div class="left-details">
@@ -339,9 +400,12 @@ sidebar).</p>
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">GeneralizedGradients.jl</a><ul>
-<li><a class="reference internal" href="#what-it-does">What it does</a></li>
-<li><a class="reference internal" href="#quick-example">Quick example</a></li>
+<li><a class="reference internal" href="#">How the GG calculation works</a><ul>
+<li><a class="reference internal" href="#the-field-expansion">The field expansion</a></li>
+<li><a class="reference internal" href="#plane-by-plane-least-squares">Plane-by-plane least squares</a></li>
+<li><a class="reference internal" href="#the-merit-function-and-weights">The merit function and weights</a></li>
+<li><a class="reference internal" href="#conversion-to-bmad-s-convention">Conversion to Bmad’s convention</a></li>
+<li><a class="reference internal" href="#references">References</a></li>
 </ul>
 </li>
 </ul>
@@ -353,9 +417,11 @@ sidebar).</p>
       
     </aside>
   </div>
-</div><script src="_static/documentation_options.js?v=8a448e45"></script>
-    <script src="_static/doctools.js?v=fd6eb6e6"></script>
-    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
-    <script src="_static/scripts/furo.js?v=46bd48cc"></script>
+</div><script src="../_static/documentation_options.js?v=8a448e45"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     </body>
 </html>

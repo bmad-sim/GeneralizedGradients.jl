@@ -39,41 +39,44 @@ The data file produced is `gg_fit_result.h5` (HDF5 format).
 
 To load the fit use
 ```
-julia> gg = gg_load_fit("gg_fit_result.h5")
+julia> fit, meta = gg_load_fit("gg_fit_result.h5")
 ```
 
-yields a NamedTuple with the following fields:
+which returns a two-tuple. `fit` is a `GGFitResults` struct with the fields:
 ```
-  outer_plane_weight   1                                          # Fit input parameter
   rms_plane            [4.17469e-6, 6.421e-6,  …                  # Per plane fit RMS
   b                    Dict((1, 2)=>[-0.00317784, -0.00341029, …  # b function fit values
   m_max                2                                          # max order
   a                    Dict((1, 2)=>[-0.0046122, -0.00615161, …   # a function fit values
+  bs                   Dict(0=>[-2.23633e-7, -2.31509e-7, …       # bs function fit values
+  z_base               [0.0, 0.005, ...]                          # Fit plane values.
+```
+and `meta` is a NamedTuple of the fit metadata:
+```
+  outer_plane_weight   1                                          # Fit input parameter
   g_ref                0                                          # Curvilinear curvature
   core_weight          1                                          # Fit input parameter
-  bs                   Dict(0=>[-2.23633e-7, -2.31509e-7, …       # bs function fit values
   dz_grid              0.005                                      # Fit values plane spacing
   origin               [-0.0, 0.0]                                # Fit (x, y) origin
   n_planes_add         1                                          # Fit input parameter.
-  z_base               [0.0, 0.005, ...]                          # Fit plane values.
 ```
 
 ## Read in fit parameters.
 
-`gg_load_fit` reads the HDF5 fit file into a NamedTuple (fields as above):
+`gg_load_fit` reads the HDF5 fit file into a `(fit, meta)` pair (fields as above):
 ```
 julia> using GeneralizedGradients
-julia> fit = gg_load_fit("gg_fit_result.h5");
-julia> fit.dz_grid              # Returns 0.005
+julia> fit, meta = gg_load_fit("gg_fit_result.h5");
+julia> meta.dz_grid             # Returns 0.005
 ```
 
 field-expansion coefficients at a given s-position:
 ```
-julia> gg_coefficients_at_s(fit, 0.0)
+julia> gg_coefficients_at_s(fit, meta, 0.0)
 ```
 
 generalized-gradient coefficients (a, b, bs) at a grid plane index or at a given s-position:
 ```
-julia> gg_coefficients_at_plane(fit, 1)      # at grid plane 1
-julia> gg_coefficients_at_s(fit, 0.0) # at s = 0.0
+julia> gg_coefficients_at_plane(fit, meta, 1)      # at grid plane 1
+julia> gg_coefficients_at_s(fit, meta, 0.0) # at s = 0.0
 ```

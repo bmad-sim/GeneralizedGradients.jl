@@ -99,14 +99,15 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    field_and_potential_evaluate(gg_fit, ip::Integer, x::Real, y::Real) -> (B, A, dA)
+    field_and_potential_evaluate(fit, meta, ip::Integer, x::Real, y::Real) -> (B, A, dA)
 
 Main entry point. Evaluate the field, vector potential and the Jacobian of `A`
 at grid plane `ip` and transverse position `(x, y)`.
 
-- `gg_fit` — NamedTuple from `gg_load_fit` (loaded `gg_fit` output file).
-- `ip` — 1-based plane index into `gg_fit.z_base`.
-- `x`, `y` — absolute transverse coordinates. `gg_fit.origin` is subtracted
+- `fit`, `meta` — the `GGFitResults` struct and metadata NamedTuple returned by
+  `gg_load_fit`.
+- `ip` — 1-based plane index into `fit.z_base`.
+- `x`, `y` — absolute transverse coordinates. `meta.origin` is subtracted
   internally to obtain the position relative to the GG expansion axis (the
   coordinate the expansion is written in). Pass an origin of `(0,0)` — or use
   the default — for axis-relative input.
@@ -120,16 +121,16 @@ dA = 3x3 matrix, dA[i,j] = ∂A_i/∂u_j  with  (A_1,A_2,A_3) = (Ax,Ay,As)
      and (u_1,u_2,u_3) = (x,y,s).
 ```
 """
-function field_and_potential_evaluate(gg_fit, ip::Integer, x::Real, y::Real)
-  g_ref = gg_fit.g_ref
+function field_and_potential_evaluate(fit, meta, ip::Integer, x::Real, y::Real)
+  g_ref = meta.g_ref
   # Shift absolute coordinates onto the GG expansion axis.
-  x = float(x) - gg_fit.origin[1]
-  y = float(y) - gg_fit.origin[2]
+  x = float(x) - meta.origin[1]
+  y = float(y) - meta.origin[2]
 
   # GG value getters at this plane (0 when an order is unavailable).
-  aval(n, m)  = (m >= 0 && haskey(gg_fit.a, (n, m)))  ? gg_fit.a[(n, m)][ip]  : 0.0
-  bval(n, m)  = (m >= 0 && haskey(gg_fit.b, (n, m)))  ? gg_fit.b[(n, m)][ip]  : 0.0
-  bsval(m)    = (m >= 0 && haskey(gg_fit.bs, m))      ? gg_fit.bs[m][ip]      : 0.0
+  aval(n, m)  = (m >= 0 && haskey(fit.a, (n, m)))  ? fit.a[(n, m)][ip]  : 0.0
+  bval(n, m)  = (m >= 0 && haskey(fit.b, (n, m)))  ? fit.b[(n, m)][ip]  : 0.0
+  bsval(m)    = (m >= 0 && haskey(fit.bs, m))      ? fit.bs[m][ip]      : 0.0
 
   # Bumped (s-derivative) getters:  ∂_s a(n,m) = a(n,m+1), etc.
   avalp(n, m) = aval(n, m + 1)
@@ -338,19 +339,20 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    _interp_gg_fit(gg_fit, s::Real) -> NamedTuple
+    _interp_gg_fit(fit, meta, s::Real) -> (fit::GGFitResults, meta)
 
-Take GG fit results `gg_fit` which give the GG functions at a set of planes and
-return a similar structure to `gg_fit` but with one plane: the GG coefficients
-for that plane are the interpolated GG coefficients at the given `s`-position.
+Take GG fit results `fit` which give the GG functions at a set of planes and
+return a similar `(fit, meta)` pair but with one plane: the GG coefficients for
+that plane are the interpolated GG coefficients at the given `s`-position. The
+`meta` is returned unchanged.
 
-- `gg_fit` — GG coefficients for all planes.
+- `fit`, `meta` — GG coefficients for all planes and the associated metadata.
 
 Builds a single virtual plane at `s` by Hermite-interpolating every GG derivative
 tower from the two straddling grid planes (one-plane Taylor if only one plane).
 """
-function _interp_gg_fit(gg_fit, s::Real)
-  z  = gg_fit.z_base
+function _interp_gg_fit(fit, meta, s::Real)
+  z  = fit.z_base
   P  = length(z)
   sq = float(s)
 
@@ -364,23 +366,23 @@ function _interp_gg_fit(gg_fit, s::Real)
   single = iL == iR
   zL = z[iL]; zR = z[iR]
 
-  a2  = _interp_nm_dict(gg_fit.a,  iL, iR, zL, zR, sq, single)
-  b2  = _interp_nm_dict(gg_fit.b,  iL, iR, zL, zR, sq, single)
-  bs2 = _interp_m_dict(gg_fit.bs, iL, iR, zL, zR, sq, single)
+  a2  = _interp_nm_dict(fit.a,  iL, iR, zL, zR, sq, single)
+  b2  = _interp_nm_dict(fit.b,  iL, iR, zL, zR, sq, single)
+  bs2 = _interp_m_dict(fit.bs, iL, iR, zL, zR, sq, single)
 
-  return (; z_base = [sq], a = a2, b = b2, bs = bs2,
-            g_ref = gg_fit.g_ref, origin = gg_fit.origin, dz_grid = gg_fit.dz_grid,
-            m_max = gg_fit.m_max, rms_plane = [NaN])
+  fit2 = GGFitResults(; z_base = [sq], a = a2, b = b2, bs = bs2,
+                        m_max = fit.m_max, rms_plane = [NaN])
+  return fit2, meta
 end
 
 #---------------------------------------------------------------------------------------------------
 
 """
-    field_and_potential_evaluate_at(gg_fit, x::Real, y::Real, s::Real) -> (B, A, dA)
+    field_and_potential_evaluate_at(fit, meta, x::Real, y::Real, s::Real) -> (B, A, dA)
 
 Evaluate at an arbitrary `(x, y, s)` point.
 
-The GG coefficients are stored only at the grid planes `gg_fit.z_base`, but the
+The GG coefficients are stored only at the grid planes `fit.z_base`, but the
 fit gives, at each plane, the whole derivative tower of every GG function:
 `a(n,0..N)`, `b(n,0..N)`, `bs(0..N)` with `a(n,m) = dᵐaₙ/dsᵐ` and `N` the
 maximum order. So for an `s` between two planes `z_L`, `z_R` we have, for each
@@ -397,28 +399,28 @@ and, because the orders are mutually consistent, the `∂A/∂s` that
 true `s`-derivative of the interpolated field. The curl identity `B = ∇×A`
 holds at `s` as before.
 
-- `gg_fit` — NamedTuple from `gg_load_fit` (loaded `gg_fit` output file).
-- `x`, `y` — absolute transverse coordinates (`gg_fit.origin` subtracted internally).
+- `fit`, `meta` — the `GGFitResults` struct and metadata NamedTuple from `gg_load_fit`.
+- `x`, `y` — absolute transverse coordinates (`meta.origin` subtracted internally).
 - `s` — absolute longitudinal coordinate.
 
 Returns `(B, A, dA)` exactly as `field_and_potential_evaluate`.
 """
-function field_and_potential_evaluate_at(gg_fit, x::Real, y::Real, s::Real)
-  return field_and_potential_evaluate(_interp_gg_fit(gg_fit, s), 1, x, y)
+function field_and_potential_evaluate_at(fit, meta, x::Real, y::Real, s::Real)
+  return field_and_potential_evaluate(_interp_gg_fit(fit, meta, s)..., 1, x, y)
 end
 
 #---------------------------------------------------------------------------------------------------
 """
-    _field_CB(gg_fit, ip::Integer) -> (CBx, CBy, CBs)
+    _field_CB(fit, meta, ip::Integer) -> (CBx, CBy, CBs)
 
 Field-expansion coefficients `B_c(x,y,s) = Σ_{i,j} CB_{c,i,j}(s) xⁱ yʲ`.
 Returns full `_NMAX×_NMAX` arrays summed over the `a`, `b`, `bs` parts.
 """
-function _field_CB(gg_fit, ip::Integer)
-  g_ref = gg_fit.g_ref
-  aval(n, m) = (m >= 0 && haskey(gg_fit.a, (n, m))) ? gg_fit.a[(n, m)][ip] : 0.0
-  bval(n, m) = (m >= 0 && haskey(gg_fit.b, (n, m))) ? gg_fit.b[(n, m)][ip] : 0.0
-  bsval(m)   = (m >= 0 && haskey(gg_fit.bs, m))     ? gg_fit.bs[m][ip]     : 0.0
+function _field_CB(fit, meta, ip::Integer)
+  g_ref = meta.g_ref
+  aval(n, m) = (m >= 0 && haskey(fit.a, (n, m))) ? fit.a[(n, m)][ip] : 0.0
+  bval(n, m) = (m >= 0 && haskey(fit.b, (n, m))) ? fit.b[(n, m)][ip] : 0.0
+  bsval(m)   = (m >= 0 && haskey(fit.bs, m))     ? fit.bs[m][ip]     : 0.0
   CBx = _accum(Bx_a, k -> aval(k...), g_ref) .+ _accum(Bx_b, k -> bval(k...), g_ref) .+ _accum(Bx_bs, m -> bsval(m), g_ref)
   CBy = _accum(By_a, k -> aval(k...), g_ref) .+ _accum(By_b, k -> bval(k...), g_ref) .+ _accum(By_bs, m -> bsval(m), g_ref)
   CBs = _accum(Bs_a, k -> aval(k...), g_ref) .+ _accum(Bs_b, k -> bval(k...), g_ref) .+ _accum(Bs_bs, m -> bsval(m), g_ref)
@@ -444,23 +446,23 @@ end
 
 #---------------------------------------------------------------------------------------------------
 """
-    field_coefficients_at_plane(gg_fit, ip::Integer) -> (CBx, CBy, CBs)
+    field_coefficients_at_plane(fit, meta, ip::Integer) -> (CBx, CBy, CBs)
 
 Field-expansion coefficients at a grid plane.
 
-- `gg_fit` — NamedTuple from `gg_load_fit` (loaded `gg_fit` output file).
-- `ip` — 1-based plane index into `gg_fit.z_base`.
+- `fit`, `meta` — the `GGFitResults` struct and metadata NamedTuple from `gg_load_fit`.
+- `ip` — 1-based plane index into `fit.z_base`.
 
 Returns `(CBx, CBy, CBs)`; each is a matrix with `CB[i+1, j+1] = CB_{c,i,j}`,
 the coefficient of `xⁱ yʲ` in that field component at the plane.
 """
-function field_coefficients_at_plane(gg_fit, ip::Integer)
-  return _trim3(_field_CB(gg_fit, ip)...)
+function field_coefficients_at_plane(fit, meta, ip::Integer)
+  return _trim3(_field_CB(fit, meta, ip)...)
 end
 
 #---------------------------------------------------------------------------------------------------
 """
-    field_coefficients_at_s(gg_fit, s::Real) -> (CBx, CBy, CBs)
+    field_coefficients_at_s(fit, meta, s::Real) -> (CBx, CBy, CBs)
 
 Field-expansion coefficients at an arbitrary `s`, via the same Hermite
 interpolation of the GG quantities used by `field_and_potential_evaluate_at`.
@@ -468,39 +470,40 @@ Returns `(CBx, CBy, CBs)` where each `CB` is a matrix with
 `CB[i+1, j+1] = CB_{c,i,j}`, the coefficient of `xⁱ yʲ` in that field component
 at the plane.
 """
-function field_coefficients_at_s(gg_fit, s::Real)
-  return _trim3(_field_CB(_interp_gg_fit(gg_fit, s), 1)...)
+function field_coefficients_at_s(fit, meta, s::Real)
+  return _trim3(_field_CB(_interp_gg_fit(fit, meta, s)..., 1)...)
 end
 
 #---------------------------------------------------------------------------------------------------
 """
-    gg_coefficients_at_plane(gg_fit, ip::Integer) -> (a, b, bs)
+    gg_coefficients_at_plane(fit, meta, ip::Integer) -> (a, b, bs)
 
 Generalized-gradient coefficients at a grid plane.
 
-- `gg_fit` — NamedTuple from `gg_load_fit` (loaded `gg_fit` output file).
-- `ip` — 1-based plane index into `gg_fit.z_base`.
+- `fit`, `meta` — the `GGFitResults` struct and metadata NamedTuple from
+  `gg_load_fit` (`meta` is accepted for a uniform call signature; it is unused).
+- `ip` — 1-based plane index into `fit.z_base`.
 
 Returns the three GG-function dicts of scalar values at the plane: `a` and `b`
 keyed by `(n,m)` with `a(n,m) = dᵐaₙ/dsᵐ`, `b(n,m) = dᵐbₙ/dsᵐ`; and `bs` keyed
 by `m` with `bs(m) = dᵐ⁺¹a_0/dsᵐ⁺¹ = dᵐb_s/dsᵐ`.
 """
-function gg_coefficients_at_plane(gg_fit, ip::Integer)
-  a  = Dict{Tuple{Int,Int},Float64}((nm => v[ip]) for (nm, v) in gg_fit.a)
-  b  = Dict{Tuple{Int,Int},Float64}((nm => v[ip]) for (nm, v) in gg_fit.b)
-  bs = Dict{Int,Float64}((m => v[ip]) for (m, v) in gg_fit.bs)
+function gg_coefficients_at_plane(fit, meta, ip::Integer)
+  a  = Dict{Tuple{Int,Int},Float64}((nm => v[ip]) for (nm, v) in fit.a)
+  b  = Dict{Tuple{Int,Int},Float64}((nm => v[ip]) for (nm, v) in fit.b)
+  bs = Dict{Int,Float64}((m => v[ip]) for (m, v) in fit.bs)
   return a, b, bs
 end
 
 #---------------------------------------------------------------------------------------------------
 """
-    gg_coefficients_at_s(gg_fit, s::Real) -> (a, b, bs)
+    gg_coefficients_at_s(fit, meta, s::Real) -> (a, b, bs)
 
 Generalized-gradient coefficients at an arbitrary `s`, Hermite-interpolated from
 the straddling grid planes (the same interpolation used by
 `field_and_potential_evaluate_at`). Returns the three GG-function dicts of
 scalar values, as in `gg_coefficients_at_plane`.
 """
-function gg_coefficients_at_s(gg_fit, s::Real)
-  return gg_coefficients_at_plane(_interp_gg_fit(gg_fit, s), 1)
+function gg_coefficients_at_s(fit, meta, s::Real)
+  return gg_coefficients_at_plane(_interp_gg_fit(fit, meta, s)..., 1)
 end

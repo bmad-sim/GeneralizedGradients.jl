@@ -26,10 +26,10 @@ reference frame.
 
 ## 2. Set the fit parameters
 
-Fit controls live in a `GGFitParams` struct:
+Fit controls live in a `GGFitInputParams` struct:
 
 ```julia
-params = GGFitParams()
+params = GGFitInputParams()
 params.origin             = [0.0, 0.0]   # (x, y) axis the GGs are expanded about
 params.n_planes_add       = 1            # z-planes added either side of the base plane
 params.core_weight        = 1            # up-weight near-axis points (1 = uniform)
@@ -48,7 +48,7 @@ results = gg_fit(field, params)
 ```
 
 `results` is a `GGFitResults` holding the fitted coefficient functions
-(`res_a`, `res_b`, `res_bs`) sampled at every base plane (`z_base`), along with
+(`a`, `b`, `bs`) sampled at every base plane (`z_base`), along with
 the per-plane weighted-RMS residuals (`rms_plane`) and `m_max`.
 
 ## 4. Inspect and save
@@ -76,7 +76,7 @@ using GeneralizedGradients
 
 field = read_field_grid_hdf5("wsnk_fieldmap_reduced.h5")
 
-params = GGFitParams()
+params = GGFitInputParams()
 params.n_planes_add = 1
 params.output_file  = "gg_fit_result.h5"
 

@@ -279,7 +279,7 @@ sidebar).</p>
 <div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="k">using</span><span class="w"> </span><span class="n">GeneralizedGradients</span>
 
 <span class="n">field</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">read_field_grid_hdf5</span><span class="p">(</span><span class="s">&quot;wsnk_fieldmap_reduced.h5&quot;</span><span class="p">)</span><span class="w">  </span><span class="c"># a FieldGridTable</span>
-<span class="n">params</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">GGFitParams</span><span class="p">()</span>
+<span class="n">params</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">GGFitInputParams</span><span class="p">()</span>
 <span class="n">params</span><span class="o">.</span><span class="n">n_planes_add</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
 <span class="n">params</span><span class="o">.</span><span class="n">output_file</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;gg_fit_result.h5&quot;</span>
 

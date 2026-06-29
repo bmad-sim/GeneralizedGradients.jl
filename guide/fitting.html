@@ -268,8 +268,8 @@ reference frame.</p>
 </section>
 <section id="set-the-fit-parameters">
 <h2>2. Set the fit parameters<a class="headerlink" href="#set-the-fit-parameters" title="Link to this heading">¶</a></h2>
-<p>Fit controls live in a <code class="docutils literal notranslate"><span class="pre">GGFitParams</span></code> struct:</p>
-<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">params</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">GGFitParams</span><span class="p">()</span>
+<p>Fit controls live in a <code class="docutils literal notranslate"><span class="pre">GGFitInputParams</span></code> struct:</p>
+<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">params</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">GGFitInputParams</span><span class="p">()</span>
 <span class="n">params</span><span class="o">.</span><span class="n">origin</span><span class="w">             </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="mf">0.0</span><span class="p">,</span><span class="w"> </span><span class="mf">0.0</span><span class="p">]</span><span class="w">   </span><span class="c"># (x, y) axis the GGs are expanded about</span>
 <span class="n">params</span><span class="o">.</span><span class="n">n_planes_add</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="w">            </span><span class="c"># z-planes added either side of the base plane</span>
 <span class="n">params</span><span class="o">.</span><span class="n">core_weight</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="w">            </span><span class="c"># up-weight near-axis points (1 = uniform)</span>
@@ -287,7 +287,7 @@ the weights do.</p>
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">results</span></code> is a <code class="docutils literal notranslate"><span class="pre">GGFitResults</span></code> holding the fitted coefficient functions
-(<code class="docutils literal notranslate"><span class="pre">res_a</span></code>, <code class="docutils literal notranslate"><span class="pre">res_b</span></code>, <code class="docutils literal notranslate"><span class="pre">res_bs</span></code>) sampled at every base plane (<code class="docutils literal notranslate"><span class="pre">z_base</span></code>), along with
+(<code class="docutils literal notranslate"><span class="pre">a</span></code>, <code class="docutils literal notranslate"><span class="pre">b</span></code>, <code class="docutils literal notranslate"><span class="pre">bs</span></code>) sampled at every base plane (<code class="docutils literal notranslate"><span class="pre">z_base</span></code>), along with
 the per-plane weighted-RMS residuals (<code class="docutils literal notranslate"><span class="pre">rms_plane</span></code>) and <code class="docutils literal notranslate"><span class="pre">m_max</span></code>.</p>
 </section>
 <section id="inspect-and-save">
@@ -310,7 +310,7 @@ to the Bmad exporters):</p>
 
 <span class="n">field</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">read_field_grid_hdf5</span><span class="p">(</span><span class="s">&quot;wsnk_fieldmap_reduced.h5&quot;</span><span class="p">)</span>
 
-<span class="n">params</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">GGFitParams</span><span class="p">()</span>
+<span class="n">params</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">GGFitInputParams</span><span class="p">()</span>
 <span class="n">params</span><span class="o">.</span><span class="n">n_planes_add</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
 <span class="n">params</span><span class="o">.</span><span class="n">output_file</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;gg_fit_result.h5&quot;</span>
 

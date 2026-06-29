@@ -7,7 +7,7 @@
 # ---------------------------------------------------------------------------
 
 """
-    gg_fit(field::FieldGridTable, params::GGFitParams) -> GGFitResults
+    gg_fit(field::FieldGridTable, params::GGFitInputParams) -> GGFitResults
 
 Fit a 3D magnetic field grid to generalized-gradient (GG) coefficients
 `a_n(z)`, `b_n(z)`, `b_s(z)` and their `z`-derivatives, plane by plane.
@@ -17,29 +17,33 @@ diagnostics. Use `gg_fit_show_results` to print a summary and
 `gg_fit_write_results` to save the result to an HDF5 file (readable by
 `gg_load_fit`).
 
-## Usage
-
-```julia
-using GeneralizedGradients
-field = read_field_grid_hdf5("wsnk_fieldmap_reduced.h5")
-params = GGFitParams()
-params.n_planes_add = 1
-results = gg_fit(field, params)
-gg_fit_show_results(results, field, params)
-gg_fit_write_results(results, field, params)
-```
-
 See `examples/run_gg_fit.jl` for a complete, runnable example.
 
 ## Arguments
 
-- `field` — a `FieldGridTable` (typically from `read_field_grid_hdf5`).
+- `field` — a `FieldGridTable`.
   `field.magnetic[ix,iy,iz]` is the `[Bx,By,Bz]` 3-vector at the grid point,
   whose `(x, y, z)` position is `field.r0 + field.dr .* (ix, iy, iz)`.
-- `params` — a `GGFitParams` holding the fit controls (`origin`,
+- `params` — a `GGFitInputParams` holding the fit parameters (`origin`,
   `n_planes_add`, `core_weight`, `outer_plane_weight`, `output_file`).
 
 ## How the fit works
+
+The GG coefficients are computed at the equally spaced `z`-positions of the
+field-table planes. The fit is done plane by plane: the coefficients of a given
+plane (the "base plane") are computed independently of every other plane, and
+all coefficients of a base plane are solved for simultaneously by minimizing a
+merit function
+
+```
+Merit = Σ  weight · (field_from_table - field_from_GG_coefs)^2
+```
+
+The sum runs over all field points lying in a plane within `n_planes_add` of the
+base plane. For example, `n_planes_add = 2` adds two planes on either side, so
+five planes are used in total. Near the ends of the table the count is reduced —
+a base plane at the very end of the table uses only three planes when
+`n_planes_add = 2`.
 
 The field expansion (`tables/gg_coef_table.jl`) is linear in the GG functions
 and their `s`-derivatives:
@@ -66,7 +70,7 @@ The unknowns at a base plane `z0` are the function values and their derivatives
 ```
 f(n,m)(z0+dz) = Σ_{j≥m} dz^(j-m)/(j-m)! · f(n,j)(z0)
 ```
-
+where `f` is either `a`, `b`, or `bs`.
 Substituting makes the model linear in the base-plane unknowns `f(n,j)(z0)`:
 
 ```
@@ -76,7 +80,45 @@ design entry for unknown f(n,j) = Σ_{m=0}^{j} CS_c,f(n,m; x,y) · dz^(j-m)/(j-m
 Each base plane is then solved by weighted linear least squares over all field
 points lying within `n_planes_add` planes of the base plane.
 
-## Fit-control parameters (`GGFitParams`)
+Adding extra planes smooths the computed values, but the approximation that the
+GG curve is well represented by the base-plane Taylor polynomial becomes less
+accurate as more planes are added. Past some limit, using more planes makes the
+fit *less* accurate.
+
+## Weighting
+
+The weight of a field point at `(x, y)` and plane offset `dz` (relative to the
+base plane) is the product of a transverse and a longitudinal factor:
+
+```
+weight(x,y,dz) = w_core(x,y) · w_plane(dz)
+```
+
+The transverse factor is
+
+```
+w_core(x,y) = core_weight · rmax^2 / (rmax^2 + r^2 · (core_weight - 1))
+```
+
+where `r^2 = x^2 + y^2` and `rmax` is the maximum `r` over all points.
+`core_weight = 1` (the default) makes `w_core` constant; `core_weight > 1`
+favors the core (low-`r`) points at the expense of points farther out. A better
+core fit is usually desired since beam particles spend most of their time near
+the core.
+
+The longitudinal factor is
+
+```
+w_plane(dz) = 1 + (outer_plane_weight - 1) · |dz| / dz_max
+```
+
+where `dz_max` is the largest `|dz|` at the ends of the fit region. If
+`n_planes_add = 0` (so `dz_max = 0` and the expression is singular) `w_plane` is
+set to 1. `outer_plane_weight = 1` (the default) makes `w_plane` constant; a
+value between 0 and 1 weights planes nearer the base plane more than the outer
+planes.
+
+## Fit input parameters (`GGFitInputParams`)
 
 - `origin = [x0, y0]` — `(x, y)` line about which the GG coefficients are
   computed. If `field.g_ref` is non-zero, `origin` must be `[0, 0]`.
@@ -89,8 +131,16 @@ points lying within `n_planes_add` planes of the base plane.
   Default `1`.
 - `output_file` — name of the output HDF5 file written by
   `gg_fit_write_results`. Default `"gg_fit_results.h5"`.
+
+## Side note
+
+In theory, the fitting does not require that the field table be a rectangular
+grid of equally spaced points. In fact, a set of randomly spaced field points would work.
+Also there is no fundamental requirement that the fit planes be evenly spaced. It is only
+for convenience that the `gg_fit` function require a regularly spaced field table and that
+the output is at evenly spaced planes.
 """
-function gg_fit(field::FieldGridTable, params::GGFitParams)
+function gg_fit(field::FieldGridTable, params::GGFitInputParams)
   a_dicts  = (Bx_a, By_a, Bs_a)
   b_dicts  = (Bx_b, By_b, Bs_b)
   bs_dicts = (Bx_bs, By_bs, Bs_bs)
@@ -156,13 +206,13 @@ function gg_fit(field::FieldGridTable, params::GGFitParams)
   # ---- Result containers ------------------------------------------------
   nplanes = length(izs_grid)
   z_base  = [r0[3] + dr[3] * iz for iz in izs_grid]
-  res_a   = Dict{Tuple{Int,Int},Vector{Float64}}()
-  res_b   = Dict{Tuple{Int,Int},Vector{Float64}}()
-  res_bs  = Dict{Int,Vector{Float64}}()
+  a   = Dict{Tuple{Int,Int},Vector{Float64}}()
+  b   = Dict{Tuple{Int,Int},Vector{Float64}}()
+  bs  = Dict{Int,Vector{Float64}}()
   for (typ, n, m) in params_list
-    typ == :a  && (res_a[(n, m)] = fill(NaN, nplanes))
-    typ == :b  && (res_b[(n, m)] = fill(NaN, nplanes))
-    typ == :bs && (res_bs[m]     = fill(NaN, nplanes))
+    typ == :a  && (a[(n, m)] = fill(NaN, nplanes))
+    typ == :b  && (b[(n, m)] = fill(NaN, nplanes))
+    typ == :bs && (bs[m]     = fill(NaN, nplanes))
   end
   rms_plane = fill(NaN, nplanes)
 
@@ -213,26 +263,26 @@ function gg_fit(field::FieldGridTable, params::GGFitParams)
 
     # Store coefficients and weighted RMS residual.
     for (col, (typ, n, m)) in enumerate(params_list)
-      typ == :a  && (res_a[(n, m)][pidx] = theta[col])
-      typ == :b  && (res_b[(n, m)][pidx] = theta[col])
-      typ == :bs && (res_bs[m][pidx]     = theta[col])
+      typ == :a  && (a[(n, m)][pidx] = theta[col])
+      typ == :b  && (b[(n, m)][pidx] = theta[col])
+      typ == :bs && (bs[m][pidx]     = theta[col])
     end
     rms_plane[pidx] = norm(Aw * theta - bw) / sqrt(nrows)
   end
 
-  return GGFitResults(; z_base, params = params_list, res_a, res_b, res_bs, rms_plane, m_max)
+  return GGFitResults(; z_base, params = params_list, a, b, bs, rms_plane, m_max)
 end
 
 #---------------------------------------------------------------------------------------------------
 
 """
-    gg_fit_show_results(results::GGFitResults, field::FieldGridTable, params::GGFitParams)
+    gg_fit_show_results(results::GGFitResults, field::FieldGridTable, params::GGFitInputParams)
 
 Print a human-readable summary of a `gg_fit` `results`: the fit settings, the
 per-plane weighted RMS residuals, and the leading multipoles at the central
 plane as a quick sanity check.
 """
-function gg_fit_show_results(results::GGFitResults, field::FieldGridTable, params::GGFitParams)
+function gg_fit_show_results(results::GGFitResults, field::FieldGridTable, params::GGFitInputParams)
   println("="^72)
   println("GG fit:")
   println("  field grid        : ", join(size(field.magnetic), " x "), "  (ix, iy, iz)")
@@ -255,14 +305,14 @@ function gg_fit_show_results(results::GGFitResults, field::FieldGridTable, param
   println("Leading coefficients at central plane (z = ",
       @sprintf("%.6g", results.z_base[ic]), "):")
   for n in 1:6
-    b00 = get(results.res_b, (n, 0), nothing)
-    a00 = get(results.res_a, (n, 0), nothing)
+    b00 = get(results.b, (n, 0), nothing)
+    a00 = get(results.a, (n, 0), nothing)
     bstr = b00 === nothing ? "     -      " : @sprintf("% .6e", b00[ic])
     astr = a00 === nothing ? "     -      " : @sprintf("% .6e", a00[ic])
     @printf("  n=%-2d   b(n,0)=%s   a(n,0)=%s\n", n, bstr, astr)
   end
-  if haskey(results.res_bs, 0)
-    @printf("  bs(0) = % .6e\n", results.res_bs[0][ic])
+  if haskey(results.bs, 0)
+    @printf("  bs(0) = % .6e\n", results.bs[0][ic])
   end
   println("="^72)
 end
@@ -270,7 +320,7 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    gg_fit_write_results(results::GGFitResults, field::FieldGridTable, params::GGFitParams) -> output_file_path
+    gg_fit_write_results(results::GGFitResults, field::FieldGridTable, params::GGFitInputParams) -> output_file_path
 
 Write a `gg_fit` `results` to an HDF5 file (readable by `gg_load_fit`).
 
@@ -288,7 +338,7 @@ is written to `params.output_file` and its path is returned.
     group  bs       : m (Int[]), values (Float64[nkeys, nplanes])
                       -- reconstruct Dict{m => values[i,:]}
 """
-function gg_fit_write_results(results::GGFitResults, field::FieldGridTable, params::GGFitParams)
+function gg_fit_write_results(results::GGFitResults, field::FieldGridTable, params::GGFitInputParams)
   outfile = params.output_file
   h5open(outfile, "w") do f
     f["z_base"]    = collect(Float64, results.z_base)
@@ -301,9 +351,9 @@ function gg_fit_write_results(results::GGFitResults, field::FieldGridTable, para
     attributes(f)["n_planes_add"]       = Int(params.n_planes_add)
     attributes(f)["core_weight"]        = Float64(params.core_weight)
     attributes(f)["outer_plane_weight"] = Float64(params.outer_plane_weight)
-    _write_coef_group(f, "a", results.res_a)
-    _write_coef_group(f, "b", results.res_b)
-    _write_coef_group(f, "bs", results.res_bs; single = true)
+    _write_coef_group(f, "a", results.a)
+    _write_coef_group(f, "b", results.b)
+    _write_coef_group(f, "bs", results.bs; single = true)
   end
   println("Results written to ", outfile)
   return outfile

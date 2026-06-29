@@ -95,7 +95,7 @@ Name of the output file.
 
 """
 
-@kwdef mutable struct GGFitParams
+@kwdef mutable struct GGFitInputParams
   origin::Vector{Float64} = [0.0, 0.0]   # (x, y) origin about which the generalized gradients coefs are computed
   n_planes_add::Int = 1                  # Number of z-planes added.
   core_weight::Int = 1                   # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
@@ -116,18 +116,18 @@ Fields:
 - `z_base` — `z` position of each base plane [m].
 - `params` — list of fitted unknowns as `(type, n, m)` tuples, where `type` is
   one of `:a`, `:b`, `:bs` (`bs` uses `n = 0`).
-- `res_a` — fitted `a(n,m)` functions, `Dict (n,m) => values_over_planes`.
-- `res_b` — fitted `b(n,m)` functions, `Dict (n,m) => values_over_planes`.
-- `res_bs` — fitted `bs(m)` functions, `Dict m => values_over_planes`.
+- `a` — fitted `a(n,m)` functions, `Dict (n,m) => values_over_planes`.
+- `b` — fitted `b(n,m)` functions, `Dict (n,m) => values_over_planes`.
+- `bs` — fitted `bs(m)` functions, `Dict m => values_over_planes`.
 - `rms_plane` — weighted RMS fit residual at each base plane.
 - `m_max` — highest derivative order resolved (`2 * n_planes_add`).
 """
 @kwdef mutable struct GGFitResults
   z_base::Vector{Float64} = Float64[]
   params::Vector{Tuple{Symbol,Int,Int}} = Tuple{Symbol,Int,Int}[]
-  res_a::Dict{Tuple{Int,Int},Vector{Float64}} = Dict{Tuple{Int,Int},Vector{Float64}}()
-  res_b::Dict{Tuple{Int,Int},Vector{Float64}} = Dict{Tuple{Int,Int},Vector{Float64}}()
-  res_bs::Dict{Int,Vector{Float64}} = Dict{Int,Vector{Float64}}()
+  a::Dict{Tuple{Int,Int},Vector{Float64}} = Dict{Tuple{Int,Int},Vector{Float64}}()
+  b::Dict{Tuple{Int,Int},Vector{Float64}} = Dict{Tuple{Int,Int},Vector{Float64}}()
+  bs::Dict{Int,Vector{Float64}} = Dict{Int,Vector{Float64}}()
   rms_plane::Vector{Float64} = Float64[]
   m_max::Int = 0
 end

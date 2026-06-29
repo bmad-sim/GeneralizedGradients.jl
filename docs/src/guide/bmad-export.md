@@ -50,8 +50,8 @@ Two files are written: `<output_base>.bmad` (the lattice element) and
 `<output_base>_gg.bmad` (the attached `gen_grad_map`). `cutoff` is a relative
 magnitude threshold: a multipole curve is dropped if its peak `|GG|` is below
 `cutoff × (largest peak |GG| of any curve)`. The default `0` keeps every
-non-zero curve. The core writer `write_bmad_gen_grad_map(fit; ...)` is exported
-too.
+non-zero curve. The core writer `write_bmad_gen_grad_map(fit, meta; ...)` is
+exported too (`fit`, `meta` as returned by `gg_load_fit`).
 
 From the shell:
 

@@ -28,6 +28,7 @@ using HDF5, OffsetArrays
 # True if `path` should be treated as an HDF5 file (".h5" or ".hdf5" suffix).
 _is_hdf5_path(path) = lowercase(splitext(path)[2]) in (".h5", ".hdf5")
 
+#---------------------------------------------------------------------------------------------------
 """
     write_field_grid(path, fg::FieldGridTable)
 
@@ -121,29 +122,41 @@ function _read_coef_group(parent, name; single::Bool = false)
   end
 end
 
-_opt_attr(f, name) = haskey(attributes(f), name) ? read_attribute(f, name) : missing
+#---------------------------------------------------------------------------------------------------
+# gg_load_fit
 
 """
-    gg_load_fit(path::AbstractString) -> NamedTuple
+    gg_load_fit(path::AbstractString) -> (fit::GGFitResults, meta::NamedTuple)
 
-Load a `gg_fit` result HDF5 file (written by `gg_fit_write_results`) into a
-NamedTuple with the GG coefficient dictionaries `a`, `b`, `bs` and the
-associated metadata.
+Load a `gg_fit` result HDF5 file (written by `gg_fit_write_results`). Returns a
+two-tuple whose first component is a `GGFitResults` struct holding the GG
+coefficient dictionaries `a`, `b`, `bs` (and `z_base`, `m_max`, `rms_plane`),
+and whose second component is a NamedTuple of the associated fit metadata
+(`g_ref`, `origin`, `dz_grid`, `n_planes_add`, `core_weight`,
+`outer_plane_weight`). The `params` field of the returned struct is empty (the
+unknown list is not stored in the file).
+
+```julia
+fit, meta = gg_load_fit(path)
+fit.a            # Dict{(n,m) => values_over_planes}
+meta.g_ref       # reference curvature
+```
 """
 function gg_load_fit(path::AbstractString)
   h5open(path, "r") do f
-    return (; z_base   = read(f["z_base"]),
-              a        = _read_coef_group(f, "a"),
-              b        = _read_coef_group(f, "b"),
-              bs       = _read_coef_group(f, "bs"; single = true),
-              g_ref    = read_attribute(f, "g_ref"),
-              origin   = read(f["origin"]),
-              dz_grid  = read_attribute(f, "dz_grid"),
-              m_max    = Int(read_attribute(f, "m_max")),
-              rms_plane = read(f["rms_plane"]),
-              # Fit-control metadata (absent in older files → missing).
-              n_planes_add       = _opt_attr(f, "n_planes_add"),
-              core_weight        = _opt_attr(f, "core_weight"),
-              outer_plane_weight = _opt_attr(f, "outer_plane_weight"))
+    fit = GGFitResults(; z_base    = read(f["z_base"]),
+                         a         = _read_coef_group(f, "a"),
+                         b         = _read_coef_group(f, "b"),
+                         bs        = _read_coef_group(f, "bs"; single = true),
+                         m_max     = Int(read_attribute(f, "m_max")),
+                         rms_plane = read(f["rms_plane"]))
+    meta = (; g_ref   = read_attribute(f, "g_ref"),
+              origin  = read(f["origin"]),
+              dz_grid = read_attribute(f, "dz_grid"),
+              # Fit-control metadata, retained for reference / reproducibility.
+              n_planes_add       = read_attribute(f, "n_planes_add"),
+              core_weight        = read_attribute(f, "core_weight"),
+              outer_plane_weight = read_attribute(f, "outer_plane_weight"))
+    return fit, meta
   end
 end

@@ -14,7 +14,7 @@ module GeneralizedGradients
   export FieldGridTable,
        GridAnchorPt,
        GridGeometry,
-       GGFitParams,
+       GGFitInputParams,
        GGFitResults,
        gg_fit,
        gg_fit_show_results,

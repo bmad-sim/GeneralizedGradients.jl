@@ -14,10 +14,10 @@
 _fac(k::Integer) = k <= 1 ? 1.0 : prod(2.0:k)
 
 """
-    gg_to_bmad_curves(fit) -> (cs, cc, c0c, nplanes, m_max, kmax)
+    gg_to_bmad_curves(fit, meta) -> (cs, cc, c0c, nplanes, m_max, kmax)
 
 Compute the Bmad azimuthal-harmonic GG derivative towers from a loaded
-`gg_fit` result. Returns
+`gg_fit` result (`fit`, `meta` as returned by `gg_load_fit`). Returns
 
 ```
 cs[(m,j)]  :: Vector  -- C^{[j]}_{m,sin}(plane)  (normal multipole m)
@@ -27,7 +27,7 @@ c0c[j]     :: Vector  -- C^{[j]}_{0,cos}(plane)  (solenoid, j ≥ 1)
 
 each a per-plane vector, for `j = 0 … m_max`.
 """
-function gg_to_bmad_curves(fit)
+function gg_to_bmad_curves(fit, meta)
   mmax = fit.m_max
   npl  = length(fit.z_base)
   kmax = maximum(first.(keys(fit.b)))
@@ -88,7 +88,7 @@ function gg_to_bmad_curves(fit)
     val = Z()
     bs0 = bsget(0)                          # b_s = C'_{0,c}
     bs1 = bsget(1)                          # b_s'
-    dz  = fit.dz_grid
+    dz  = meta.dz_grid
     for i in 2:npl
       # ∫ over one plane of the cubic-Hermite of C'_{0,c} = b_s.
       incr = 0.5 * dz * (bs0[i-1] + bs0[i])
@@ -115,27 +115,28 @@ _gg_num(x::Real) = iszero(x) ? "0" : repr(float(x))
 _peak(d, m) = (v = get(d, (m, 0), nothing); v === nothing ? 0.0 : maximum(abs, v))
 
 """
-    write_bmad_gen_grad_map(fit; ele_name, output_base, g_ref, cutoff)
+    write_bmad_gen_grad_map(fit, meta; ele_name, output_base, g_ref, cutoff)
 
-Convert a loaded `gg_fit` result to a Bmad `gen_grad_map` and write the element
-and map files. Returns the path of the lattice-element file.
+Convert a loaded `gg_fit` result (`fit`, `meta` as returned by `gg_load_fit`) to
+a Bmad `gen_grad_map` and write the element and map files. Returns the path of
+the lattice-element file.
 
 Keyword arguments:
 - `ele_name` — name of the Bmad lattice element. Default `"gen_grad_ele"`.
 - `output_base` — base path for the two output files. Default `ele_name`.
 - `g_ref` — reference-coordinates bending "strength" = `1/bend_radius` [1/m].
-  Default `fit.g_ref`. Non-zero => the element is an `sbend` with
+  Default `meta.g_ref`. Non-zero => the element is an `sbend` with
   `curved_ref_frame = T`.
 - `cutoff` — relative cutoff for pruning negligible curves. Default `0`.
 """
-function write_bmad_gen_grad_map(fit;
+function write_bmad_gen_grad_map(fit, meta;
                 ele_name::AbstractString = "gen_grad_ele",
                 output_base::AbstractString = ele_name,
-                g_ref::Real = fit.g_ref,
+                g_ref::Real = meta.g_ref,
                 cutoff::Real = 0.0)
 
-  cs, cc, c0c, npl, mmax, kmax = gg_to_bmad_curves(fit)
-  dz = fit.dz_grid
+  cs, cc, c0c, npl, mmax, kmax = gg_to_bmad_curves(fit, meta)
+  dz = meta.dz_grid
   L  = (npl - 1) * dz
   is_bend = g_ref != 0
 
@@ -171,7 +172,7 @@ function write_bmad_gen_grad_map(fit;
     println(io, "  field_type = magnetic,")
     println(io, "  ele_anchor_pt = beginning,")
     is_bend && println(io, "  curved_ref_frame = T,")
-    println(io, "  r0 = (", _gg_num(fit.origin[1]), ", ", _gg_num(fit.origin[2]), ", 0),")
+    println(io, "  r0 = (", _gg_num(meta.origin[1]), ", ", _gg_num(meta.origin[2]), ", 0),")
     println(io, "  dz = ", _gg_num(dz), ",")
 
     # Solenoid first (m = 0, cos), then normal+skew for each m.
@@ -296,20 +297,20 @@ function gg_to_bmad(input::AbstractString;
                         joinpath(dirname(input), first(splitext(basename(input)))),
                     cutoff::Real = 0.0)
   ele_name = basename(output_base)
-  fit = gg_load_fit(input)
-  ele_file = write_bmad_gen_grad_map(fit; ele_name, output_base, cutoff)
+  fit, meta = gg_load_fit(input)
+  ele_file = write_bmad_gen_grad_map(fit, meta; ele_name, output_base, cutoff)
 
-  cs, cc, c0c, npl, mmax, kmax = gg_to_bmad_curves(fit)
+  cs, cc, c0c, npl, mmax, kmax = gg_to_bmad_curves(fit, meta)
   nc = count(m -> (v = get(cs, (m, 0), nothing); v !== nothing && maximum(abs, v) > 0), 1:kmax) +
     count(m -> (v = get(cc, (m, 0), nothing); v !== nothing && maximum(abs, v) > 0), 1:kmax) +
     (haskey(c0c, 0) ? 1 : 0)
   println("="^72)
   println("GG coefficients -> Bmad gen_grad_map")
   println("  input file   : ", input)
-  println("  planes       : ", npl, "   dz = ", fit.dz_grid, "   m_max = ", mmax)
+  println("  planes       : ", npl, "   dz = ", meta.dz_grid, "   m_max = ", mmax)
   println("  max multipole: m = ", kmax)
-  println("  reference    : ", fit.g_ref == 0 ? "straight (em_field)" :
-      @sprintf("arc, g = %.6g 1/m (sbend)", fit.g_ref))
+  println("  reference    : ", meta.g_ref == 0 ? "straight (em_field)" :
+      @sprintf("arc, g = %.6g 1/m (sbend)", meta.g_ref))
   println("  element      : ", ele_name)
   println("  lattice file : ", ele_file)
   println("  map file     : ", output_base * "_gg.bmad")

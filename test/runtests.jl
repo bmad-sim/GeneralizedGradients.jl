@@ -40,32 +40,35 @@ function curl_from(A, dA, x, g_ref)
   return [Bx, By, Bs]
 end
 
-# Build a synthetic gg_fit NamedTuple (same shape as gg_load_fit returns) so we
+# Build a synthetic (fit, meta) pair (same shape as gg_load_fit returns) so we
 # can exercise finite curvature g_ref, which the example file (g_ref = 0) does not.
-synth(z_base, a, b, bs, g_ref; m_max, dz_grid) = (;
-  z_base = collect(float.(z_base)),
-  a = a, b = b, bs = bs,
-  g_ref = g_ref, origin = [0.0, 0.0], dz_grid = dz_grid,
-  m_max = m_max, rms_plane = fill(NaN, length(z_base)))
+synth(z_base, a, b, bs, g_ref; m_max, dz_grid) = (
+  GGFitResults(; z_base = collect(float.(z_base)), a, b, bs,
+                 m_max, rms_plane = fill(NaN, length(z_base))),
+  (; g_ref, origin = [0.0, 0.0], dz_grid))
 
 const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.007, 0.0))
 
 @testset "GeneralizedGradients" begin
 
   @testset "gg_load_fit" begin
-    gg = gg_load_fit(EXAMPLE)
-    for k in (:z_base, :a, :b, :bs, :g_ref, :origin, :dz_grid, :m_max, :rms_plane)
-      @test hasproperty(gg, k)
+    fit, meta = gg_load_fit(EXAMPLE)
+    @test fit isa GGFitResults
+    for k in (:z_base, :a, :b, :bs, :m_max, :rms_plane)
+      @test hasproperty(fit, k)
     end
-    @test length(gg.z_base) == length(gg.rms_plane)
-    @test gg.a isa Dict && gg.b isa Dict && gg.bs isa Dict
+    for k in (:g_ref, :origin, :dz_grid)
+      @test hasproperty(meta, k)
+    end
+    @test length(fit.z_base) == length(fit.rms_plane)
+    @test fit.a isa Dict && fit.b isa Dict && fit.bs isa Dict
   end
 
   @testset "curl(A) == B at grid planes (example, g_ref=0)" begin
-    gg = gg_load_fit(EXAMPLE)
-    for ip in 1:length(gg.z_base), (x, y) in PTS
-      B, A, dA = field_and_potential_evaluate(gg, ip, x, y)
-      Bc = curl_from(A, dA, x - gg.origin[1], gg.g_ref)
+    fit, meta = gg_load_fit(EXAMPLE)
+    for ip in 1:length(fit.z_base), (x, y) in PTS
+      B, A, dA = field_and_potential_evaluate(fit, meta, ip, x, y)
+      Bc = curl_from(A, dA, x - meta.origin[1], meta.g_ref)
       @test maximum(abs, B .- Bc) < 1e-12
     end
   end
@@ -77,10 +80,10 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
     va = Dict(k => [v] for (k, v) in a)
     vb = Dict(k => [v] for (k, v) in b)
     vbs = Dict(k => [v] for (k, v) in bs)
-    gg = synth([0.0], va, vb, vbs, 0.6; m_max = 2, dz_grid = 0.1)
+    fit, meta = synth([0.0], va, vb, vbs, 0.6; m_max = 2, dz_grid = 0.1)
     for (x, y) in PTS
-      B, A, dA = field_and_potential_evaluate(gg, 1, x, y)
-      Bc = curl_from(A, dA, x, gg.g_ref)
+      B, A, dA = field_and_potential_evaluate(fit, meta, 1, x, y)
+      Bc = curl_from(A, dA, x, meta.g_ref)
       @test maximum(abs, B .- Bc) < 1e-12
     end
   end
@@ -102,57 +105,57 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
   bmap = Dict((1,m) => [mvec(fb1, s)[m+1] for s in zg] for m in 0:2)
   merge!(bmap, Dict((2,m) => [mvec(fb2, s)[m+1] for s in zg] for m in 0:2))
   bsmap = Dict(m => [mvec(fbs, s)[m+1] for s in zg] for m in 0:3)
-  ggM = synth(zg, amap, bmap, bsmap, 0.5; m_max = 3, dz_grid = 0.05)
+  fitM, metaM = synth(zg, amap, bmap, bsmap, 0.5; m_max = 3, dz_grid = 0.05)
 
   @testset "curl(A) == B, multi-plane (g_ref=0.5)" begin
     for ip in 1:length(zg), (x, y) in PTS
-      B, A, dA = field_and_potential_evaluate(ggM, ip, x, y)
-      Bc = curl_from(A, dA, x, ggM.g_ref)
+      B, A, dA = field_and_potential_evaluate(fitM, metaM, ip, x, y)
+      Bc = curl_from(A, dA, x, metaM.g_ref)
       @test maximum(abs, B .- Bc) < 1e-12
     end
   end
 
   @testset "∂A/∂s matches finite difference" begin
     ip = 6; sc = zg[ip]; xq, yq = 0.006, -0.004
-    _, _, dA = field_and_potential_evaluate(ggM, ip, xq, yq)
+    _, _, dA = field_and_potential_evaluate(fitM, metaM, ip, xq, yq)
     δ = 1e-5
-    _, Ap, _ = field_and_potential_evaluate_at(ggM, xq, yq, sc + δ)
-    _, Am, _ = field_and_potential_evaluate_at(ggM, xq, yq, sc - δ)
+    _, Ap, _ = field_and_potential_evaluate_at(fitM, metaM, xq, yq, sc + δ)
+    _, Am, _ = field_and_potential_evaluate_at(fitM, metaM, xq, yq, sc - δ)
     dAs_fd = (Ap .- Am) ./ (2δ)
     @test maximum(abs, dA[:, 3] .- dAs_fd) < 1e-6
   end
 
   @testset "gg_coefficients_at_plane matches direct indexing" begin
-    gg = gg_load_fit(EXAMPLE)
+    fit, meta = gg_load_fit(EXAMPLE)
     ip = 3
-    a, b, bs = gg_coefficients_at_plane(gg, ip)
+    a, b, bs = gg_coefficients_at_plane(fit, meta, ip)
     @test a isa Dict{Tuple{Int,Int},Float64}
     @test bs isa Dict{Int,Float64}
-    for (nm, v) in gg.a; @test a[nm] == v[ip]; end
-    for (nm, v) in gg.b; @test b[nm] == v[ip]; end
-    for (m, v) in gg.bs; @test bs[m] == v[ip]; end
+    for (nm, v) in fit.a; @test a[nm] == v[ip]; end
+    for (nm, v) in fit.b; @test b[nm] == v[ip]; end
+    for (m, v) in fit.bs; @test bs[m] == v[ip]; end
   end
 
   @testset "_at_s reproduces plane values at a grid plane" begin
-    gg = gg_load_fit(EXAMPLE)
-    ip = 4; s = gg.z_base[ip]
+    fit, meta = gg_load_fit(EXAMPLE)
+    ip = 4; s = fit.z_base[ip]
 
-    a, b, bs = gg_coefficients_at_plane(gg, ip)
-    as, bsd, bss = gg_coefficients_at_s(gg, s)
+    a, b, bs = gg_coefficients_at_plane(fit, meta, ip)
+    as, bsd, bss = gg_coefficients_at_s(fit, meta, s)
     @test as == a && bsd == b && bss == bs
 
-    CBx, CBy, CBs = field_coefficients_at_plane(gg, ip)
-    CBxs, CBys, CBss = field_coefficients_at_s(gg, s)
+    CBx, CBy, CBs = field_coefficients_at_plane(fit, meta, ip)
+    CBxs, CBys, CBss = field_coefficients_at_s(fit, meta, s)
     @test CBxs == CBx && CBys == CBy && CBss == CBs
 
-    B, A, dA = field_and_potential_evaluate(gg, ip, 0.004, 0.003)
-    Bs, As, dAs = field_and_potential_evaluate_at(gg, 0.004, 0.003, s)
+    B, A, dA = field_and_potential_evaluate(fit, meta, ip, 0.004, 0.003)
+    Bs, As, dAs = field_and_potential_evaluate_at(fit, meta, 0.004, 0.003, s)
     @test Bs ≈ B && As ≈ A && dAs ≈ dA
   end
 
   @testset "gg_fit + show + write round-trip" begin
     field = make_field()
-    p = GGFitParams()
+    p = GGFitInputParams()
     p.n_planes_add = 1
     res = gg_fit(field, p)
     @test res isa GGFitResults
@@ -167,29 +170,29 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
       p.output_file = joinpath(dir, "fit.h5")
       out = quiet(() -> gg_fit_write_results(res, field, p))
       @test out == p.output_file && isfile(out)
-      gg = gg_load_fit(out)
-      @test gg.m_max == res.m_max
-      @test gg.dz_grid ≈ field.dr[3]
-      @test length(gg.z_base) == length(res.z_base)
-      @test Set(keys(gg.a)) == Set(keys(res.res_a))
-      @test Set(keys(gg.bs)) == Set(keys(res.res_bs))
-      for (k, v) in res.res_a; @test gg.a[k] ≈ v; end
-      for (k, v) in res.res_b; @test gg.b[k] ≈ v; end
-      for (k, v) in res.res_bs; @test gg.bs[k] ≈ v; end
+      fit, meta = gg_load_fit(out)
+      @test fit.m_max == res.m_max
+      @test meta.dz_grid ≈ field.dr[3]
+      @test length(fit.z_base) == length(res.z_base)
+      @test Set(keys(fit.a)) == Set(keys(res.a))
+      @test Set(keys(fit.bs)) == Set(keys(res.bs))
+      for (k, v) in res.a; @test fit.a[k] ≈ v; end
+      for (k, v) in res.b; @test fit.b[k] ≈ v; end
+      for (k, v) in res.bs; @test fit.bs[k] ≈ v; end
     end
   end
 
   @testset "gg_fit weighting and n_planes_add=0 branches" begin
     field = make_field()
     # Non-default core/outer weights exercise the weighting branches.
-    p = GGFitParams()
+    p = GGFitInputParams()
     p.n_planes_add = 1
     p.core_weight = 2
     p.outer_plane_weight = 2
     res = gg_fit(field, p)
     @test all(isfinite, res.rms_plane)
     # n_planes_add = 0 (single-plane, m_max = 0) exercises the dzmax == 0 branch.
-    p0 = GGFitParams()
+    p0 = GGFitInputParams()
     p0.n_planes_add = 0
     res0 = gg_fit(field, p0)
     @test res0.m_max == 0
@@ -279,8 +282,8 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
       @test isfile(base * "_gg.bmad")
       @test occursin("em_field", read(ele, String))
 
-      fit = gg_load_fit(EXAMPLE)
-      cs, cc, c0c, npl, mmax, kmax = GeneralizedGradients.gg_to_bmad_curves(fit)
+      fit, meta = gg_load_fit(EXAMPLE)
+      cs, cc, c0c, npl, mmax, kmax = GeneralizedGradients.gg_to_bmad_curves(fit, meta)
       @test npl == length(fit.z_base)
       @test mmax == fit.m_max
       @test kmax >= 1
@@ -288,7 +291,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
       # Curved reference (g_ref ≠ 0) with a solenoid term: fit a synthetic field,
       # write it, then convert -> exercises the sbend + solenoid + cutoff paths.
       field = make_field(g_ref = 0.3)
-      p = GGFitParams()
+      p = GGFitInputParams()
       p.n_planes_add = 1
       p.output_file = joinpath(dir, "curved_fit.h5")
       res = gg_fit(field, p)

@@ -7,7 +7,7 @@
 # ---------------------------------------------------------------------------
 
 """
-    gg_fit(field::FieldGridTable, params::GGFitParams) -> GGFitResults
+    gg_fit(field::FieldGridTable, params::GGFitInputParams) -> GGFitResults
 
 Fit a 3D magnetic field grid to generalized-gradient (GG) coefficients
 `a_n(z)`, `b_n(z)`, `b_s(z)` and their `z`-derivatives, plane by plane.
@@ -17,26 +17,14 @@ diagnostics. Use `gg_fit_show_results` to print a summary and
 `gg_fit_write_results` to save the result to an HDF5 file (readable by
 `gg_load_fit`).
 
-## Usage
-
-```julia
-using GeneralizedGradients
-field = read_field_grid_hdf5("wsnk_fieldmap_reduced.h5")
-params = GGFitParams()
-params.n_planes_add = 1
-results = gg_fit(field, params)
-gg_fit_show_results(results, field, params)
-gg_fit_write_results(results, field, params)
-```
-
 See `examples/run_gg_fit.jl` for a complete, runnable example.
 
 ## Arguments
 
-- `field` — a `FieldGridTable` (typically from `read_field_grid_hdf5`).
+- `field` — a `FieldGridTable`.
   `field.magnetic[ix,iy,iz]` is the `[Bx,By,Bz]` 3-vector at the grid point,
   whose `(x, y, z)` position is `field.r0 + field.dr .* (ix, iy, iz)`.
-- `params` — a `GGFitParams` holding the fit controls (`origin`,
+- `params` — a `GGFitInputParams` holding the fit parameters (`origin`,
   `n_planes_add`, `core_weight`, `outer_plane_weight`, `output_file`).
 
 ## How the fit works
@@ -66,7 +54,7 @@ The unknowns at a base plane `z0` are the function values and their derivatives
 ```
 f(n,m)(z0+dz) = Σ_{j≥m} dz^(j-m)/(j-m)! · f(n,j)(z0)
 ```
-
+where `f` is either `a`, `b`, or `bs`.
 Substituting makes the model linear in the base-plane unknowns `f(n,j)(z0)`:
 
 ```
@@ -76,7 +64,7 @@ design entry for unknown f(n,j) = Σ_{m=0}^{j} CS_c,f(n,m; x,y) · dz^(j-m)/(j-m
 Each base plane is then solved by weighted linear least squares over all field
 points lying within `n_planes_add` planes of the base plane.
 
-## Fit-control parameters (`GGFitParams`)
+## Fit input parameters (`GGFitInputParams`)
 
 - `origin = [x0, y0]` — `(x, y)` line about which the GG coefficients are
   computed. If `field.g_ref` is non-zero, `origin` must be `[0, 0]`.
@@ -90,7 +78,7 @@ points lying within `n_planes_add` planes of the base plane.
 - `output_file` — name of the output HDF5 file written by
   `gg_fit_write_results`. Default `"gg_fit_results.h5"`.
 """
-function gg_fit(field::FieldGridTable, params::GGFitParams)
+function gg_fit(field::FieldGridTable, params::GGFitInputParams)
   a_dicts  = (Bx_a, By_a, Bs_a)
   b_dicts  = (Bx_b, By_b, Bs_b)
   bs_dicts = (Bx_bs, By_bs, Bs_bs)
@@ -226,13 +214,13 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    gg_fit_show_results(results::GGFitResults, field::FieldGridTable, params::GGFitParams)
+    gg_fit_show_results(results::GGFitResults, field::FieldGridTable, params::GGFitInputParams)
 
 Print a human-readable summary of a `gg_fit` `results`: the fit settings, the
 per-plane weighted RMS residuals, and the leading multipoles at the central
 plane as a quick sanity check.
 """
-function gg_fit_show_results(results::GGFitResults, field::FieldGridTable, params::GGFitParams)
+function gg_fit_show_results(results::GGFitResults, field::FieldGridTable, params::GGFitInputParams)
   println("="^72)
   println("GG fit:")
   println("  field grid        : ", join(size(field.magnetic), " x "), "  (ix, iy, iz)")
@@ -270,7 +258,7 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    gg_fit_write_results(results::GGFitResults, field::FieldGridTable, params::GGFitParams) -> output_file_path
+    gg_fit_write_results(results::GGFitResults, field::FieldGridTable, params::GGFitInputParams) -> output_file_path
 
 Write a `gg_fit` `results` to an HDF5 file (readable by `gg_load_fit`).
 
@@ -288,7 +276,7 @@ is written to `params.output_file` and its path is returned.
     group  bs       : m (Int[]), values (Float64[nkeys, nplanes])
                       -- reconstruct Dict{m => values[i,:]}
 """
-function gg_fit_write_results(results::GGFitResults, field::FieldGridTable, params::GGFitParams)
+function gg_fit_write_results(results::GGFitResults, field::FieldGridTable, params::GGFitInputParams)
   outfile = params.output_file
   h5open(outfile, "w") do f
     f["z_base"]    = collect(Float64, results.z_base)

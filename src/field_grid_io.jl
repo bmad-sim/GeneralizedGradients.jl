@@ -28,6 +28,7 @@ using HDF5, OffsetArrays
 # True if `path` should be treated as an HDF5 file (".h5" or ".hdf5" suffix).
 _is_hdf5_path(path) = lowercase(splitext(path)[2]) in (".h5", ".hdf5")
 
+#---------------------------------------------------------------------------------------------------
 """
     write_field_grid(path, fg::FieldGridTable)
 
@@ -122,6 +123,9 @@ function _read_coef_group(parent, name; single::Bool = false)
 end
 
 _opt_attr(f, name) = haskey(attributes(f), name) ? read_attribute(f, name) : missing
+
+#---------------------------------------------------------------------------------------------------
+# gg_load_fit
 
 """
     gg_load_fit(path::AbstractString) -> NamedTuple

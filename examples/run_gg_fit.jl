@@ -34,7 +34,7 @@ field = read_field_grid_hdf5(grid_file)
 #---------------------------------------------------------------------------------------------------
 # Other parameters
 
-p = GGFitParams()
+p = GGFitInputParams()
 
 p.origin = [0.0, 0.0]      # (x, y) origin about which the generalized gradients coefs are computed
 p.n_planes_add = 1            # Number of z-planes added.

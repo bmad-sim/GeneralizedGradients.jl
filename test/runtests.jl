@@ -152,7 +152,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
 
   @testset "gg_fit + show + write round-trip" begin
     field = make_field()
-    p = GGFitParams()
+    p = GGFitInputParams()
     p.n_planes_add = 1
     res = gg_fit(field, p)
     @test res isa GGFitResults
@@ -182,14 +182,14 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
   @testset "gg_fit weighting and n_planes_add=0 branches" begin
     field = make_field()
     # Non-default core/outer weights exercise the weighting branches.
-    p = GGFitParams()
+    p = GGFitInputParams()
     p.n_planes_add = 1
     p.core_weight = 2
     p.outer_plane_weight = 2
     res = gg_fit(field, p)
     @test all(isfinite, res.rms_plane)
     # n_planes_add = 0 (single-plane, m_max = 0) exercises the dzmax == 0 branch.
-    p0 = GGFitParams()
+    p0 = GGFitInputParams()
     p0.n_planes_add = 0
     res0 = gg_fit(field, p0)
     @test res0.m_max == 0
@@ -288,7 +288,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
       # Curved reference (g_ref ≠ 0) with a solenoid term: fit a synthetic field,
       # write it, then convert -> exercises the sbend + solenoid + cutoff paths.
       field = make_field(g_ref = 0.3)
-      p = GGFitParams()
+      p = GGFitInputParams()
       p.n_planes_add = 1
       p.output_file = joinpath(dir, "curved_fit.h5")
       res = gg_fit(field, p)

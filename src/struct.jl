@@ -95,7 +95,7 @@ Name of the output file.
 
 """
 
-@kwdef mutable struct GGFitParams
+@kwdef mutable struct GGFitInputParams
   origin::Vector{Float64} = [0.0, 0.0]   # (x, y) origin about which the generalized gradients coefs are computed
   n_planes_add::Int = 1                  # Number of z-planes added.
   core_weight::Int = 1                   # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.

@@ -23,24 +23,25 @@ julia> fg.magnetic = OffsetArray(m[:, :, 0:11], axes(m, 1), axes(m, 2), 0:11);  
 julia> write_field_grid_hdf5("wsnk_fieldmap_reduced.h5", fg)
 ```
 
-To read back in use:
+Note: To read back in use:
 ```
 julia> field = read_field_grid_hdf5("wsnk_fieldmap_reduced.h5")   # a FieldGridTable
 ```
 
 ## Create a GG fit file.
 
-The fit for this example is driven by the script:
+An example fit run:
 ```
-example/run_gg_fit.jl
+julia> include("run_gg_fit.jl")
 ```
-It reads the field grid, builds a `GGFitParams` with the fit settings, runs
-`gg_fit`, prints a summary with `gg_fit_show_results`, and writes the results
-with `gg_fit_write_results`. To run it use the command:
+See the `run_gg_fit.jl` and `src/gg_fit.jl` for documentation on the fit.
+The data file produced is `gg_fit_result.h5` (HDF5 format). 
+
+To load the fit use
 ```
-julia run_gg_fit.jl
+julia> gg = gg_load_fit("gg_fit_result.h5")
 ```
-The data file produced is `gg_fit_result.h5` (HDF5). Loaded with `gg_load_fit`, it
+
 yields a NamedTuple with the following fields:
 ```
   outer_plane_weight   1                                          # Fit input parameter

@@ -1,9 +1,9 @@
 # ---------------------------------------------------------------------------
-# gg_to_bmad.jl
+# write_bmad_gg_fit.jl
 #
 # Convert generalized-gradient (GG) coefficients produced by `gg_fit` into Bmad
 # `gen_grad_map` format (a lattice element with the GG map attached).
-# `write_bmad_gg_fit` is the public function; programs/run_gg_to_bmad.jl is a
+# `write_bmad_gg_fit` is the public function; programs/run_write_bmad_gg_fit.jl is a
 # shell wrapper.
 # ---------------------------------------------------------------------------
 
@@ -31,9 +31,9 @@ which is read with `read_gg_fit`.
 using GeneralizedGradients
 write_bmad_gg_fit("gg_fit_result.h5")
 ```
-From the shell (see `programs/run_gg_to_bmad.jl`):
+From the shell (see `programs/run_write_bmad_gg_fit.jl`):
 ```
-julia programs/run_gg_to_bmad.jl <gg_fit_result.h5> [output_base] [cutoff]
+julia programs/run_write_bmad_gg_fit.jl <gg_fit_result.h5> [output_base] [cutoff]
 ```
 
 Keyword arguments:

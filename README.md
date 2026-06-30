@@ -53,14 +53,14 @@ HDF5 file (read by `read_field_grid_hdf5`). Two files are written:
 strength is taken from the field grid's `g_ref` = `1/bend_radius` [1/m]; if
 non-zero the element is an `sbend`, otherwise an `em_field`.
 
-## write_bmad_gg_fit (src/gg_to_bmad.jl) and programs/run_gg_to_bmad.jl
+## write_bmad_gg_fit (src/write_bmad_gg_fit.jl) and programs/run_write_bmad_gg_fit.jl
 
 `write_bmad_gg_fit(input; output_base, cutoff)` is a function in the
 `GeneralizedGradients` package that converts the gg coefficients produced by
 `gg_fit` into Bmad `gen_grad_map` format, producing a Bmad lattice element with the
 generalized-gradient map attached. It can be run from the shell with
 ```
-julia programs/run_gg_to_bmad.jl <gg_fit_result.h5> [output_base] [cutoff]
+julia programs/run_write_bmad_gg_fit.jl <gg_fit_result.h5> [output_base] [cutoff]
 ```
 The input is either a gg-fit file (output of `gg_fit`) or a loaded fit
 (`fit, meta` as returned by `read_gg_fit`, passed as `write_bmad_gg_fit(fit, meta; ...)`).

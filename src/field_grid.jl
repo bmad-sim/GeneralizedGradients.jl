@@ -1,57 +1,17 @@
-# ---------------------------------------------------------------------------
-# field_grid.jl
-#
-# Everything for reading, writing, and exporting 3D field grids:
-#   * Bmad `grid_field` export -- write_bmad_field_grid (see also the shell
-#     wrapper programs/run_write_bmad_field_grid.jl).
-#   * native storage I/O        -- write_field_grid / read_gg_fit / write_gg_fit.
-#   * openPMD HDF5 field maps    -- read_field_grid_hdf5 / write_field_grid_hdf5.
-# ---------------------------------------------------------------------------
-
 # ===========================================================================
 # Bmad grid_field export
 #
 # Read a 3D field grid and write it out in Bmad `grid_field` format (a lattice
-# element with the field grid attached).  `write_bmad_field_grid` is the public
+# element with the field grid attached). `write_bmad_field_grid` is the public
 # function; programs/run_write_bmad_field_grid.jl is a shell wrapper.
+# The underscore-prefixed helper functions used here live in src/helpers.jl.
 # ===========================================================================
-
-# Format a real for a Bmad lattice file: compact but lossless. `iszero` guard
-# avoids printing a signed "-0".
-_grid_num(x::Real) = iszero(x) ? "0" : @sprintf("%.15g", float(x))
-
-# Write the plain-text field-grid block from an (ix, iy, iz) OffsetArray of
-# [Bx,By,Bz] 3-vectors, using the grid's own indices (origin `r0`, spacing `dr`,
-# anchor = beginning).
-function _write_field_grid_text(path, mag, r0, dr, is_bend, field_scale)
-  ax = axes(mag)
-  open(path, "w") do io
-    println(io, "{")
-    println(io, "  geometry = xyz,")
-    println(io, "  field_type = magnetic,")
-    println(io, "  ele_anchor_pt = beginning,")
-    is_bend && println(io, "  curved_ref_frame = T,")
-    field_scale != 1 && println(io, "  field_scale = ", _grid_num(field_scale), ",")
-    println(io, "  r0 = (", _grid_num(r0[1]), ", ", _grid_num(r0[2]), ", ", _grid_num(r0[3]), "),")
-    println(io, "  dr = (", _grid_num(dr[1]), ", ", _grid_num(dr[2]), ", ", _grid_num(dr[3]), "),")
-    println(io, "  {")
-    for iz in ax[3], iy in ax[2], ix in ax[1]
-      B = mag[ix, iy, iz]
-      @printf(io, "    %d %d %d: %s %s %s,\n",
-          ix, iy, iz, _grid_num(B[1]), _grid_num(B[2]), _grid_num(B[3]))
-    end
-    println(io, "  }")
-    println(io, "}")
-  end
-end
-
-#---------------------------------------------------------------------------------------------------
 
 """
     write_bmad_field_grid(field; ele_name, output_base, field_scale, hdf5)
 
-Translate a field grid into Bmad `grid_field` format. Writes two files and
-returns the path of the lattice-element file.
+Write a field grid table in Bmad `grid_field` format (a lattice element with the field grid attached).
+Also write the field grid to a file in HDF5 or ASCII format.
 
 - `field` — either a `FieldGridTable` (see `read_field_grid_hdf5`) or a string
   path to a Bmad openPMD `field_grid` HDF5 file, which is read with
@@ -138,33 +98,8 @@ function write_bmad_field_grid(field::Union{AbstractString,FieldGridTable};
   return ele_file
 end
 
-# ===========================================================================
-# Native storage I/O
-#
-# HDF5 storage for the project's native data products:
-#   * field grids       -- write_field_grid (the Bmad openPMD field_grid format;
-#                          a thin wrapper over the HDF5 routines below, so field
-#                          grids are also Bmad files). Read them with read_field_grid_hdf5.
-#   * GG fit results    -- read_gg_fit (written by write_gg_fit)
-# ===========================================================================
-
-using HDF5, OffsetArrays
-
-# ===========================================================================
-# Field grid
-#
-# The storage format is chosen by file extension:
-#   * ".h5" / ".hdf5"  -> Bmad openPMD `field_grid` HDF5 (read_field_grid_hdf5 /
-#                         write_field_grid_hdf5 below), so the file
-#                         is also a valid Bmad field_grid file.
-#   * anything else    -> a Julia source file (like ags-snakes/wsnk_fieldmap.jl)
-#                         that, when `include`d, defines `fg::FieldGridTable`.
-# ===========================================================================
-
-# True if `path` should be treated as an HDF5 file (".h5" or ".hdf5" suffix).
-_is_hdf5_path(path) = lowercase(splitext(path)[2]) in (".h5", ".hdf5")
-
 #---------------------------------------------------------------------------------------------------
+
 """
     write_field_grid(path, fg::FieldGridTable)
 
@@ -198,64 +133,6 @@ function write_field_grid(path::AbstractString, fg::FieldGridTable)
     isempty(fg.electric) || _write_field_component_jl(io, "electric", fg.electric)
   end
   return path
-end
-
-# Write the `fg.<name>` OffsetArray of [Bx,By,Bz] 3-vectors as include-able Julia.
-function _write_field_component_jl(io, name, field)
-  ax = axes(field)
-  nx, ny, nz = length.(ax)
-  ox, oy, oz = first(ax[1]) - 1, first(ax[2]) - 1, first(ax[3]) - 1
-  println(io)
-  println(io, "temp = Array{Vector{Float64}}(undef, $nx, $ny, $nz);")
-  println(io, "fg.$name = OffsetArray(temp, $ox, $oy, $oz);")
-  println(io)
-  for ix in ax[1], iy in ax[2], iz in ax[3]
-    b = field[ix, iy, iz]
-    println(io, "fg.$name[$ix, $iy, $iz] = [", b[1], ", ", b[2], ", ", b[3], "]")
-  end
-end
-
-# ===========================================================================
-# GG fit result
-#
-# HDF5 schema (written by write_gg_fit, read by read_gg_fit):
-#   root datasets   : z_base, rms_plane, origin            (Float64[])
-#   root attributes : g_ref, dz_grid (Float64); m_max, n_planes_add (Int);
-#                     core_weight, outer_plane_weight (Float64)
-#   groups a, b     : n (Int[]), m (Int[]), values (Float64[nkeys, nplanes])
-#                     -- reconstruct Dict{(n,m) => values[i,:]}
-#   group  bs       : m (Int[]), values (Float64[nkeys, nplanes])
-#                     -- reconstruct Dict{m => values[i,:]}
-# ===========================================================================
-
-# Write a Dict keyed by (n,m) (or by m, if `single`) as index arrays + matrix.
-function _write_coef_group(parent, name, d; single::Bool = false)
-  g = create_group(parent, name)
-  ks = sort(collect(keys(d)))
-  nplanes = isempty(ks) ? 0 : length(d[first(ks)])
-  V = Array{Float64}(undef, length(ks), nplanes)
-  for (i, k) in enumerate(ks)
-    V[i, :] = d[k]
-  end
-  if single
-    g["m"] = Int[k for k in ks]
-  else
-    g["n"] = Int[k[1] for k in ks]
-    g["m"] = Int[k[2] for k in ks]
-  end
-  g["values"] = V
-end
-
-function _read_coef_group(parent, name; single::Bool = false)
-  g = parent[name]
-  m = Int.(read(g["m"]))
-  V = read(g["values"])
-  if single
-    return Dict{Int,Vector{Float64}}(m[i] => V[i, :] for i in eachindex(m))
-  else
-    n = Int.(read(g["n"]))
-    return Dict{Tuple{Int,Int},Vector{Float64}}((n[i], m[i]) => V[i, :] for i in eachindex(m))
-  end
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -297,6 +174,8 @@ function read_gg_fit(path::AbstractString)
   end
 end
 
+#---------------------------------------------------------------------------------------------------
+
 # ===========================================================================
 # openPMD HDF5 field maps
 #
@@ -312,6 +191,8 @@ end
 # with reversed `axisLabels` / `gridDataOrder = "F"` its size check and data read
 # both succeed.  On read, HDF5.jl likewise hands back a (nx,ny,nz) array == the
 # field, so no transpose is needed.
+#
+# The underscore-prefixed read/write helpers used below live in src/helpers.jl.
 # ---------------------------------------------------------------------------
 
 # openPMD complex field samples are a compound type with real ("r") and
@@ -321,87 +202,12 @@ struct ComplexPMD
   i::Float64
 end
 
-# openPMD SI base-unit exponents (L, M, T, I, Theta, N, J) for Tesla and V/m.
-const _DIM_TESLA = [0.0, 1, -2, -1, 0, 0, 0]
-const _DIM_VPERM = [1.0, 1, -3, -1, 0, 0, 0]
-
-# Write a fixed-length (null-terminated, ASCII) string-array attribute, matching
-# Bmad's `hdf5_write_attribute_string` rank-1.  HDF5.jl writes String arrays as
-# variable-length strings by default, which Bmad's reader cannot convert into its
-# fixed `character` buffers (it aborts on `axisLabels`).
-function _write_fixed_str_array(parent, name, strs::AbstractVector{<:AbstractString})
-  n = maximum(length, strs)
-  dt = HDF5.Datatype(HDF5.API.h5t_copy(HDF5.API.H5T_C_S1))
-  HDF5.API.h5t_set_size(dt, n)
-  HDF5.API.h5t_set_strpad(dt, HDF5.API.H5T_STR_NULLTERM)
-  HDF5.API.h5t_set_cset(dt, HDF5.API.H5T_CSET_ASCII)
-  dspace = dataspace((length(strs),))
-  attr = create_attribute(parent, name, dt, dspace)
-  buf = zeros(UInt8, n * length(strs))
-  for (i, s) in enumerate(strs)
-    cu = codeunits(s)
-    copyto!(buf, (i - 1) * n + 1, cu, 1, length(cu))
-  end
-  HDF5.API.h5a_write(attr, dt, buf)
-  close(attr); close(dspace); close(dt)
-end
-
-# Map the GridAnchorPt enum <-> the openPMD `eleAnchorPt` strings.
-function _anchor_to_str(a::GridAnchorPt.T)
-  a == GridAnchorPt.Beginning && return "beginning"
-  a == GridAnchorPt.Center    && return "center"
-  return "end"
-end
-
-function _anchor_from_str(s)
-  ls = lowercase(strip(string(s)))
-  ls == "beginning" && return GridAnchorPt.Beginning
-  ls == "center"    && return GridAnchorPt.Center
-  ls == "end"       && return GridAnchorPt.End
-  error("Unrecognized eleAnchorPt: $s")
-end
-
-# Map the GridGeometry enum <-> the openPMD `gridGeometry` strings.
-_geometry_to_str(::GridGeometry.T) = "rectangular"   # only XYZ supported
-function _geometry_from_str(s)
-  s == "rectangular" && return GridGeometry.XYZ
-  error("read_field_grid_hdf5 supports only 'rectangular' (xyz) grids, got: $s")
-end
+# The unit-exponent constants `_DIM_TESLA` / `_DIM_VPERM` are defined in
+# GeneralizedGradients.jl.
 
 # ---------------------------------------------------------------------------
 # Write
 # ---------------------------------------------------------------------------
-
-# Lay component `c` of a (ix, iy, iz) OffsetArray of 3-vectors out as a 1-based
-# (nx, ny, nz) complex array.  HDF5.jl reverses dims on write, so the dataset
-# lands on disk exactly like Bmad's own Fortran writer (H5Screate_simple_f with
-# Fortran dims [nx,ny,nz]): Bmad's reader gets data_dim = (nx,ny,nz) and, with
-# data_order "F", reads the column-major buffer back into pt[ix,iy,iz] correctly.
-function _component_dataset(field, c)
-  ax = axes(field)
-  nx, ny, nz = length(ax[1]), length(ax[2]), length(ax[3])
-  out = Array{ComplexPMD}(undef, nx, ny, nz)
-  for (a, ix) in enumerate(ax[1]), (b, iy) in enumerate(ax[2]), (k, iz) in enumerate(ax[3])
-    v = field[ix, iy, iz][c]
-    out[a, b, k] = ComplexPMD(real(v), imag(v))
-  end
-  return out
-end
-
-# Write one field group ("magneticField"/"electricField") from an (ix,iy,iz)
-# OffsetArray of 3-vectors.
-function _write_field_group(g1, name, field, unit_dim, unit_sym)
-  grp = create_group(g1, name)
-  for (c, axis) in enumerate(("x", "y", "z"))
-    grp[axis] = _component_dataset(field, c)
-    da = attributes(grp[axis])
-    da["gridDataOrder"] = "F"           # explicit; Bmad reader honors this first
-    da["localName"]     = axis
-    da["unitSI"]        = [1.0]
-    da["unitDimension"] = unit_dim
-    da["unitSymbol"]    = unit_sym
-  end
-end
 
 """
     write_field_grid_hdf5(path, fg::FieldGridTable)
@@ -461,36 +267,8 @@ function write_field_grid_hdf5(path::AbstractString, fg::FieldGridTable)
   return path
 end
 
-# ---------------------------------------------------------------------------
-# Read
-# ---------------------------------------------------------------------------
-
-# Read an attribute if present, else return `default`.
-_attr(obj, name, default) = haskey(attributes(obj), name) ? read_attribute(obj, name) : default
-
-# Read a field group ("magneticField"/"electricField") into an (ix, iy, iz)
-# OffsetArray of [Bx,By,Bz] 3-vectors indexed from `lb`, or `nothing` if absent.
-#
-# In a Bmad field_grid file each component dataset is written Fortran-order
-# (logical dims [nx,ny,nz]; on-disk C-dims (nz,ny,nx)).  HDF5.jl reverses dims on
-# read, so it hands back a 1-based (nx, ny, nz) array that is already the field --
-# no transpose needed.
-function _read_field_group(g1, name, lb, nx, ny, nz)
-  haskey(g1, name) || return nothing
-  grp = g1[name]
-  comps = ntuple(_ -> zeros(Float64, nx, ny, nz), 3)   # one (nx,ny,nz) array per component
-  for (c, axis) in enumerate(("x", "y", "z"))
-    haskey(grp, axis) || continue       # missing component => zero field
-    comp = read(grp[axis])
-    size(comp) == (nx, ny, nz) ||
-      error("field_grid dataset $name/$axis has size $(size(comp)), expected ($nx, $ny, $nz) " *
-            "-- not a Bmad-format (Fortran-order) field_grid file.")
-    comps[c] .= real.(comp)
-  end
-  field = [Float64[comps[1][a, b, k], comps[2][a, b, k], comps[3][a, b, k]]
-      for a in 1:nx, b in 1:ny, k in 1:nz]
-  return OffsetArray(field, lb[1]:lb[1]+nx-1, lb[2]:lb[2]+ny-1, lb[3]:lb[3]+nz-1)
-end
+# --------------------------------------------------------------------------------------------------
+# read_field_grid_hdf5
 
 """
     read_field_grid_hdf5(path; index = 1) -> FieldGridTable

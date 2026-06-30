@@ -358,22 +358,3 @@ function write_gg_fit(results::GGCoefs, field::FieldGridTable, params::GGFitInpu
   println("Results written to ", outfile)
   return outfile
 end
-
-#---------------------------------------------------------------------------------------------------
-
-# CB coefficient sum: Σ coeff·g_ref^k·x^p·y^q over the table entries for one
-# (component, function) — one entry of the CB grids built in gg_fit.
-
-function _coefsum(terms, x::Float64, y::Float64, g_ref)
-  s = 0.0
-  for (c, p, q, k) in terms
-    hk = k == 0 ? 1.0 : float(g_ref)^k
-    s += float(c) * hk * x^p * y^q
-  end
-  return s
-end
-
-#---------------------------------------------------------------------------------------------------
-
-# Float factorial (m_max is small, but keep it overflow-proof).
-_ffact(k::Int) = k <= 1 ? 1.0 : prod(2.0:float(k))

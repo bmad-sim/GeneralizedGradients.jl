@@ -53,5 +53,5 @@ gg_fit_show_results(results, field, params)    # print a summary
 write_gg_fit(results, field, params)   # save to HDF5
 
 # Convert the fit to a Bmad gen_grad_map element:
-gg_to_bmad("gg_fit_result.h5")
+write_bmad_gg_fit("gg_fit_result.h5")
 ```

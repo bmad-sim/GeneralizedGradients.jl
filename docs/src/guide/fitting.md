@@ -60,11 +60,11 @@ multipoles at the central plane):
 gg_fit_show_results(results, field, params)
 ```
 
-Write the result to an HDF5 file (readable later by `gg_load_fit`, and the input
+Write the result to an HDF5 file (readable later by `read_gg_fit`, and the input
 to the Bmad exporters):
 
 ```julia
-gg_fit_write_results(results, field, params)   # writes params.output_file
+write_gg_fit(results, field, params)   # writes params.output_file
 ```
 
 ## Putting it together
@@ -82,7 +82,7 @@ params.output_file  = "gg_fit_result.h5"
 
 results = gg_fit(field, params)
 gg_fit_show_results(results, field, params)
-gg_fit_write_results(results, field, params)
+write_gg_fit(results, field, params)
 ```
 
 ```{tip}

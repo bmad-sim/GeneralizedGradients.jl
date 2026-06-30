@@ -24,8 +24,8 @@ calculates values for the gg functions that fit a given field table. It takes a
 `FieldGridTable` (`field`, typically from `read_field_grid_hdf5`) and a `GGFitInputParams`
 (`params`) and returns a `GGCoefs` holding the fitted coefficients and
 per-plane diagnostics. Use `gg_fit_show_results` to print a summary and
-`gg_fit_write_results` to write the results to an HDF5 file (readable by
-`gg_load_fit`). See `examples/run_gg_fit.jl` for a runnable example.
+`write_gg_fit` to write the results to an HDF5 file (readable by
+`read_gg_fit`). See `examples/run_gg_fit.jl` for a runnable example.
 The fit assumes that the field table is defined on an evenly spaced grid and 
 the gg function values are calculated on (x, y) planes coincident with the planes of the grid.
 
@@ -70,7 +70,7 @@ multipole curves (default 0, keep every non-zero curve). The exact conversion fr
 the project's midplane-derivative gg functions (a_n, b_n, b_s) to Bmad's
 azimuthal-harmonic gradients C_{m,sin/cos} is documented in the `gg_to_bmad`
 docstring. The core writer `write_bmad_gen_grad_map(fit, meta; ...)` is also exported and
-can be called directly (`fit`, `meta` as returned by `gg_load_fit`).
+can be called directly (`fit`, `meta` as returned by `read_gg_fit`).
 
 ## field_and_potential_evaluate_at(fit, meta, x::Real, y::Real, s::Real) ->
 

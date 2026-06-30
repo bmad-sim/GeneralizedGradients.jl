@@ -50,7 +50,7 @@ params.output_file  = "gg_fit_result.h5"
 
 results = gg_fit(field, params)                # fit GGs plane by plane
 gg_fit_show_results(results, field, params)    # print a summary
-gg_fit_write_results(results, field, params)   # save to HDF5
+write_gg_fit(results, field, params)   # save to HDF5
 
 # Convert the fit to a Bmad gen_grad_map element:
 gg_to_bmad("gg_fit_result.h5")

@@ -14,8 +14,8 @@ Fit a 3D magnetic field grid to generalized-gradient (GG) coefficients
 
 The returned `GGCoefs` holds the fitted coefficients and per-plane
 diagnostics. Use `gg_fit_show_results` to print a summary and
-`gg_fit_write_results` to save the result to an HDF5 file (readable by
-`gg_load_fit`).
+`write_gg_fit` to save the result to an HDF5 file (readable by
+`read_gg_fit`).
 
 See `examples/run_gg_fit.jl` for a complete, runnable example.
 
@@ -130,7 +130,7 @@ planes.
 - `outer_plane_weight` — merit-function weight for the outer `z`-planes.
   Default `1`.
 - `output_file` — name of the output HDF5 file written by
-  `gg_fit_write_results`. Default `"gg_fit_results.h5"`.
+  `write_gg_fit`. Default `"gg_fit_results.h5"`.
 
 ## Side note
 
@@ -320,9 +320,9 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    gg_fit_write_results(results::GGCoefs, field::FieldGridTable, params::GGFitInputParams) -> output_file_path
+    write_gg_fit(results::GGCoefs, field::FieldGridTable, params::GGFitInputParams) -> output_file_path
 
-Write a `gg_fit` `results` to an HDF5 file (readable by `gg_load_fit`).
+Write a `gg_fit` `results` to an HDF5 file (readable by `read_gg_fit`).
 
 Stores the fitted GG coefficients plus enough metadata to reproduce and
 interpret the fit later. The (large) input field table is NOT stored. The file
@@ -338,7 +338,7 @@ is written to `params.output_file` and its path is returned.
     group  bs       : m (Int[]), values (Float64[nkeys, nplanes])
                       -- reconstruct Dict{m => values[i,:]}
 """
-function gg_fit_write_results(results::GGCoefs, field::FieldGridTable, params::GGFitInputParams)
+function write_gg_fit(results::GGCoefs, field::FieldGridTable, params::GGFitInputParams)
   outfile = params.output_file
   h5open(outfile, "w") do f
     f["z_base"]    = collect(Float64, results.z_base)

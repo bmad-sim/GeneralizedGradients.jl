@@ -5,11 +5,7 @@
 #   * field grids       -- write_field_grid (the Bmad openPMD field_grid format;
 #                          a thin wrapper over field_grid_hdf5.jl, so field grids
 #                          are also Bmad files). Read them with read_field_grid_hdf5.
-#   * GG fit results     -- gg_load_fit (written by gg_fit_write_results)
-#
-# These replace the former JLD2 `load`/`save`/`jldsave` storage.  Plain HDF5 has
-# no notion of Julia Dicts, so the GG-fit-result schema below stores the
-# dictionary keys explicitly alongside the numeric data.
+#   * GG fit results    -- read_gg_fit (written by write_gg_fit)
 # ---------------------------------------------------------------------------
 
 using HDF5, OffsetArrays
@@ -82,7 +78,7 @@ end
 # ===========================================================================
 # GG fit result
 #
-# HDF5 schema (written by gg_fit_write_results, read by gg_load_fit):
+# HDF5 schema (written by write_gg_fit, read by read_gg_fit):
 #   root datasets   : z_base, rms_plane, origin            (Float64[])
 #   root attributes : g_ref, dz_grid (Float64); m_max, n_planes_add (Int);
 #                     core_weight, outer_plane_weight (Float64)
@@ -123,12 +119,12 @@ function _read_coef_group(parent, name; single::Bool = false)
 end
 
 #---------------------------------------------------------------------------------------------------
-# gg_load_fit
+# read_gg_fit
 
 """
-    gg_load_fit(path::AbstractString) -> (fit::GGCoefs, meta::NamedTuple)
+    read_gg_fit(path::AbstractString) -> (fit::GGCoefs, meta::NamedTuple)
 
-Load a `gg_fit` result HDF5 file (written by `gg_fit_write_results`). Returns a
+Load a `gg_fit` result HDF5 file (written by `write_gg_fit`). Returns a
 two-tuple whose first component is a `GGCoefs` struct holding the GG
 coefficient dictionaries `a`, `b`, `bs` (and `z_base`, `m_max`, `rms_plane`),
 and whose second component is a NamedTuple of the associated fit metadata
@@ -137,12 +133,12 @@ and whose second component is a NamedTuple of the associated fit metadata
 unknown list is not stored in the file).
 
 ```julia
-fit, meta = gg_load_fit(path)
+fit, meta = read_gg_fit(path)
 fit.a            # Dict{(n,m) => values_over_planes}
 meta.g_ref       # reference curvature
 ```
 """
-function gg_load_fit(path::AbstractString)
+function read_gg_fit(path::AbstractString)
   h5open(path, "r") do f
     fit = GGCoefs(; z_base    = read(f["z_base"]),
                          a         = _read_coef_group(f, "a"),

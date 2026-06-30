@@ -41,7 +41,7 @@ The data file produced is `gg_fit_result.h5` (HDF5 format).
 
 To load the fit use
 ```
-julia> fit, meta = gg_load_fit("gg_fit_result.h5")
+julia> fit, meta = read_gg_fit("gg_fit_result.h5")
 ```
 
 which returns a two-tuple. `fit` is a `GGCoefs` struct with the fields:

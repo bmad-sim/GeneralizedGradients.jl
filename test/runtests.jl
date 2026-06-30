@@ -43,7 +43,7 @@ end
 # Build a synthetic (fit, meta) pair (same shape as gg_load_fit returns) so we
 # can exercise finite curvature g_ref, which the example file (g_ref = 0) does not.
 synth(z_base, a, b, bs, g_ref; m_max, dz_grid) = (
-  GGFitResults(; z_base = collect(float.(z_base)), a, b, bs,
+  GGCoefs(; z_base = collect(float.(z_base)), a, b, bs,
                  m_max, rms_plane = fill(NaN, length(z_base))),
   (; g_ref, origin = [0.0, 0.0], dz_grid))
 
@@ -53,7 +53,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
 
   @testset "gg_load_fit" begin
     fit, meta = gg_load_fit(EXAMPLE)
-    @test fit isa GGFitResults
+    @test fit isa GGCoefs
     for k in (:z_base, :a, :b, :bs, :m_max, :rms_plane)
       @test hasproperty(fit, k)
     end
@@ -158,7 +158,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
     p = GGFitInputParams()
     p.n_planes_add = 1
     res = gg_fit(field, p)
-    @test res isa GGFitResults
+    @test res isa GGCoefs
     @test length(res.z_base) == size(field.magnetic, 3)
     @test res.m_max == 2
     @test length(res.rms_plane) == length(res.z_base)

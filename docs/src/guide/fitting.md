@@ -47,7 +47,7 @@ the weights do.
 results = gg_fit(field, params)
 ```
 
-`results` is a `GGFitResults` holding the fitted coefficient functions
+`results` is a `GGCoefs` holding the fitted coefficient functions
 (`a`, `b`, `bs`) sampled at every base plane (`z_base`), along with
 the per-plane weighted-RMS residuals (`rms_plane`) and `m_max`.
 

@@ -27,7 +27,7 @@ The reference frame is determined by the grid's own `g_ref`: non-zero gives an
 Two files are written: `<output_base>.bmad` (the lattice element) and the grid,
 either `<output_base>_grid.h5` (HDF5, the default) or `<output_base>_grid.bmad`
 (plain text). The core writer `write_bmad_field_grid(field; ...)` is also exported
-and can be called directly on a `FieldGridTable`.
+and can be called directly on a `FieldGridTable` or an HDF5 grid-file path.
 
 From the shell:
 

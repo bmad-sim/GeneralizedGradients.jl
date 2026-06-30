@@ -270,7 +270,7 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
     rms_plane[pidx] = norm(Aw * theta - bw) / sqrt(nrows)
   end
 
-  return GGCoefs(; z_base, params = params_list, a, b, bs, rms_plane, m_max)
+  return GGCoefs(; z_base, params = params_list, a, b, bs, rms_plane, m_max, g_ref = field.g_ref)
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -345,7 +345,7 @@ function write_gg_fit(results::GGCoefs, field::FieldGridTable, params::GGFitInpu
     f["rms_plane"] = collect(Float64, results.rms_plane)
     f["origin"]    = collect(Float64, params.origin)
     attributes(f)["m_max"]              = Int(results.m_max)
-    attributes(f)["g_ref"]              = Float64(field.g_ref)
+    attributes(f)["g_ref"]              = Float64(results.g_ref)
     attributes(f)["dz_grid"]            = Float64(field.dr[3])
     # Fit-control parameters, retained for later reference / reproducibility.
     attributes(f)["n_planes_add"]       = Int(params.n_planes_add)

@@ -122,7 +122,7 @@ dA = 3x3 matrix, dA[i,j] = ∂A_i/∂u_j  with  (A_1,A_2,A_3) = (Ax,Ay,As)
 ```
 """
 function field_and_potential_evaluate(fit, meta, ip::Integer, x::Real, y::Real)
-  g_ref = meta.g_ref
+  g_ref = fit.g_ref
   # Shift absolute coordinates onto the GG expansion axis.
   x = float(x) - meta.origin[1]
   y = float(y) - meta.origin[2]
@@ -371,7 +371,7 @@ function _interp_gg_fit(fit, meta, s::Real)
   bs2 = _interp_m_dict(fit.bs, iL, iR, zL, zR, sq, single)
 
   fit2 = GGCoefs(; z_base = [sq], a = a2, b = b2, bs = bs2,
-                        m_max = fit.m_max, rms_plane = [NaN])
+                        m_max = fit.m_max, rms_plane = [NaN], g_ref = fit.g_ref)
   return fit2, meta
 end
 
@@ -417,7 +417,7 @@ Field-expansion coefficients `B_c(x,y,s) = Σ_{i,j} CB_{c,i,j}(s) xⁱ yʲ`.
 Returns full `_NMAX×_NMAX` arrays summed over the `a`, `b`, `bs` parts.
 """
 function _field_CB(fit, meta, ip::Integer)
-  g_ref = meta.g_ref
+  g_ref = fit.g_ref
   aval(n, m) = (m >= 0 && haskey(fit.a, (n, m))) ? fit.a[(n, m)][ip] : 0.0
   bval(n, m) = (m >= 0 && haskey(fit.b, (n, m))) ? fit.b[(n, m)][ip] : 0.0
   bsval(m)   = (m >= 0 && haskey(fit.bs, m))     ? fit.bs[m][ip]     : 0.0

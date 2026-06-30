@@ -121,6 +121,8 @@ Fields:
 - `bs` — fitted `bs(m)` functions, `Dict m => values_over_planes`.
 - `rms_plane` — weighted RMS fit residual at each base plane.
 - `m_max` — highest derivative order resolved (`2 * n_planes_add`).
+- `g_ref` — reference-frame bending strength = `1/bending_radius` [1/m] (`0` for a
+  straight reference frame).
 """
 @kwdef mutable struct GGCoefs
   z_base::Vector{Float64} = Float64[]
@@ -130,4 +132,5 @@ Fields:
   bs::Dict{Int,Vector{Float64}} = Dict{Int,Vector{Float64}}()
   rms_plane::Vector{Float64} = Float64[]
   m_max::Int = 0
+  g_ref::Float64 = 0.0
 end

@@ -32,7 +32,7 @@
 # src/helpers.jl.
 
 # The gg_coef tables (Bx_a … As_bs), `_NMAX`, and the other package constants are
-# defined in GeneralizedGradients.jl; read_gg_fit lives in field_grid.jl.
+# defined in GeneralizedGradients.jl; read_gg_fit lives in gg_utils.jl.
 
 #---------------------------------------------------------------------------------------------------
 

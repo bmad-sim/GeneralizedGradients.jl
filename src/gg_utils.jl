@@ -1,11 +1,52 @@
 # ---------------------------------------------------------------------------
-# write_bmad_gg_fit.jl
+# gg_utils.jl
 #
-# Convert generalized-gradient (GG) coefficients produced by `gg_fit` into Bmad
-# `gen_grad_map` format (a lattice element with the GG map attached).
-# `write_bmad_gg_fit` is the public function; programs/run_write_bmad_gg_fit.jl is a
-# shell wrapper.
+# Utilities for generalized-gradient (GG) fit results:
+#  - `read_gg_fit` loads a gg_fit HDF5 file (written by `write_gg_fit`).
+#  - `write_bmad_gg_fit` converts GG coefficients produced by `gg_fit` into Bmad
+#    `gen_grad_map` format (a lattice element with the GG map attached);
+#    programs/run_write_bmad_gg_fit.jl is a shell wrapper.
+# The underscore-prefixed helper functions used here live in src/helpers.jl.
 # ---------------------------------------------------------------------------
+
+#---------------------------------------------------------------------------------------------------
+# read_gg_fit
+
+"""
+    read_gg_fit(path::AbstractString) -> (fit::GGCoefs, meta::NamedTuple)
+
+Load a `gg_fit` result HDF5 file (written by `write_gg_fit`). Returns a
+two-tuple whose first component is a `GGCoefs` struct holding the GG
+coefficient dictionaries `a`, `b`, `bs` (and `z_base`, `m_max`, `rms_plane`,
+`g_ref`), and whose second component is a NamedTuple of the associated fit
+metadata (`origin`, `dz_grid`, `n_planes_add`, `core_weight`,
+`outer_plane_weight`). The `params` field of the returned struct is empty (the
+unknown list is not stored in the file).
+
+```julia
+fit, meta = read_gg_fit(path)
+fit.a            # Dict{(n,m) => values_over_planes}
+fit.g_ref        # reference curvature
+```
+"""
+function read_gg_fit(path::AbstractString)
+  h5open(path, "r") do f
+    fit = GGCoefs(; z_base    = read(f["z_base"]),
+                         a         = _read_coef_group(f, "a"),
+                         b         = _read_coef_group(f, "b"),
+                         bs        = _read_coef_group(f, "bs"; single = true),
+                         m_max     = Int(read_attribute(f, "m_max")),
+                         rms_plane = read(f["rms_plane"]),
+                         g_ref     = read_attribute(f, "g_ref"))
+    meta = (; origin  = read(f["origin"]),
+              dz_grid = read_attribute(f, "dz_grid"),
+              # Fit-control metadata, retained for reference / reproducibility.
+              n_planes_add       = read_attribute(f, "n_planes_add"),
+              core_weight        = read_attribute(f, "core_weight"),
+              outer_plane_weight = read_attribute(f, "outer_plane_weight"))
+    return fit, meta
+  end
+end
 
 # ---------------------------------------------------------------------------
 # Coefficient recursion: project a_n/b_n/b_s  ->  Bmad C_{m,α} derivative towers

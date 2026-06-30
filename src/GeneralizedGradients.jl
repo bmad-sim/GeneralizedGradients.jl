@@ -22,7 +22,7 @@ module GeneralizedGradients
   include("helpers.jl")
   include("gg_eval.jl")
   include("gg_fit.jl")
-  include("write_bmad_gg_fit.jl")
+  include("gg_utils.jl")
   include("field_grid.jl")
 
   export FieldGridTable,

@@ -1,0 +1,9 @@
+/* GeneralizedGradients.jl — minor Furo tweaks. */
+
+/* Give the "API Reference →" external-links block a little separation from the
+   page navigation above it. */
+.sidebar-tree + .sidebar-tree {
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--color-background-border);
+  padding-top: 0.5rem;
+}

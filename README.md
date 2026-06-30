@@ -36,41 +36,40 @@ fundamental requirement. In fact, it may be advantageous to have unequal spacing
 the field of a magnet body is fairly uniform, so that a coarse spacing is adequate, but the fringe
 regions need a fine spacing.
 
-## field_grid_to_bmad (src/field_grid_to_bmad.jl) and programs/run_field_grid_to_bmad.jl
+## write_bmad_field_grid (src/field_grid.jl) and programs/run_write_bmad_field_grid.jl
 
-`field_grid_to_bmad(input; output_base, hdf5)` is a function in the
-`GeneralizedGradients` package that writes a 3D field grid out in Bmad
-`grid_field` format, producing a Bmad lattice element with the field grid
+`write_bmad_field_grid(field; ele_name, output_base, field_scale, hdf5)` is a
+function in the `GeneralizedGradients` package that writes a 3D field grid out in
+Bmad `grid_field` format, producing a Bmad lattice element with the field grid
 attached. It can be run from the shell with
 ```
-julia programs/run_field_grid_to_bmad.jl <field_grid.h5> [output_base] [--text]
+julia programs/run_write_bmad_field_grid.jl <field_grid.h5> [output_base] [--text]
 ```
-`input` is either a `FieldGridTable` or the path to a Bmad openPMD `field_grid`
+`field` is either a `FieldGridTable` or the path to a Bmad openPMD `field_grid`
 HDF5 file (read by `read_field_grid_hdf5`). Two files are written:
 `<output_base>.bmad` (the lattice element) and the attached grid, either
 `<output_base>_grid.h5` (openPMD HDF5, the default) or `<output_base>_grid.bmad`
 (plain-text block, with `--text` / `hdf5 = false`). The reference-curve bending
 strength is taken from the field grid's `g_ref` = `1/bend_radius` [1/m]; if
-non-zero the element is an `sbend`, otherwise an `em_field`. The core writer
-`write_bmad_field_grid(field; ...)` is also exported and can be called directly.
+non-zero the element is an `sbend`, otherwise an `em_field`.
 
-## gg_to_bmad (src/gg_to_bmad.jl) and programs/run_gg_to_bmad.jl
+## write_bmad_gg_fit (src/gg_to_bmad.jl) and programs/run_gg_to_bmad.jl
 
-`gg_to_bmad(input; output_base, cutoff)` is a function in the
+`write_bmad_gg_fit(input; output_base, cutoff)` is a function in the
 `GeneralizedGradients` package that converts the gg coefficients produced by
 `gg_fit` into Bmad `gen_grad_map` format, producing a Bmad lattice element with the
 generalized-gradient map attached. It can be run from the shell with
 ```
 julia programs/run_gg_to_bmad.jl <gg_fit_result.h5> [output_base] [cutoff]
 ```
-The input is a gg-fit file (output of `gg_fit`). Two files are written:
-`<output_base>.bmad` (the lattice element) and `<output_base>_gg.bmad` (the attached
-`gen_grad_map`). `cutoff` is a relative magnitude threshold for pruning negligible
-multipole curves (default 0, keep every non-zero curve). The exact conversion from
-the project's midplane-derivative gg functions (a_n, b_n, b_s) to Bmad's
-azimuthal-harmonic gradients C_{m,sin/cos} is documented in the `gg_to_bmad`
-docstring. The core writer `write_bmad_gen_grad_map(fit, meta; ...)` is also exported and
-can be called directly (`fit`, `meta` as returned by `read_gg_fit`).
+The input is either a gg-fit file (output of `gg_fit`) or a loaded fit
+(`fit, meta` as returned by `read_gg_fit`, passed as `write_bmad_gg_fit(fit, meta; ...)`).
+Two files are written: `<output_base>.bmad` (the lattice element) and
+`<output_base>_gg.bmad` (the attached `gen_grad_map`). `cutoff` is a relative
+magnitude threshold for pruning negligible multipole curves (default 0, keep every
+non-zero curve). The exact conversion from the project's midplane-derivative gg
+functions (a_n, b_n, b_s) to Bmad's azimuthal-harmonic gradients C_{m,sin/cos} is
+documented in the `write_bmad_gg_fit` docstring.
 
 ## field_and_potential_evaluate_at(fit, meta, x::Real, y::Real, s::Real) ->
 

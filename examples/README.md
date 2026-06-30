@@ -63,6 +63,12 @@ and `meta` is a NamedTuple of the fit metadata:
   n_planes_add         1                                          # Fit input parameter.
 ```
 
+## Write Field Table to Bmad
+
+```
+write_bmad
+```
+
 ## GG Coefficient Manipulation
 
 field-expansion coefficients at a given s-position:

@@ -44,8 +44,8 @@ end
 # can exercise finite curvature g_ref, which the example file (g_ref = 0) does not.
 synth(z_base, a, b, bs, g_ref; m_max, dz_grid) = (
   GGCoefs(; z_base = collect(float.(z_base)), a, b, bs,
-                 m_max, rms_plane = fill(NaN, length(z_base))),
-  (; g_ref, origin = [0.0, 0.0], dz_grid))
+                 m_max, rms_plane = fill(NaN, length(z_base)), g_ref),
+  (; origin = [0.0, 0.0], dz_grid))
 
 const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.007, 0.0))
 
@@ -54,10 +54,10 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
   @testset "read_gg_fit" begin
     fit, meta = read_gg_fit(EXAMPLE)
     @test fit isa GGCoefs
-    for k in (:z_base, :a, :b, :bs, :m_max, :rms_plane)
+    for k in (:z_base, :a, :b, :bs, :m_max, :rms_plane, :g_ref)
       @test hasproperty(fit, k)
     end
-    for k in (:g_ref, :origin, :dz_grid)
+    for k in (:origin, :dz_grid)
       @test hasproperty(meta, k)
     end
     @test length(fit.z_base) == length(fit.rms_plane)
@@ -68,7 +68,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
     fit, meta = read_gg_fit(EXAMPLE)
     for ip in 1:length(fit.z_base), (x, y) in PTS
       B, A, dA = field_and_potential_evaluate(fit, meta, ip, x, y)
-      Bc = curl_from(A, dA, x - meta.origin[1], meta.g_ref)
+      Bc = curl_from(A, dA, x - meta.origin[1], fit.g_ref)
       @test maximum(abs, B .- Bc) < 1e-12
     end
   end
@@ -83,7 +83,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
     fit, meta = synth([0.0], va, vb, vbs, 0.6; m_max = 2, dz_grid = 0.1)
     for (x, y) in PTS
       B, A, dA = field_and_potential_evaluate(fit, meta, 1, x, y)
-      Bc = curl_from(A, dA, x, meta.g_ref)
+      Bc = curl_from(A, dA, x, fit.g_ref)
       @test maximum(abs, B .- Bc) < 1e-12
     end
   end
@@ -110,7 +110,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
   @testset "curl(A) == B, multi-plane (g_ref=0.5)" begin
     for ip in 1:length(zg), (x, y) in PTS
       B, A, dA = field_and_potential_evaluate(fitM, metaM, ip, x, y)
-      Bc = curl_from(A, dA, x, metaM.g_ref)
+      Bc = curl_from(A, dA, x, fitM.g_ref)
       @test maximum(abs, B .- Bc) < 1e-12
     end
   end

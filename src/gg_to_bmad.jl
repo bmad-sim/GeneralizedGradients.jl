@@ -109,8 +109,8 @@ function gg_to_bmad(input::AbstractString;
   println("  input file   : ", input)
   println("  planes       : ", npl, "   dz = ", meta.dz_grid, "   m_max = ", mmax)
   println("  max multipole: m = ", kmax)
-  println("  reference    : ", meta.g_ref == 0 ? "straight (em_field)" :
-      @sprintf("arc, g = %.6g 1/m (sbend)", meta.g_ref))
+  println("  reference    : ", fit.g_ref == 0 ? "straight (em_field)" :
+      @sprintf("arc, g = %.6g 1/m (sbend)", fit.g_ref))
   println("  element      : ", ele_name)
   println("  lattice file : ", ele_file)
   println("  map file     : ", output_base * "_gg.bmad")
@@ -121,26 +121,25 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    write_bmad_gen_grad_map(fit, meta; ele_name, output_base, g_ref, cutoff)
+    write_bmad_gen_grad_map(fit, meta; ele_name, output_base, cutoff)
 
 Convert a loaded `gg_fit` result (`fit`, `meta` as returned by `read_gg_fit`) to
 a Bmad `gen_grad_map` and write the element and map files. Returns the path of
-the lattice-element file.
+the lattice-element file. The reference-coordinates bending "strength"
+`1/bend_radius` [1/m] is taken from `fit.g_ref`; non-zero => the element is an
+`sbend` with `curved_ref_frame = T`.
 
 Keyword arguments:
 - `ele_name` — name of the Bmad lattice element. Default `"gen_grad_ele"`.
 - `output_base` — base path for the two output files. Default `ele_name`.
-- `g_ref` — reference-coordinates bending "strength" = `1/bend_radius` [1/m].
-  Default `meta.g_ref`. Non-zero => the element is an `sbend` with
-  `curved_ref_frame = T`.
 - `cutoff` — relative cutoff for pruning negligible curves. Default `0`.
 """
 function write_bmad_gen_grad_map(fit, meta;
                 ele_name::AbstractString = "gen_grad_ele",
                 output_base::AbstractString = ele_name,
-                g_ref::Real = meta.g_ref,
                 cutoff::Real = 0.0)
 
+  g_ref = fit.g_ref
   cs, cc, c0c, npl, mmax, kmax = gg_to_bmad_curves(fit, meta)
   dz = meta.dz_grid
   L  = (npl - 1) * dz

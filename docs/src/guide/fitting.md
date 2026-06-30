@@ -49,7 +49,8 @@ results = gg_fit(field, params)
 
 `results` is a `GGCoefs` holding the fitted coefficient functions
 (`a`, `b`, `bs`) sampled at every base plane (`z_base`), along with
-the per-plane weighted-RMS residuals (`rms_plane`) and `m_max`.
+the per-plane weighted-RMS residuals (`rms_plane`), `m_max`, and the
+reference-frame bending strength `g_ref`.
 
 ## 4. Inspect and save
 

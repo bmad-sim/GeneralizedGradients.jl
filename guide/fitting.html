@@ -297,9 +297,9 @@ multipoles at the central plane):</p>
 <div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">gg_fit_show_results</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>Write the result to an HDF5 file (readable later by <code class="docutils literal notranslate"><span class="pre">gg_load_fit</span></code>, and the input
+<p>Write the result to an HDF5 file (readable later by <code class="docutils literal notranslate"><span class="pre">read_gg_fit</span></code>, and the input
 to the Bmad exporters):</p>
-<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">gg_fit_write_results</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span><span class="w">   </span><span class="c"># writes params.output_file</span>
+<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">write_gg_fit</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span><span class="w">   </span><span class="c"># writes params.output_file</span>
 </pre></div>
 </div>
 </section>
@@ -316,7 +316,7 @@ to the Bmad exporters):</p>
 
 <span class="n">results</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gg_fit</span><span class="p">(</span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span>
 <span class="n">gg_fit_show_results</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span>
-<span class="n">gg_fit_write_results</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span>
+<span class="n">write_gg_fit</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span>
 </pre></div>
 </div>
 <div class="admonition tip">

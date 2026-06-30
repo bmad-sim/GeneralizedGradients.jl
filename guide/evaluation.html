@@ -247,14 +247,14 @@
         <article role="main" id="furo-main-content">
           <section class="tex2jax_ignore mathjax_ignore" id="evaluating-the-fitted-field">
 <h1>Evaluating the fitted field<a class="headerlink" href="#evaluating-the-fitted-field" title="Link to this heading">¶</a></h1>
-<p>Once a fit has been written with <code class="docutils literal notranslate"><span class="pre">gg_fit_write_results</span></code>, load it back with
-<code class="docutils literal notranslate"><span class="pre">gg_load_fit</span></code> and evaluate the field, the vector potential, and the
+<p>Once a fit has been written with <code class="docutils literal notranslate"><span class="pre">write_gg_fit</span></code>, load it back with
+<code class="docutils literal notranslate"><span class="pre">read_gg_fit</span></code> and evaluate the field, the vector potential, and the
 field-expansion coefficients anywhere.</p>
 <div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="k">using</span><span class="w"> </span><span class="n">GeneralizedGradients</span>
-<span class="n">fit</span><span class="p">,</span><span class="w"> </span><span class="n">meta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gg_load_fit</span><span class="p">(</span><span class="s">&quot;gg_fit_result.h5&quot;</span><span class="p">)</span>
+<span class="n">fit</span><span class="p">,</span><span class="w"> </span><span class="n">meta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">read_gg_fit</span><span class="p">(</span><span class="s">&quot;gg_fit_result.h5&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">gg_load_fit</span></code> returns a two-tuple. <code class="docutils literal notranslate"><span class="pre">fit</span></code> is a <code class="docutils literal notranslate"><span class="pre">GGCoefs</span></code> struct with the GG
+<p><code class="docutils literal notranslate"><span class="pre">read_gg_fit</span></code> returns a two-tuple. <code class="docutils literal notranslate"><span class="pre">fit</span></code> is a <code class="docutils literal notranslate"><span class="pre">GGCoefs</span></code> struct with the GG
 coefficient dictionaries <code class="docutils literal notranslate"><span class="pre">a</span></code>, <code class="docutils literal notranslate"><span class="pre">b</span></code>, <code class="docutils literal notranslate"><span class="pre">bs</span></code> (plus <code class="docutils literal notranslate"><span class="pre">z_base</span></code>, <code class="docutils literal notranslate"><span class="pre">m_max</span></code>, <code class="docutils literal notranslate"><span class="pre">rms_plane</span></code>),
 and <code class="docutils literal notranslate"><span class="pre">meta</span></code> is a NamedTuple of the associated metadata <code class="docutils literal notranslate"><span class="pre">g_ref</span></code>, <code class="docutils literal notranslate"><span class="pre">origin</span></code>,
 <code class="docutils literal notranslate"><span class="pre">dz_grid</span></code>, <code class="docutils literal notranslate"><span class="pre">n_planes_add</span></code>, <code class="docutils literal notranslate"><span class="pre">core_weight</span></code>, <code class="docutils literal notranslate"><span class="pre">outer_plane_weight</span></code>. Both are passed

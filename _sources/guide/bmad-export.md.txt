@@ -56,7 +56,7 @@ non-zero curve.
 From the shell:
 
 ```
-julia programs/run_gg_to_bmad.jl <gg_fit_result.h5> [output_base] [cutoff]
+julia programs/run_write_bmad_gg_fit.jl <gg_fit_result.h5> [output_base] [cutoff]
 ```
 
 ```{note}

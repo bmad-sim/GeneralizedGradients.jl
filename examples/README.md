@@ -37,18 +37,20 @@ julia> include("run_gg_fit.jl")
 See the `run_gg_fit.jl` and `src/gg_fit.jl` for documentation on the fit.
 The data file produced is `gg_fit_result.h5` (HDF5 format). 
 
+## Read in fit parameters.
+
 To load the fit use
 ```
 julia> fit, meta = gg_load_fit("gg_fit_result.h5")
 ```
 
-which returns a two-tuple. `fit` is a `GGFitResults` struct with the fields:
+which returns a two-tuple. `fit` is a `GGCoefs` struct with the fields:
 ```
   rms_plane            [4.17469e-6, 6.421e-6,  …                  # Per plane fit RMS
-  b                    Dict((1, 2)=>[-0.00317784, -0.00341029, …  # b function fit values
-  m_max                2                                          # max order
   a                    Dict((1, 2)=>[-0.0046122, -0.00615161, …   # a function fit values
+  b                    Dict((1, 2)=>[-0.00317784, -0.00341029, …  # b function fit values
   bs                   Dict(0=>[-2.23633e-7, -2.31509e-7, …       # bs function fit values
+  m_max                2                                          # max order
   z_base               [0.0, 0.005, ...]                          # Fit plane values.
 ```
 and `meta` is a NamedTuple of the fit metadata:
@@ -61,14 +63,7 @@ and `meta` is a NamedTuple of the fit metadata:
   n_planes_add         1                                          # Fit input parameter.
 ```
 
-## Read in fit parameters.
-
-`gg_load_fit` reads the HDF5 fit file into a `(fit, meta)` pair (fields as above):
-```
-julia> using GeneralizedGradients
-julia> fit, meta = gg_load_fit("gg_fit_result.h5");
-julia> meta.dz_grid             # Returns 0.005
-```
+## GG Coefficient Manipulation
 
 field-expansion coefficients at a given s-position:
 ```

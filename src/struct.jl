@@ -105,7 +105,7 @@ end
 
 #---------------------------------------------------------------------------------------------------
 """
-    mutable struct GGFitResults
+    mutable struct GGCoefs
 
 Holds the result of a `gg_fit` fit: the fitted generalized-gradient (GG)
 coefficient functions sampled at the base planes plus per-plane diagnostics.
@@ -122,7 +122,7 @@ Fields:
 - `rms_plane` — weighted RMS fit residual at each base plane.
 - `m_max` — highest derivative order resolved (`2 * n_planes_add`).
 """
-@kwdef mutable struct GGFitResults
+@kwdef mutable struct GGCoefs
   z_base::Vector{Float64} = Float64[]
   params::Vector{Tuple{Symbol,Int,Int}} = Tuple{Symbol,Int,Int}[]
   a::Dict{Tuple{Int,Int},Vector{Float64}} = Dict{Tuple{Int,Int},Vector{Float64}}()

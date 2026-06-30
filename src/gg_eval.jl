@@ -104,7 +104,7 @@ end
 Main entry point. Evaluate the field, vector potential and the Jacobian of `A`
 at grid plane `ip` and transverse position `(x, y)`.
 
-- `fit`, `meta` — the `GGFitResults` struct and metadata NamedTuple returned by
+- `fit`, `meta` — the `GGCoefs` struct and metadata NamedTuple returned by
   `gg_load_fit`.
 - `ip` — 1-based plane index into `fit.z_base`.
 - `x`, `y` — absolute transverse coordinates. `meta.origin` is subtracted
@@ -339,7 +339,7 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    _interp_gg_fit(fit, meta, s::Real) -> (fit::GGFitResults, meta)
+    _interp_gg_fit(fit, meta, s::Real) -> (fit::GGCoefs, meta)
 
 Take GG fit results `fit` which give the GG functions at a set of planes and
 return a similar `(fit, meta)` pair but with one plane: the GG coefficients for
@@ -370,7 +370,7 @@ function _interp_gg_fit(fit, meta, s::Real)
   b2  = _interp_nm_dict(fit.b,  iL, iR, zL, zR, sq, single)
   bs2 = _interp_m_dict(fit.bs, iL, iR, zL, zR, sq, single)
 
-  fit2 = GGFitResults(; z_base = [sq], a = a2, b = b2, bs = bs2,
+  fit2 = GGCoefs(; z_base = [sq], a = a2, b = b2, bs = bs2,
                         m_max = fit.m_max, rms_plane = [NaN])
   return fit2, meta
 end
@@ -399,7 +399,7 @@ and, because the orders are mutually consistent, the `∂A/∂s` that
 true `s`-derivative of the interpolated field. The curl identity `B = ∇×A`
 holds at `s` as before.
 
-- `fit`, `meta` — the `GGFitResults` struct and metadata NamedTuple from `gg_load_fit`.
+- `fit`, `meta` — the `GGCoefs` struct and metadata NamedTuple from `gg_load_fit`.
 - `x`, `y` — absolute transverse coordinates (`meta.origin` subtracted internally).
 - `s` — absolute longitudinal coordinate.
 
@@ -450,7 +450,7 @@ end
 
 Field-expansion coefficients at a grid plane.
 
-- `fit`, `meta` — the `GGFitResults` struct and metadata NamedTuple from `gg_load_fit`.
+- `fit`, `meta` — the `GGCoefs` struct and metadata NamedTuple from `gg_load_fit`.
 - `ip` — 1-based plane index into `fit.z_base`.
 
 Returns `(CBx, CBy, CBs)`; each is a matrix with `CB[i+1, j+1] = CB_{c,i,j}`,
@@ -480,7 +480,7 @@ end
 
 Generalized-gradient coefficients at a grid plane.
 
-- `fit`, `meta` — the `GGFitResults` struct and metadata NamedTuple from
+- `fit`, `meta` — the `GGCoefs` struct and metadata NamedTuple from
   `gg_load_fit` (`meta` is accepted for a uniform call signature; it is unused).
 - `ip` — 1-based plane index into `fit.z_base`.
 

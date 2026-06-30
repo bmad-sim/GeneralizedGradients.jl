@@ -126,10 +126,10 @@ end
 # gg_load_fit
 
 """
-    gg_load_fit(path::AbstractString) -> (fit::GGFitResults, meta::NamedTuple)
+    gg_load_fit(path::AbstractString) -> (fit::GGCoefs, meta::NamedTuple)
 
 Load a `gg_fit` result HDF5 file (written by `gg_fit_write_results`). Returns a
-two-tuple whose first component is a `GGFitResults` struct holding the GG
+two-tuple whose first component is a `GGCoefs` struct holding the GG
 coefficient dictionaries `a`, `b`, `bs` (and `z_base`, `m_max`, `rms_plane`),
 and whose second component is a NamedTuple of the associated fit metadata
 (`g_ref`, `origin`, `dz_grid`, `n_planes_add`, `core_weight`,
@@ -144,7 +144,7 @@ meta.g_ref       # reference curvature
 """
 function gg_load_fit(path::AbstractString)
   h5open(path, "r") do f
-    fit = GGFitResults(; z_base    = read(f["z_base"]),
+    fit = GGCoefs(; z_base    = read(f["z_base"]),
                          a         = _read_coef_group(f, "a"),
                          b         = _read_coef_group(f, "b"),
                          bs        = _read_coef_group(f, "bs"; single = true),

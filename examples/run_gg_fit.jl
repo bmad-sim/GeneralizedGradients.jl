@@ -43,4 +43,4 @@ p.output_file = "gg_fit_result.h5"
 
 results = gg_fit(field, p)
 gg_fit_show_results(results, field, p)
-gg_fit_write_results(results, field, p)
+write_gg_fit(results, field, p)

@@ -110,7 +110,7 @@ end
 Holds the result of a `gg_fit` fit: the fitted generalized-gradient (GG)
 coefficient functions sampled at the base planes plus per-plane diagnostics.
 Returned by `gg_fit` and consumed by `gg_fit_show_results` and
-`gg_fit_write_results`.
+`write_gg_fit`.
 
 Fields:
 - `z_base` — `z` position of each base plane [m].

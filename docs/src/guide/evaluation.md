@@ -1,15 +1,15 @@
 # Evaluating the fitted field
 
-Once a fit has been written with `gg_fit_write_results`, load it back with
-`gg_load_fit` and evaluate the field, the vector potential, and the
+Once a fit has been written with `write_gg_fit`, load it back with
+`read_gg_fit` and evaluate the field, the vector potential, and the
 field-expansion coefficients anywhere.
 
 ```julia
 using GeneralizedGradients
-fit, meta = gg_load_fit("gg_fit_result.h5")
+fit, meta = read_gg_fit("gg_fit_result.h5")
 ```
 
-`gg_load_fit` returns a two-tuple. `fit` is a `GGCoefs` struct with the GG
+`read_gg_fit` returns a two-tuple. `fit` is a `GGCoefs` struct with the GG
 coefficient dictionaries `a`, `b`, `bs` (plus `z_base`, `m_max`, `rms_plane`),
 and `meta` is a NamedTuple of the associated metadata `g_ref`, `origin`,
 `dz_grid`, `n_planes_add`, `core_weight`, `outer_plane_weight`. Both are passed

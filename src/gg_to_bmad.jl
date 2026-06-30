@@ -17,7 +17,7 @@ _fac(k::Integer) = k <= 1 ? 1.0 : prod(2.0:k)
     gg_to_bmad_curves(fit, meta) -> (cs, cc, c0c, nplanes, m_max, kmax)
 
 Compute the Bmad azimuthal-harmonic GG derivative towers from a loaded
-`gg_fit` result (`fit`, `meta` as returned by `gg_load_fit`). Returns
+`gg_fit` result (`fit`, `meta` as returned by `read_gg_fit`). Returns
 
 ```
 cs[(m,j)]  :: Vector  -- C^{[j]}_{m,sin}(plane)  (normal multipole m)
@@ -117,7 +117,7 @@ _peak(d, m) = (v = get(d, (m, 0), nothing); v === nothing ? 0.0 : maximum(abs, v
 """
     write_bmad_gen_grad_map(fit, meta; ele_name, output_base, g_ref, cutoff)
 
-Convert a loaded `gg_fit` result (`fit`, `meta` as returned by `gg_load_fit`) to
+Convert a loaded `gg_fit` result (`fit`, `meta` as returned by `read_gg_fit`) to
 a Bmad `gen_grad_map` and write the element and map files. Returns the path of
 the lattice-element file.
 
@@ -232,7 +232,7 @@ julia programs/run_gg_to_bmad.jl <gg_fit_result.h5> [output_base] [cutoff]
 ```
 
 Arguments:
-- `input` — input GG-fit file (output of `gg_fit_write_results`).
+- `input` — input GG-fit file (output of `write_gg_fit`).
 - `output_base` — base name for the output files. Default: input name without
   extension. Two files are written: `<output_base>.bmad` (the lattice element)
   and `<output_base>_gg.bmad` (the attached `gen_grad_map`).
@@ -297,7 +297,7 @@ function gg_to_bmad(input::AbstractString;
                         joinpath(dirname(input), first(splitext(basename(input)))),
                     cutoff::Real = 0.0)
   ele_name = basename(output_base)
-  fit, meta = gg_load_fit(input)
+  fit, meta = read_gg_fit(input)
   ele_file = write_bmad_gen_grad_map(fit, meta; ele_name, output_base, cutoff)
 
   cs, cc, c0c, npl, mmax, kmax = gg_to_bmad_curves(fit, meta)

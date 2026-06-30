@@ -39,7 +39,7 @@ const _NMAX = 20
 
 _newK() = zeros(Float64, _NMAX, _NMAX)
 
-# gg_load_fit lives in field_grid_io.jl (HDF5 storage); files are written by gg_fit_write_results.
+# read_gg_fit lives in field_grid_io.jl (HDF5 storage); files are written by write_gg_fit.
 
 #---------------------------------------------------------------------------------------------------
 # Coefficient-array builders.  K[p+1,q+1] = coefficient of xᵖ yᵠ.
@@ -105,7 +105,7 @@ Main entry point. Evaluate the field, vector potential and the Jacobian of `A`
 at grid plane `ip` and transverse position `(x, y)`.
 
 - `fit`, `meta` — the `GGCoefs` struct and metadata NamedTuple returned by
-  `gg_load_fit`.
+  `read_gg_fit`.
 - `ip` — 1-based plane index into `fit.z_base`.
 - `x`, `y` — absolute transverse coordinates. `meta.origin` is subtracted
   internally to obtain the position relative to the GG expansion axis (the
@@ -399,7 +399,7 @@ and, because the orders are mutually consistent, the `∂A/∂s` that
 true `s`-derivative of the interpolated field. The curl identity `B = ∇×A`
 holds at `s` as before.
 
-- `fit`, `meta` — the `GGCoefs` struct and metadata NamedTuple from `gg_load_fit`.
+- `fit`, `meta` — the `GGCoefs` struct and metadata NamedTuple from `read_gg_fit`.
 - `x`, `y` — absolute transverse coordinates (`meta.origin` subtracted internally).
 - `s` — absolute longitudinal coordinate.
 
@@ -450,7 +450,7 @@ end
 
 Field-expansion coefficients at a grid plane.
 
-- `fit`, `meta` — the `GGCoefs` struct and metadata NamedTuple from `gg_load_fit`.
+- `fit`, `meta` — the `GGCoefs` struct and metadata NamedTuple from `read_gg_fit`.
 - `ip` — 1-based plane index into `fit.z_base`.
 
 Returns `(CBx, CBy, CBs)`; each is a matrix with `CB[i+1, j+1] = CB_{c,i,j}`,
@@ -481,7 +481,7 @@ end
 Generalized-gradient coefficients at a grid plane.
 
 - `fit`, `meta` — the `GGCoefs` struct and metadata NamedTuple from
-  `gg_load_fit` (`meta` is accepted for a uniform call signature; it is unused).
+  `read_gg_fit` (`meta` is accepted for a uniform call signature; it is unused).
 - `ip` — 1-based plane index into `fit.z_base`.
 
 Returns the three GG-function dicts of scalar values at the plane: `a` and `b`

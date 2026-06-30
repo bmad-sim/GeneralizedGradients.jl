@@ -37,7 +37,7 @@ julia programs/run_field_grid_to_bmad.jl <field_grid.h5> [output_base] [--text]
 
 ## GG fit → `gen_grad_map`
 
-`gg_to_bmad` converts a GG fit file (the output of `gg_fit_write_results`) into a
+`gg_to_bmad` converts a GG fit file (the output of `write_gg_fit`) into a
 Bmad `gen_grad_map`:
 
 ```julia
@@ -51,7 +51,7 @@ Two files are written: `<output_base>.bmad` (the lattice element) and
 magnitude threshold: a multipole curve is dropped if its peak `|GG|` is below
 `cutoff × (largest peak |GG| of any curve)`. The default `0` keeps every
 non-zero curve. The core writer `write_bmad_gen_grad_map(fit, meta; ...)` is
-exported too (`fit`, `meta` as returned by `gg_load_fit`).
+exported too (`fit`, `meta` as returned by `read_gg_fit`).
 
 From the shell:
 

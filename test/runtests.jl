@@ -40,7 +40,7 @@ function curl_from(A, dA, x, g_ref)
   return [Bx, By, Bs]
 end
 
-# Build a synthetic (fit, meta) pair (same shape as gg_load_fit returns) so we
+# Build a synthetic (fit, meta) pair (same shape as read_gg_fit returns) so we
 # can exercise finite curvature g_ref, which the example file (g_ref = 0) does not.
 synth(z_base, a, b, bs, g_ref; m_max, dz_grid) = (
   GGCoefs(; z_base = collect(float.(z_base)), a, b, bs,
@@ -51,8 +51,8 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
 
 @testset "GeneralizedGradients" begin
 
-  @testset "gg_load_fit" begin
-    fit, meta = gg_load_fit(EXAMPLE)
+  @testset "read_gg_fit" begin
+    fit, meta = read_gg_fit(EXAMPLE)
     @test fit isa GGCoefs
     for k in (:z_base, :a, :b, :bs, :m_max, :rms_plane)
       @test hasproperty(fit, k)
@@ -65,7 +65,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
   end
 
   @testset "curl(A) == B at grid planes (example, g_ref=0)" begin
-    fit, meta = gg_load_fit(EXAMPLE)
+    fit, meta = read_gg_fit(EXAMPLE)
     for ip in 1:length(fit.z_base), (x, y) in PTS
       B, A, dA = field_and_potential_evaluate(fit, meta, ip, x, y)
       Bc = curl_from(A, dA, x - meta.origin[1], meta.g_ref)
@@ -126,7 +126,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
   end
 
   @testset "gg_coefficients_at_plane matches direct indexing" begin
-    fit, meta = gg_load_fit(EXAMPLE)
+    fit, meta = read_gg_fit(EXAMPLE)
     ip = 3
     a, b, bs = gg_coefficients_at_plane(fit, meta, ip)
     @test a isa Dict{Tuple{Int,Int},Float64}
@@ -137,7 +137,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
   end
 
   @testset "_at_s reproduces plane values at a grid plane" begin
-    fit, meta = gg_load_fit(EXAMPLE)
+    fit, meta = read_gg_fit(EXAMPLE)
     ip = 4; s = fit.z_base[ip]
 
     a, b, bs = gg_coefficients_at_plane(fit, meta, ip)
@@ -168,9 +168,9 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
 
     mktempdir() do dir
       p.output_file = joinpath(dir, "fit.h5")
-      out = quiet(() -> gg_fit_write_results(res, field, p))
+      out = quiet(() -> write_gg_fit(res, field, p))
       @test out == p.output_file && isfile(out)
-      fit, meta = gg_load_fit(out)
+      fit, meta = read_gg_fit(out)
       @test fit.m_max == res.m_max
       @test meta.dz_grid ≈ field.dr[3]
       @test length(fit.z_base) == length(res.z_base)
@@ -282,7 +282,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
       @test isfile(base * "_gg.bmad")
       @test occursin("em_field", read(ele, String))
 
-      fit, meta = gg_load_fit(EXAMPLE)
+      fit, meta = read_gg_fit(EXAMPLE)
       cs, cc, c0c, npl, mmax, kmax = GeneralizedGradients.gg_to_bmad_curves(fit, meta)
       @test npl == length(fit.z_base)
       @test mmax == fit.m_max
@@ -295,7 +295,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
       p.n_planes_add = 1
       p.output_file = joinpath(dir, "curved_fit.h5")
       res = gg_fit(field, p)
-      quiet(() -> gg_fit_write_results(res, field, p))
+      quiet(() -> write_gg_fit(res, field, p))
       base2 = joinpath(dir, "gg_bend")
       ele2 = quiet(() -> gg_to_bmad(p.output_file; output_base = base2, cutoff = 1e-6))
       @test isfile(ele2) && isfile(base2 * "_gg.bmad")

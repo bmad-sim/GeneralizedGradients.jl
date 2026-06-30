@@ -244,40 +244,39 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
     end
   end
 
-  @testset "field_grid_to_bmad (string/FieldGridTable, text/hdf5, em_field/sbend)" begin
+  @testset "write_bmad_field_grid (string/FieldGridTable, text/hdf5, em_field/sbend)" begin
     mktempdir() do dir
       field = make_field()                       # g_ref = 0 -> em_field
       gpath = joinpath(dir, "grid.h5")
       write_field_grid_hdf5(gpath, field)
 
-      # String input, default output_base (from file name) and default hdf5 = true.
-      ele = quiet(() -> field_grid_to_bmad(gpath))
-      stem = joinpath(dir, "grid")
+      # String input, hdf5 = true (default).
+      stem = joinpath(dir, "grid_out")
+      ele = quiet(() -> write_bmad_field_grid(gpath; output_base = stem))
       @test ele == stem * ".bmad" && isfile(ele)
       @test isfile(stem * "_grid.h5")
       @test occursin("em_field", read(ele, String))
 
-      # String input, explicit output_base, text grid (hdf5 = false).
+      # String input, text grid (hdf5 = false).
       base = joinpath(dir, "out_text")
-      ele2 = quiet(() -> field_grid_to_bmad(gpath; output_base = base, hdf5 = false))
+      ele2 = quiet(() -> write_bmad_field_grid(gpath; output_base = base, hdf5 = false))
       @test isfile(base * "_grid.bmad")
       @test occursin("em_field", read(ele2, String))
 
-      # FieldGridTable input (curved frame -> sbend), default output_base + hdf5.
-      cd(dir) do
-        bfield = make_field(g_ref = 0.4)
-        ele3 = quiet(() -> field_grid_to_bmad(bfield))
-        @test isfile("field_grid.bmad") && isfile("field_grid_grid.h5")
-        @test occursin("sbend", read("field_grid.bmad", String))
-      end
+      # FieldGridTable input (curved frame -> sbend).
+      bfield = make_field(g_ref = 0.4)
+      base3 = joinpath(dir, "bend")
+      ele3 = quiet(() -> write_bmad_field_grid(bfield; output_base = base3))
+      @test isfile(base3 * ".bmad") && isfile(base3 * "_grid.h5")
+      @test occursin("sbend", read(base3 * ".bmad", String))
     end
   end
 
-  @testset "gg_to_bmad (straight + bend/solenoid)" begin
+  @testset "write_bmad_gg_fit (straight + bend/solenoid)" begin
     mktempdir() do dir
       # Straight reference (g_ref = 0) from the example fit file.
       base = joinpath(dir, "gg_straight")
-      ele = quiet(() -> gg_to_bmad(EXAMPLE; output_base = base))
+      ele = quiet(() -> write_bmad_gg_fit(EXAMPLE; output_base = base))
       @test ele == base * ".bmad" && isfile(ele)
       @test isfile(base * "_gg.bmad")
       @test occursin("em_field", read(ele, String))
@@ -288,6 +287,11 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
       @test mmax == fit.m_max
       @test kmax >= 1
 
+      # In-memory (fit, meta) method writes the same element.
+      basem = joinpath(dir, "gg_mem")
+      elem = write_bmad_gg_fit(fit, meta; output_base = basem)
+      @test elem == basem * ".bmad" && isfile(elem) && isfile(basem * "_gg.bmad")
+
       # Curved reference (g_ref ≠ 0) with a solenoid term: fit a synthetic field,
       # write it, then convert -> exercises the sbend + solenoid + cutoff paths.
       field = make_field(g_ref = 0.3)
@@ -297,7 +301,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
       res = gg_fit(field, p)
       quiet(() -> write_gg_fit(res, field, p))
       base2 = joinpath(dir, "gg_bend")
-      ele2 = quiet(() -> gg_to_bmad(p.output_file; output_base = base2, cutoff = 1e-6))
+      ele2 = quiet(() -> write_bmad_gg_fit(p.output_file; output_base = base2, cutoff = 1e-6))
       @test isfile(ele2) && isfile(base2 * "_gg.bmad")
       @test occursin("sbend", read(ele2, String))
     end

@@ -97,7 +97,7 @@ C^{[j]}_{0,c} = b_s^{[j-1]} \quad (j \ge 1),
 
 where $x^{[j]} \equiv \mathrm{d}^j x/\mathrm{d}s^j$ is supplied directly by the
 fit. The full derivation, including the mixing weights $W_n$, $W_c$, and $U_s$,
-is in the `gg_to_bmad` docstring (see the **API Reference**).
+is in the `write_bmad_gg_fit` docstring (see the **API Reference**).
 
 ## References
 

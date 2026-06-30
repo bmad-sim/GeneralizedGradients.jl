@@ -39,7 +39,7 @@ const _NMAX = 20
 
 _newK() = zeros(Float64, _NMAX, _NMAX)
 
-# read_gg_fit lives in field_grid_io.jl (HDF5 storage); files are written by write_gg_fit.
+# read_gg_fit lives in field_grid.jl (HDF5 storage); files are written by write_gg_fit.
 
 #---------------------------------------------------------------------------------------------------
 # Coefficient-array builders.  K[p+1,q+1] = coefficient of xᵖ yᵠ.

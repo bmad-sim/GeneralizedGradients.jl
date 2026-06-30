@@ -15,7 +15,7 @@ Run with command:
   [cutoff]            Relative magnitude cutoff for pruning negligible multipole
                       curves. Default 0 (keep every non-zero curve).
 
-See the documentation for the `gg_to_bmad` function for more details.
+See the documentation for the `write_bmad_gg_fit` function for more details.
 """
 
 using OffsetArrays, LinearAlgebra, Printf, GeneralizedGradients
@@ -27,4 +27,4 @@ output_base = length(ARGS) >= 2 ? ARGS[2] :
               joinpath(dirname(input), first(splitext(basename(input))))
 cutoff = length(ARGS) >= 3 ? parse(Float64, ARGS[3]) : 0.0
 
-gg_to_bmad(input; output_base, cutoff)
+write_bmad_gg_fit(input; output_base, cutoff)

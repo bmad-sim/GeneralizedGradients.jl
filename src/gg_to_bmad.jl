@@ -3,8 +3,8 @@
 #
 # Convert generalized-gradient (GG) coefficients produced by `gg_fit` into Bmad
 # `gen_grad_map` format (a lattice element with the GG map attached).
-# `gg_to_bmad` is the public function; programs/run_gg_to_bmad.jl is a shell
-# wrapper.
+# `write_bmad_gg_fit` is the public function; programs/run_gg_to_bmad.jl is a
+# shell wrapper.
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
@@ -14,31 +14,42 @@
 #---------------------------------------------------------------------------------------------------
 
 """
-    gg_to_bmad(input; output_base, cutoff) -> lattice_file_path
+    write_bmad_gg_fit(fit::GGCoefs, meta; ele_name, output_base, cutoff) -> lattice_file_path
+    write_bmad_gg_fit(input::AbstractString; output_base, cutoff) -> lattice_file_path
 
 Convert generalized-gradient (GG) coefficients produced by `gg_fit` into Bmad
 `gen_grad_map` format, producing a Bmad lattice element with the GG map attached.
+Returns the path of the lattice-element file.
+
+The GG fit is supplied either as a loaded result (`fit`, `meta` as returned by
+`read_gg_fit`) or as the path to a gg_fit HDF5 file (output of `write_gg_fit`),
+which is read with `read_gg_fit`.
 
 ## Usage
 
-As a function:
 ```
 using GeneralizedGradients
-gg_to_bmad("gg_fit_result.h5")
+write_bmad_gg_fit("gg_fit_result.h5")
 ```
 From the shell (see `programs/run_gg_to_bmad.jl`):
 ```
 julia programs/run_gg_to_bmad.jl <gg_fit_result.h5> [output_base] [cutoff]
 ```
 
-Arguments:
-- `input` — input GG-fit file (output of `write_gg_fit`).
-- `output_base` — base name for the output files. Default: input name without
-  extension. Two files are written: `<output_base>.bmad` (the lattice element)
-  and `<output_base>_gg.bmad` (the attached `gen_grad_map`).
+Keyword arguments:
+- `ele_name` — name of the Bmad lattice element. Default `"gen_grad_ele"` (or, for
+  a file input, the `output_base` basename).
+- `output_base` — base name for the two output files: `<output_base>.bmad` (the
+  lattice element) and `<output_base>_gg.bmad` (the attached `gen_grad_map`).
+  Defaults to the input file name without extension, or `ele_name` for an
+  in-memory fit.
 - `cutoff` — relative magnitude cutoff for pruning negligible multipole curves.
   A curve is dropped if its peak `|GG|` is below `cutoff * (largest peak |GG| of
   any curve)`. Default `0` (keep every non-zero curve).
+
+The reference-coordinates bending "strength" `1/bend_radius` [1/m] is taken from
+`fit.g_ref`; non-zero => the element is an `sbend` with `curved_ref_frame = T`,
+otherwise an `em_field`.
 
 ## Background: the two GG conventions
 
@@ -92,49 +103,15 @@ length is `L = (n_planes - 1) * dz`. The transverse anchor `r0` is the GG
 expansion axis (`origin`). For a curved reference (`g_ref ≠ 0`) the element is an
 `sbend` with `g = g_ref` and `curved_ref_frame = T`; otherwise it is an `em_field`.
 """
-function gg_to_bmad(input::AbstractString;
-                    output_base::AbstractString =
-                        joinpath(dirname(input), first(splitext(basename(input)))),
-                    cutoff::Real = 0.0)
-  ele_name = basename(output_base)
+function write_bmad_gg_fit(input::AbstractString;
+                output_base::AbstractString =
+                    joinpath(dirname(input), first(splitext(basename(input)))),
+                cutoff::Real = 0.0)
   fit, meta = read_gg_fit(input)
-  ele_file = write_bmad_gen_grad_map(fit, meta; ele_name, output_base, cutoff)
-
-  cs, cc, c0c, npl, mmax, kmax = gg_to_bmad_curves(fit, meta)
-  nc = count(m -> (v = get(cs, (m, 0), nothing); v !== nothing && maximum(abs, v) > 0), 1:kmax) +
-    count(m -> (v = get(cc, (m, 0), nothing); v !== nothing && maximum(abs, v) > 0), 1:kmax) +
-    (haskey(c0c, 0) ? 1 : 0)
-  println("="^72)
-  println("GG coefficients -> Bmad gen_grad_map")
-  println("  input file   : ", input)
-  println("  planes       : ", npl, "   dz = ", meta.dz_grid, "   m_max = ", mmax)
-  println("  max multipole: m = ", kmax)
-  println("  reference    : ", fit.g_ref == 0 ? "straight (em_field)" :
-      @sprintf("arc, g = %.6g 1/m (sbend)", fit.g_ref))
-  println("  element      : ", ele_name)
-  println("  lattice file : ", ele_file)
-  println("  map file     : ", output_base * "_gg.bmad")
-  println("="^72)
-  return ele_file
+  return write_bmad_gg_fit(fit, meta; ele_name = basename(output_base), output_base, cutoff)
 end
 
-#---------------------------------------------------------------------------------------------------
-
-"""
-    write_bmad_gen_grad_map(fit, meta; ele_name, output_base, cutoff)
-
-Convert a loaded `gg_fit` result (`fit`, `meta` as returned by `read_gg_fit`) to
-a Bmad `gen_grad_map` and write the element and map files. Returns the path of
-the lattice-element file. The reference-coordinates bending "strength"
-`1/bend_radius` [1/m] is taken from `fit.g_ref`; non-zero => the element is an
-`sbend` with `curved_ref_frame = T`.
-
-Keyword arguments:
-- `ele_name` — name of the Bmad lattice element. Default `"gen_grad_ele"`.
-- `output_base` — base path for the two output files. Default `ele_name`.
-- `cutoff` — relative cutoff for pruning negligible curves. Default `0`.
-"""
-function write_bmad_gen_grad_map(fit, meta;
+function write_bmad_gg_fit(fit::GGCoefs, meta;
                 ele_name::AbstractString = "gen_grad_ele",
                 output_base::AbstractString = ele_name,
                 cutoff::Real = 0.0)
@@ -194,7 +171,7 @@ function write_bmad_gen_grad_map(fit, meta;
 
   open(ele_file, "w") do io
     println(io, "! Bmad lattice element with attached generalized-gradient map.")
-    println(io, "! Generated from gg_fit GG coefficients by gg_to_bmad.")
+    println(io, "! Generated from gg_fit GG coefficients by write_bmad_gg_fit.")
     println(io, "!")
     if is_bend
       println(io, "! Reference curve is an arc (g = ", _gg_num(g_ref),

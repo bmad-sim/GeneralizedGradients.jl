@@ -42,12 +42,12 @@ Translate a field grid (a `FieldGridTable`, see `read_field_grid_hdf5`) into Bma
 `grid_field` format. Writes two files and returns the path of the lattice-element file.
 
 Keyword arguments:
-- `ele_name` — name of the Bmad lattice element. Default `"fieldmap_ele"`.
+- `ele_name`    — name of the Bmad lattice element. Default `"fieldmap_ele"`.
 - `output_base` — base path for the two output files. Default `ele_name`.
-- `g_ref` — reference bending strength = `1/bending_radius` [1/m].
+- `g_ref`       — reference bending strength = `1/bending_radius` [1/m].
   Default `field.g_ref`. Non-zero => the element is an `sbend`.
 - `field_scale` — overall field scale factor written to the field grid. Default `1`.
-- `hdf5` — if true, write the field grid as an openPMD HDF5 file
+- `hdf5`        — if true (the default), write the field grid as an openPMD HDF5 file
   (`<output_base>_grid.h5`) instead of a plain-text block.
 """
 function write_bmad_field_grid(field::FieldGridTable;
@@ -55,7 +55,7 @@ function write_bmad_field_grid(field::FieldGridTable;
                                output_base::AbstractString = ele_name,
                                g_ref::Real = field.g_ref,
                                field_scale::Real = 1.0,
-                               hdf5::Bool = false)
+                               hdf5::Bool = true)
 
   mag = field.magnetic
   dr  = field.dr

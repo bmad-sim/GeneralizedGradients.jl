@@ -10,8 +10,8 @@ fit, meta = read_gg_fit("gg_fit_result.h5")
 ```
 
 `read_gg_fit` returns a two-tuple. `fit` is a `GGCoefs` struct with the GG
-coefficient dictionaries `a`, `b`, `bs` (plus `z_base`, `m_max`, `rms_plane`),
-and `meta` is a NamedTuple of the associated metadata `g_ref`, `origin`,
+coefficient dictionaries `a`, `b`, `bs` (plus `z_base`, `m_max`, `rms_plane`,
+`g_ref`), and `meta` is a NamedTuple of the associated metadata `origin`,
 `dz_grid`, `n_planes_add`, `core_weight`, `outer_plane_weight`. Both are passed
 together to the evaluation functions below.
 

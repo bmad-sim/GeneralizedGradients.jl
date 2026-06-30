@@ -269,7 +269,7 @@ either a <code class="docutils literal notranslate"><span class="pre">FieldGridT
 <p>Two files are written: <code class="docutils literal notranslate"><span class="pre">&lt;output_base&gt;.bmad</span></code> (the lattice element) and the grid,
 either <code class="docutils literal notranslate"><span class="pre">&lt;output_base&gt;_grid.h5</span></code> (HDF5, the default) or <code class="docutils literal notranslate"><span class="pre">&lt;output_base&gt;_grid.bmad</span></code>
 (plain text). The core writer <code class="docutils literal notranslate"><span class="pre">write_bmad_field_grid(field;</span> <span class="pre">...)</span></code> is also exported
-and can be called directly on a <code class="docutils literal notranslate"><span class="pre">FieldGridTable</span></code>.</p>
+and can be called directly on a <code class="docutils literal notranslate"><span class="pre">FieldGridTable</span></code> or an HDF5 grid-file path.</p>
 <p>From the shell:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">julia</span> <span class="n">programs</span><span class="o">/</span><span class="n">run_field_grid_to_bmad</span><span class="o">.</span><span class="n">jl</span> <span class="o">&lt;</span><span class="n">field_grid</span><span class="o">.</span><span class="n">h5</span><span class="o">&gt;</span> <span class="p">[</span><span class="n">output_base</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">text</span><span class="p">]</span>
 </pre></div>

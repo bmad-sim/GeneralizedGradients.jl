@@ -285,17 +285,4 @@ function gg_to_bmad_curves(fit, meta)
   return cs, cc, c0c, npl, mmax, kmax
 end
 
-#---------------------------------------------------------------------------------------------------
-# Helper functions
-
-# Lossless, compact Float64 text: `repr` emits the shortest string that parses
-# back to the identical Float64 (Bmad's Fortran reader accepts the e-notation).
-# Without this, cancellation in B_s (which is a small difference of larger terms)
-# magnifies the rounding of a fixed-precision format.
-_gg_num(x::Real) = iszero(x) ? "0" : repr(float(x))
-
-# Peak |value| of a derivative tower's value column (j = 0), used for cutoffs.
-_peak(d, m) = (v = get(d, (m, 0), nothing); v === nothing ? 0.0 : maximum(abs, v))
-
-_fac(k::Integer) = k <= 1 ? 1.0 : prod(2.0:k)
 

@@ -66,7 +66,7 @@ and `meta` is a NamedTuple of the fit metadata:
 ## Write Field Table to Bmad
 
 ```
-write_bmad
+write_bmad_field_grid("gg_fit_result.h5"
 ```
 
 ## GG Coefficient Manipulation

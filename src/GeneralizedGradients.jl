@@ -6,7 +6,7 @@ module GeneralizedGradients
   include("struct.jl")
   include("gg_eval.jl")
   include("gg_fit.jl")
-  include("gg_to_bmad.jl")
+  include("write_bmad_gg_fit.jl")
   include("field_grid.jl")
 
   export FieldGridTable,

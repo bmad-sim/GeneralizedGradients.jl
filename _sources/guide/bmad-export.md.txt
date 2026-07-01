@@ -11,14 +11,14 @@ an `em_field`. Each element is anchored at its entrance
 
 ## Field grid → `grid_field`
 
-`write_bmad_field_grid` writes a field grid as a Bmad `grid_field`. Its `field`
+`write_bmad_field_grid_element` writes a field grid as a Bmad `grid_field`. Its `field`
 argument is either a `FieldGridTable` or the path to a `field_grid` HDF5 file:
 
 ```julia
 using GeneralizedGradients
-write_bmad_field_grid("field_grid.h5")                  # openPMD HDF5 grid (default)
-write_bmad_field_grid("field_grid.h5"; hdf5 = false)    # plain-text grid block
-write_bmad_field_grid(field)                             # from a FieldGridTable
+write_bmad_field_grid_element("field_grid.h5")                  # openPMD HDF5 grid (default)
+write_bmad_field_grid_element("field_grid.h5"; hdf5 = false)    # plain-text grid block
+write_bmad_field_grid_element(field)                             # from a FieldGridTable
 ```
 
 The reference frame is determined by the grid's own `g_ref`: non-zero gives an
@@ -31,7 +31,7 @@ either `<output_base>_grid.h5` (HDF5, the default) or `<output_base>_grid.bmad`
 From the shell:
 
 ```
-julia programs/run_write_bmad_field_grid.jl <field_grid.h5> [output_base] [--text]
+julia programs/run_write_bmad_field_grid_element.jl <field_grid.h5> [output_base] [--text]
 ```
 
 ## GG fit → `gen_grad_map`

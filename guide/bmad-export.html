@@ -256,12 +256,12 @@ an <code class="docutils literal notranslate"><span class="pre">em_field</span><
 (<code class="docutils literal notranslate"><span class="pre">ele_anchor_pt</span> <span class="pre">=</span> <span class="pre">beginning</span></code>).</p>
 <section id="field-grid-grid-field">
 <h2>Field grid → <code class="docutils literal notranslate"><span class="pre">grid_field</span></code><a class="headerlink" href="#field-grid-grid-field" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">write_bmad_field_grid</span></code> writes a field grid as a Bmad <code class="docutils literal notranslate"><span class="pre">grid_field</span></code>. Its <code class="docutils literal notranslate"><span class="pre">field</span></code>
+<p><code class="docutils literal notranslate"><span class="pre">write_bmad_field_grid_element</span></code> writes a field grid as a Bmad <code class="docutils literal notranslate"><span class="pre">grid_field</span></code>. Its <code class="docutils literal notranslate"><span class="pre">field</span></code>
 argument is either a <code class="docutils literal notranslate"><span class="pre">FieldGridTable</span></code> or the path to a <code class="docutils literal notranslate"><span class="pre">field_grid</span></code> HDF5 file:</p>
 <div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="k">using</span><span class="w"> </span><span class="n">GeneralizedGradients</span>
-<span class="n">write_bmad_field_grid</span><span class="p">(</span><span class="s">&quot;field_grid.h5&quot;</span><span class="p">)</span><span class="w">                  </span><span class="c"># openPMD HDF5 grid (default)</span>
-<span class="n">write_bmad_field_grid</span><span class="p">(</span><span class="s">&quot;field_grid.h5&quot;</span><span class="p">;</span><span class="w"> </span><span class="n">hdf5</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">)</span><span class="w">    </span><span class="c"># plain-text grid block</span>
-<span class="n">write_bmad_field_grid</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="w">                             </span><span class="c"># from a FieldGridTable</span>
+<span class="n">write_bmad_field_grid_element</span><span class="p">(</span><span class="s">&quot;field_grid.h5&quot;</span><span class="p">)</span><span class="w">                  </span><span class="c"># openPMD HDF5 grid (default)</span>
+<span class="n">write_bmad_field_grid_element</span><span class="p">(</span><span class="s">&quot;field_grid.h5&quot;</span><span class="p">;</span><span class="w"> </span><span class="n">hdf5</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">)</span><span class="w">    </span><span class="c"># plain-text grid block</span>
+<span class="n">write_bmad_field_grid_element</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="w">                             </span><span class="c"># from a FieldGridTable</span>
 </pre></div>
 </div>
 <p>The reference frame is determined by the grid’s own <code class="docutils literal notranslate"><span class="pre">g_ref</span></code>: non-zero gives an
@@ -270,7 +270,7 @@ argument is either a <code class="docutils literal notranslate"><span class="pre
 either <code class="docutils literal notranslate"><span class="pre">&lt;output_base&gt;_grid.h5</span></code> (HDF5, the default) or <code class="docutils literal notranslate"><span class="pre">&lt;output_base&gt;_grid.bmad</span></code>
 (plain text).</p>
 <p>From the shell:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">julia</span> <span class="n">programs</span><span class="o">/</span><span class="n">run_write_bmad_field_grid</span><span class="o">.</span><span class="n">jl</span> <span class="o">&lt;</span><span class="n">field_grid</span><span class="o">.</span><span class="n">h5</span><span class="o">&gt;</span> <span class="p">[</span><span class="n">output_base</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">text</span><span class="p">]</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">julia</span> <span class="n">programs</span><span class="o">/</span><span class="n">run_write_bmad_field_grid_element</span><span class="o">.</span><span class="n">jl</span> <span class="o">&lt;</span><span class="n">field_grid</span><span class="o">.</span><span class="n">h5</span><span class="o">&gt;</span> <span class="p">[</span><span class="n">output_base</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">text</span><span class="p">]</span>
 </pre></div>
 </div>
 </section>

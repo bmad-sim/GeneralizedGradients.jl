@@ -219,19 +219,18 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    _interp_gg_fit(fit, meta, s::Real) -> (fit::GGCoefs, meta)
+    _interp_gg_fit(fit, s::Real) -> fit::GGCoefs
 
 Take GG fit results `fit` which give the GG functions at a set of planes and
-return a similar `(fit, meta)` pair but with one plane: the GG coefficients for
-that plane are the interpolated GG coefficients at the given `s`-position. The
-`meta` is returned unchanged.
+return a similar `GGCoefs` but with one plane: the GG coefficients for that
+plane are the interpolated GG coefficients at the given `s`-position.
 
-- `fit`, `meta` — GG coefficients for all planes and the associated metadata.
+- `fit` — GG coefficients for all planes.
 
 Builds a single virtual plane at `s` by Hermite-interpolating every GG derivative
 tower from the two straddling grid planes (one-plane Taylor if only one plane).
 """
-function _interp_gg_fit(fit, meta, s::Real)
+function _interp_gg_fit(fit, s::Real)
   z  = fit.z_base
   P  = length(z)
   sq = float(s)
@@ -251,19 +250,20 @@ function _interp_gg_fit(fit, meta, s::Real)
   bs2 = _interp_m_dict(fit.bs, iL, iR, zL, zR, sq, single)
 
   fit2 = GGCoefs(; z_base = [sq], a = a2, b = b2, bs = bs2,
-                        m_max = fit.m_max, rms_plane = [NaN], g_ref = fit.g_ref)
-  return fit2, meta
+                        m_max = fit.m_max, rms_plane = [NaN], g_ref = fit.g_ref,
+                        origin = fit.origin, dz_grid = fit.dz_grid)
+  return fit2
 end
 
 #---------------------------------------------------------------------------------------------------
 
 """
-    _field_CB(fit, meta, ip::Integer) -> (CBx, CBy, CBs)
+    _field_CB(fit, ip::Integer) -> (CBx, CBy, CBs)
 
 Field-expansion coefficients `B_c(x,y,s) = Σ_{i,j} CB_{c,i,j}(s) xⁱ yʲ`.
 Returns full `_NMAX×_NMAX` arrays summed over the `a`, `b`, `bs` parts.
 """
-function _field_CB(fit, meta, ip::Integer)
+function _field_CB(fit, ip::Integer)
   g_ref = fit.g_ref
   aval(n, m) = (m >= 0 && haskey(fit.a, (n, m))) ? fit.a[(n, m)][ip] : 0.0
   bval(n, m) = (m >= 0 && haskey(fit.b, (n, m))) ? fit.b[(n, m)][ip] : 0.0

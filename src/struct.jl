@@ -123,6 +123,8 @@ Fields:
 - `m_max` — highest derivative order resolved (`2 * n_planes_add`).
 - `g_ref` — reference-frame bending strength = `1/bending_radius` [1/m] (`0` for a
   straight reference frame).
+- `origin` — `(x, y)` line about which the GG coefficients are computed.
+- `dz_grid` — spacing between base planes [m].
 """
 @kwdef mutable struct GGCoefs
   z_base::Vector{Float64} = Float64[]
@@ -133,4 +135,6 @@ Fields:
   rms_plane::Vector{Float64} = Float64[]
   m_max::Int = 0
   g_ref::Float64 = 0.0
+  origin::Vector{Float64} = [0.0, 0.0]   # (x, y) origin about which the generalized gradients coefs are computed
+  dz_grid::Float64 = 0.0                 # spacing between base planes [m]
 end

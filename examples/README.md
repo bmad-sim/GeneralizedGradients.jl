@@ -75,18 +75,18 @@ with Runge-Kutta tracking.
 ## Write GG coefs to Bmad
 
 ```
-write_bmad_gg_fit
+write_bmad_gg_fit(fit)
 ```
 
 ## GG Coefficient Manipulation
 
 field-expansion coefficients at a given s-position:
 ```
-julia> gg_coefficients_at_s(fit, meta, 0.0)
+julia> gg_coefficients_at_s(fit, 0.0)
 ```
 
 generalized-gradient coefficients (a, b, bs) at a grid plane index or at a given s-position:
 ```
-julia> gg_coefficients_at_plane(fit, meta, 1)      # at grid plane 1
-julia> gg_coefficients_at_s(fit, meta, 0.0) # at s = 0.0
+julia> gg_coefficients_at_plane(fit, 1)      # at grid plane 1
+julia> gg_coefficients_at_s(fit, 0.0) # at s = 0.0
 ```

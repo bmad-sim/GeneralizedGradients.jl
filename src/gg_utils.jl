@@ -7,8 +7,8 @@
 Load a `gg_fit` result HDF5 file (written by `write_gg_fit`). Returns a
 two-tuple whose first component is a `GGCoefs` struct holding the GG
 coefficient dictionaries `a`, `b`, `bs` (and `z_base`, `m_max`, `rms_plane`,
-`g_ref`), and whose second component is a NamedTuple of the associated fit
-metadata (`origin`, `dz_grid`, `n_planes_add`, `core_weight`,
+`g_ref`, `origin`, `dz_grid`), and whose second component is a NamedTuple of the
+associated fit-control metadata (`n_planes_add`, `core_weight`,
 `outer_plane_weight`). The `params` field of the returned struct is empty (the
 unknown list is not stored in the file).
 
@@ -26,10 +26,10 @@ function read_gg_fit(path::AbstractString)
                          bs        = _read_coef_group(f, "bs"; single = true),
                          m_max     = Int(read_attribute(f, "m_max")),
                          rms_plane = read(f["rms_plane"]),
-                         g_ref     = read_attribute(f, "g_ref"))
-    meta = (; origin  = read(f["origin"]),
-              dz_grid = read_attribute(f, "dz_grid"),
-              # Fit-control metadata, retained for reference / reproducibility.
+                         g_ref     = read_attribute(f, "g_ref"),
+                         origin    = read(f["origin"]),
+                         dz_grid   = read_attribute(f, "dz_grid"))
+    meta = (; # Fit-control metadata, retained for reference / reproducibility.
               n_planes_add       = read_attribute(f, "n_planes_add"),
               core_weight        = read_attribute(f, "core_weight"),
               outer_plane_weight = read_attribute(f, "outer_plane_weight"))
@@ -37,21 +37,17 @@ function read_gg_fit(path::AbstractString)
   end
 end
 
-# ---------------------------------------------------------------------------
-# Coefficient recursion: project a_n/b_n/b_s  ->  Bmad C_{m,α} derivative towers
-# ---------------------------------------------------------------------------
-
 #---------------------------------------------------------------------------------------------------
 
 """
-    write_bmad_gg_fit(fit::GGCoefs, meta; ele_name, output_base, cutoff) -> lattice_file_path
+    write_bmad_gg_fit(fit::GGCoefs; ele_name, output_base, cutoff) -> lattice_file_path
     write_bmad_gg_fit(input::AbstractString; output_base, cutoff) -> lattice_file_path
 
 Convert generalized-gradient (GG) coefficients produced by `gg_fit` into Bmad
 `gen_grad_map` format, producing a Bmad lattice element with the GG map attached.
 Returns the path of the lattice-element file.
 
-The GG fit is supplied either as a loaded result (`fit`, `meta` as returned by
+The GG fit is supplied either as a loaded `GGCoefs` struct (`fit`, as returned by
 `read_gg_fit`) or as the path to a gg_fit HDF5 file (output of `write_gg_fit`),
 which is read with `read_gg_fit`.
 
@@ -137,18 +133,18 @@ function write_bmad_gg_fit(input::AbstractString;
                 output_base::AbstractString =
                     joinpath(dirname(input), first(splitext(basename(input)))),
                 cutoff::Real = 0.0)
-  fit, meta = read_gg_fit(input)
-  return write_bmad_gg_fit(fit, meta; ele_name = basename(output_base), output_base, cutoff)
+  fit, _ = read_gg_fit(input)
+  return write_bmad_gg_fit(fit; ele_name = basename(output_base), output_base, cutoff)
 end
 
-function write_bmad_gg_fit(fit::GGCoefs, meta;
+function write_bmad_gg_fit(fit::GGCoefs;
                 ele_name::AbstractString = "gen_grad_ele",
                 output_base::AbstractString = ele_name,
                 cutoff::Real = 0.0)
 
   g_ref = fit.g_ref
-  cs, cc, c0c, npl, mmax, kmax = gg_to_bmad_curves(fit, meta)
-  dz = meta.dz_grid
+  cs, cc, c0c, npl, mmax, kmax = gg_to_bmad_curves(fit)
+  dz = fit.dz_grid
   L  = (npl - 1) * dz
   is_bend = g_ref != 0
 
@@ -184,7 +180,7 @@ function write_bmad_gg_fit(fit::GGCoefs, meta;
     println(io, "  field_type = magnetic,")
     println(io, "  ele_anchor_pt = beginning,")
     is_bend && println(io, "  curved_ref_frame = T,")
-    println(io, "  r0 = (", _gg_num(meta.origin[1]), ", ", _gg_num(meta.origin[2]), ", 0),")
+    println(io, "  r0 = (", _gg_num(fit.origin[1]), ", ", _gg_num(fit.origin[2]), ", 0),")
     println(io, "  dz = ", _gg_num(dz), ",")
 
     # Solenoid first (m = 0, cos), then normal+skew for each m.
@@ -228,10 +224,10 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    gg_to_bmad_curves(fit, meta) -> (cs, cc, c0c, nplanes, m_max, kmax)
+    gg_to_bmad_curves(fit) -> (cs, cc, c0c, nplanes, m_max, kmax)
 
 Compute the Bmad azimuthal-harmonic GG derivative towers from a loaded
-`gg_fit` result (`fit`, `meta` as returned by `read_gg_fit`). Returns
+`gg_fit` result (`fit`, the `GGCoefs` struct returned by `read_gg_fit`). Returns
 
 ```
 cs[(m,j)]  :: Vector  -- C^{[j]}_{m,sin}(plane)  (normal multipole m)
@@ -241,7 +237,7 @@ c0c[j]     :: Vector  -- C^{[j]}_{0,cos}(plane)  (solenoid, j ≥ 1)
 
 each a per-plane vector, for `j = 0 … m_max`.
 """
-function gg_to_bmad_curves(fit, meta)
+function gg_to_bmad_curves(fit)
   mmax = fit.m_max
   npl  = length(fit.z_base)
   kmax = maximum(first.(keys(fit.b)))
@@ -302,7 +298,7 @@ function gg_to_bmad_curves(fit, meta)
     val = Z()
     bs0 = bsget(0)                          # b_s = C'_{0,c}
     bs1 = bsget(1)                          # b_s'
-    dz  = meta.dz_grid
+    dz  = fit.dz_grid
     for i in 2:npl
       # ∫ over one plane of the cubic-Hermite of C'_{0,c} = b_s.
       incr = 0.5 * dz * (bs0[i-1] + bs0[i])

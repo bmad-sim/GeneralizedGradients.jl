@@ -277,12 +277,12 @@ either <code class="docutils literal notranslate"><span class="pre">&lt;output_b
 <section id="gg-fit-gen-grad-map">
 <h2>GG fit → <code class="docutils literal notranslate"><span class="pre">gen_grad_map</span></code><a class="headerlink" href="#gg-fit-gen-grad-map" title="Link to this heading">¶</a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">write_bmad_gg_fit</span></code> converts a GG fit into a Bmad <code class="docutils literal notranslate"><span class="pre">gen_grad_map</span></code>. Its input is
-either a GG fit file (the output of <code class="docutils literal notranslate"><span class="pre">write_gg_fit</span></code>) or a loaded fit (<code class="docutils literal notranslate"><span class="pre">fit,</span> <span class="pre">meta</span></code>
-as returned by <code class="docutils literal notranslate"><span class="pre">read_gg_fit</span></code>):</p>
+either a GG fit file (the output of <code class="docutils literal notranslate"><span class="pre">write_gg_fit</span></code>) or a loaded fit (the <code class="docutils literal notranslate"><span class="pre">fit</span></code>
+<code class="docutils literal notranslate"><span class="pre">GGCoefs</span></code> struct returned by <code class="docutils literal notranslate"><span class="pre">read_gg_fit</span></code>):</p>
 <div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="k">using</span><span class="w"> </span><span class="n">GeneralizedGradients</span>
 <span class="n">write_bmad_gg_fit</span><span class="p">(</span><span class="s">&quot;gg_fit_result.h5&quot;</span><span class="p">)</span>
 <span class="n">write_bmad_gg_fit</span><span class="p">(</span><span class="s">&quot;gg_fit_result.h5&quot;</span><span class="p">;</span><span class="w"> </span><span class="n">cutoff</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">1e-6</span><span class="p">)</span><span class="w">   </span><span class="c"># prune negligible multipoles</span>
-<span class="n">write_bmad_gg_fit</span><span class="p">(</span><span class="n">fit</span><span class="p">,</span><span class="w"> </span><span class="n">meta</span><span class="p">)</span><span class="w">                            </span><span class="c"># from a loaded fit</span>
+<span class="n">write_bmad_gg_fit</span><span class="p">(</span><span class="n">fit</span><span class="p">)</span><span class="w">                                  </span><span class="c"># from a loaded fit</span>
 </pre></div>
 </div>
 <p>Two files are written: <code class="docutils literal notranslate"><span class="pre">&lt;output_base&gt;.bmad</span></code> (the lattice element) and

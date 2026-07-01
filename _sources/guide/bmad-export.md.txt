@@ -37,14 +37,14 @@ julia programs/run_write_bmad_field_grid_element.jl <field_grid.h5> [output_base
 ## GG fit → `gen_grad_map`
 
 `write_bmad_gg_fit` converts a GG fit into a Bmad `gen_grad_map`. Its input is
-either a GG fit file (the output of `write_gg_fit`) or a loaded fit (`fit, meta`
-as returned by `read_gg_fit`):
+either a GG fit file (the output of `write_gg_fit`) or a loaded fit (the `fit`
+`GGCoefs` struct returned by `read_gg_fit`):
 
 ```julia
 using GeneralizedGradients
 write_bmad_gg_fit("gg_fit_result.h5")
 write_bmad_gg_fit("gg_fit_result.h5"; cutoff = 1e-6)   # prune negligible multipoles
-write_bmad_gg_fit(fit, meta)                            # from a loaded fit
+write_bmad_gg_fit(fit)                                  # from a loaded fit
 ```
 
 Two files are written: `<output_base>.bmad` (the lattice element) and

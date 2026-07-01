@@ -252,21 +252,21 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
 
       # String input, hdf5 = true (default).
       stem = joinpath(dir, "grid_out")
-      ele = quiet(() -> write_bmad_field_grid_element(gpath; output_base = stem))
+      ele, gfile = quiet(() -> write_bmad_field_grid_element(gpath; output_base = stem))
       @test ele == stem * ".bmad" && isfile(ele)
-      @test isfile(stem * "_grid.h5")
+      @test gfile == stem * "_grid.h5" && isfile(gfile)
       @test occursin("em_field", read(ele, String))
 
       # String input, text grid (hdf5 = false).
       base = joinpath(dir, "out_text")
-      ele2 = quiet(() -> write_bmad_field_grid_element(gpath; output_base = base, hdf5 = false))
-      @test isfile(base * "_grid.bmad")
+      ele2, gfile2 = quiet(() -> write_bmad_field_grid_element(gpath; output_base = base, hdf5 = false))
+      @test gfile2 == base * "_grid.bmad" && isfile(gfile2)
       @test occursin("em_field", read(ele2, String))
 
       # FieldGridTable input (curved frame -> sbend).
       bfield = make_field(g_ref = 0.4)
       base3 = joinpath(dir, "bend")
-      ele3 = quiet(() -> write_bmad_field_grid_element(bfield; output_base = base3))
+      ele3, gfile3 = quiet(() -> write_bmad_field_grid_element(bfield; output_base = base3))
       @test isfile(base3 * ".bmad") && isfile(base3 * "_grid.h5")
       @test occursin("sbend", read(base3 * ".bmad", String))
     end

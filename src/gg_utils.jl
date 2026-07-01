@@ -1,14 +1,3 @@
-# ---------------------------------------------------------------------------
-# gg_utils.jl
-#
-# Utilities for generalized-gradient (GG) fit results:
-#  - `read_gg_fit` loads a gg_fit HDF5 file (written by `write_gg_fit`).
-#  - `write_bmad_gg_fit` converts GG coefficients produced by `gg_fit` into Bmad
-#    `gen_grad_map` format (a lattice element with the GG map attached);
-#    programs/run_write_bmad_gg_fit.jl is a shell wrapper.
-# The underscore-prefixed helper functions used here live in src/helpers.jl.
-# ---------------------------------------------------------------------------
-
 #---------------------------------------------------------------------------------------------------
 # read_gg_fit
 

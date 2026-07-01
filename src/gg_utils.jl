@@ -248,9 +248,9 @@ function gg_to_bmad_curves(fit)
   aget(k, j)  = (0 <= j <= mmax && haskey(fit.a, (k, j)))  ? fit.a[(k, j)]  : nothing
   bsget(j)    = (0 <= j <= mmax && haskey(fit.bs, j))      ? fit.bs[j]      : nothing
 
-  Wn(k, n) = (-1.0)^n * _fac(k - 2n) * (k - 2n) / (4.0^n * _fac(n) * _fac(k - n))
-  Wc(k, n) = (-1.0)^n * _fac(k - 2n) * k         / (4.0^n * _fac(n) * _fac(k - n))
-  Us(k)    = (-1.0)^(k ÷ 2) * k / (4.0^(k ÷ 2) * _fac(k ÷ 2)^2)
+  Wn(k, n) = (-1.0)^n * factorial(k - 2n) * (k - 2n) / (4.0^n * factorial(n) * factorial(k - n))
+  Wc(k, n) = (-1.0)^n * factorial(k - 2n) * k         / (4.0^n * factorial(n) * factorial(k - n))
+  Us(k)    = (-1.0)^(k ÷ 2) * k / (4.0^(k ÷ 2) * factorial(k ÷ 2)^2)
 
   cs = Dict{Tuple{Int,Int},Vector{Float64}}()   # normal (sin)
   cc = Dict{Tuple{Int,Int},Vector{Float64}}()   # skew (cos)
@@ -263,10 +263,10 @@ function gg_to_bmad_curves(fit)
       n = 1
       while k - 2n >= 1
         lo = get(cs, (k - 2n, j + 2n), nothing)
-        lo !== nothing && (acc .-= _fac(k - 1) * Wn(k, n) .* lo)
+        lo !== nothing && (acc .-= factorial(k - 1) * Wn(k, n) .* lo)
         n += 1
       end
-      cs[(k, j)] = acc ./ _fac(k)
+      cs[(k, j)] = acc ./ factorial(k)
     end
     # Skew family.
     aj = aget(k, j)
@@ -275,14 +275,14 @@ function gg_to_bmad_curves(fit)
       n = 1
       while k - 2n >= 1
         lo = get(cc, (k - 2n, j + 2n), nothing)
-        lo !== nothing && (acc .-= _fac(k - 1) * Wc(k, n) .* lo)
+        lo !== nothing && (acc .-= factorial(k - 1) * Wc(k, n) .* lo)
         n += 1
       end
       if iseven(k)
         bsd = bsget(k + j - 1)          # = C^{[k+j]}_{0,c}
-        bsd !== nothing && (acc .-= _fac(k - 1) * Us(k) .* bsd)
+        bsd !== nothing && (acc .-= factorial(k - 1) * Us(k) .* bsd)
       end
-      cc[(k, j)] = acc ./ _fac(k)
+      cc[(k, j)] = acc ./ factorial(k)
     end
   end
 

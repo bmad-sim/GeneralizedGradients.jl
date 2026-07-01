@@ -1,0 +1,11 @@
+! Bmad lattice element with attached generalized-gradient map.
+! Generated from gg_fit GG coefficients by write_bmad_gg_fit.
+!
+! Reference curve is straight => em_field.
+
+gen_grad_ele: em_field,
+  l = 0.055,
+  field_calc = fieldmap,
+  tracking_method = runge_kutta,
+  mat6_calc_method = tracking,
+  gen_grad_map = call::gen_grad_ele_gg.bmad

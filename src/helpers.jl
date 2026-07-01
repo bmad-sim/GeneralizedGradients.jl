@@ -312,15 +312,6 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    _ffact(k::Int) -> Float64
-
-Float factorial (`m_max` is small, but keep it overflow-proof).
-"""
-_ffact(k::Int) = k <= 1 ? 1.0 : prod(2.0:float(k))
-
-#---------------------------------------------------------------------------------------------------
-
-"""
     _gg_num(x::Real) -> String
 
 Lossless, compact `Float64` text: `repr` emits the shortest string that parses
@@ -338,10 +329,6 @@ _gg_num(x::Real) = iszero(x) ? "0" : repr(float(x))
 Peak `|value|` of a derivative tower's value column (`j = 0`), used for cutoffs.
 """
 _peak(d, m) = (v = get(d, (m, 0), nothing); v === nothing ? 0.0 : maximum(abs, v))
-
-#---------------------------------------------------------------------------------------------------
-
-_fac(k::Integer) = k <= 1 ? 1.0 : prod(2.0:k)
 
 #---------------------------------------------------------------------------------------------------
 

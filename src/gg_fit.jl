@@ -248,7 +248,7 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
             for mm in 0:j
               grid = get(CB, (comp, typ, n, mm), nothing)
               grid === nothing && continue
-              val += grid[iix, iiy] * dz^(j - mm) / _ffact(j - mm)
+              val += grid[iix, iiy] * dz^(j - mm) / factorial(j - mm)
             end
             A[row, col] = val
           end

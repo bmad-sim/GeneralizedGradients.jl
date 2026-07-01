@@ -66,7 +66,16 @@ and `meta` is a NamedTuple of the fit metadata:
 ## Write Field Table to Bmad
 
 ```
-write_bmad_field_grid("gg_fit_result.h5"
+write_bmad_field_grid_element("wsnk_fieldmap_reduced.h5")
+```
+This function creates two files: An HDF5 field table, called in this case `fieldmap_ele_grid.h5`,
+and a Bmad lattice, in this case called `fieldmap_ele.bmad` with a single element using the grid
+with Runge-Kutta tracking.
+
+## Write GG coefs to Bmad
+
+```
+write_bmad_gg_fit
 ```
 
 ## GG Coefficient Manipulation

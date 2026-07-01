@@ -34,7 +34,7 @@ module GeneralizedGradients
        gg_fit_show_results,
        write_gg_fit,
        read_gg_fit,
-       write_bmad_field_grid,
+       write_bmad_field_grid_element,
        write_bmad_gg_fit,
        write_field_grid,
        read_field_grid_hdf5,

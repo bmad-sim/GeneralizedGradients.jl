@@ -1,5 +1,5 @@
 """
-    run_write_bmad_field_grid
+    run_write_bmad_field_grid_element
 
 Read a 3D field grid and write it out in Bmad `grid_field` format, producing a
 Bmad lattice element with the field grid attached.
@@ -7,7 +7,7 @@ Bmad lattice element with the field grid attached.
 ## Usage
 
 Run with command:
-  julia programs/run_write_bmad_field_grid.jl <field_grid.h5> [output_base] [--text]
+  julia programs/run_write_bmad_field_grid_element.jl <field_grid.h5> [output_base] [--text]
 
   <field_grid.h5>    Input field-grid HDF5 file (read by `read_field_grid_hdf5`).
   [output_base]      Base name for the output files. Default: input name without
@@ -18,17 +18,17 @@ Run with command:
 The reference-curve bending strength is taken from the field grid's `g_ref`;
 non-zero => the element is written as an `sbend`.
 
-See the documentation for the `write_bmad_field_grid` function for more details.
+See the documentation for the `write_bmad_field_grid_element` function for more details.
 """
 
 using OffsetArrays, Printf, GeneralizedGradients
 
 text = "--text" in ARGS
 args = filter(!startswith("--"), ARGS)
-isempty(args) && error("Usage: julia programs/run_write_bmad_field_grid.jl <field_grid.h5> [output_base] [--text]")
+isempty(args) && error("Usage: julia programs/run_write_bmad_field_grid_element.jl <field_grid.h5> [output_base] [--text]")
 
 input = args[1]
 output_base = length(args) >= 2 ? args[2] :
               joinpath(dirname(input), first(splitext(basename(input))))
 
-write_bmad_field_grid(input; ele_name = basename(output_base), output_base, hdf5 = !text)
+write_bmad_field_grid_element(input; ele_name = basename(output_base), output_base, hdf5 = !text)

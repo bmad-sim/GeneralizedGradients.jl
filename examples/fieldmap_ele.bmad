@@ -1,0 +1,10 @@
+! Bmad lattice element with attached field grid.
+! Generated from write_bmad_field_grid_element.
+!
+
+fieldmap_ele: em_field,
+  l = 0.055,
+  field_calc = fieldmap,
+  tracking_method = runge_kutta,
+  mat6_calc_method = tracking,
+  grid_field = call::fieldmap_ele_grid.h5

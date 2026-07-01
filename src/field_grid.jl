@@ -2,27 +2,20 @@
 # Bmad grid_field export
 #
 # Read a 3D field grid and write it out in Bmad `grid_field` format (a lattice
-# element with the field grid attached). `write_bmad_field_grid` is the public
-# function; programs/run_write_bmad_field_grid.jl is a shell wrapper.
+# element with the field grid attached). `write_bmad_field_grid_element` is the public
+# function; programs/run_write_bmad_field_grid_element.jl is a shell wrapper.
 # The underscore-prefixed helper functions used here live in src/helpers.jl.
 # ===========================================================================
 
 """
-    write_bmad_field_grid(field; ele_name, output_base, field_scale, hdf5)
+    write_bmad_field_grid_element(field::Union{AbstractString,FieldGridTable};
+                               ele_name::AbstractString = "fieldmap_ele",
+                               output_base::AbstractString = ele_name,
+                               field_scale::Real = 1.0,
+                               hdf5::Bool = true) -> (ele_file, grid_file)
 
-Write a field grid table in Bmad `grid_field` format (a lattice element with the field grid attached).
-Also write the field grid to a file in HDF5 or ASCII format.
-
-- `field` — either a `FieldGridTable` (see `read_field_grid_hdf5`) or a string
-  path to a Bmad openPMD `field_grid` HDF5 file, which is read with
-  `read_field_grid_hdf5`.
-
-Keyword arguments:
-- `ele_name`    — name of the Bmad lattice element. Default `"fieldmap_ele"`.
-- `output_base` — base path for the two output files. Default `ele_name`.
-- `field_scale` — overall field scale factor written to the field grid. Default `1`.
-- `hdf5`        — if true (the default), write the field grid as an openPMD HDF5 file
-  (`<output_base>_grid.h5`) instead of a plain-text block.
+Create a file with a single Bmad lattice element that uses the field grid table for Runge-Kutta
+tracking. Also write the field grid to a file in HDF5 or ASCII format.
 
 Two files are written: `<output_base>.bmad` (the lattice element) and the field
 grid (`<output_base>_grid.h5` or `_grid.bmad`). The reference-curve bending
@@ -31,8 +24,21 @@ the element is written as an `sbend`, otherwise an `em_field`. The grid is
 anchored at the entrance of the element (`ele_anchor_pt = beginning`) with length
 `L = dz*(nz-1)`; the field-grid `r0` keeps the transverse offset `(x0, y0)` of the
 input grid and shifts z so the first grid plane sits at the element entrance.
+
+## Input:
+- `field`       - Field table or name of an HDF5 field table file.
+- `ele_name`    — name of the Bmad lattice element. Default `"fieldmap_ele"`.
+- `output_base` — base path for the two output files. Default `ele_name`.
+- `field_scale` — overall field scale factor written to the field grid. Default `1`.
+- `hdf5`        — if true (the default), write the field grid as an openPMD HDF5 file
+  (`<output_base>_grid.h5`) instead of a plain-text block.
+
+## Output
+
+
+
 """
-function write_bmad_field_grid(field::Union{AbstractString,FieldGridTable};
+function write_bmad_field_grid_element(field::Union{AbstractString,FieldGridTable};
                                ele_name::AbstractString = "fieldmap_ele",
                                output_base::AbstractString = ele_name,
                                field_scale::Real = 1.0,
@@ -77,25 +83,24 @@ function write_bmad_field_grid(field::Union{AbstractString,FieldGridTable};
   # ---- Write the lattice element ---------------------------------------
   open(ele_file, "w") do io
     println(io, "! Bmad lattice element with attached field grid.")
-    println(io, "! Generated from write_bmad_field_grid.")
-    println(io, "!")
+    println(io, "! Generated from write_bmad_field_grid_element.")
+    println(io)
+
     if is_bend
-      println(io)
       println(io, ele_name, ": sbend,")
-      println(io, "  g = ", _grid_num(g_ref), ",")
+      println(io, "  g = ", string(g_ref), ",")
     else
-      println(io)
       println(io, ele_name, ": em_field,")
     end
 
-    println(io, "  l = ", _grid_num(L), ",")
+    println(io, "  l = ", string(L), ",")
     println(io, "  field_calc = fieldmap,")
     println(io, "  tracking_method = runge_kutta,")
     println(io, "  mat6_calc_method = tracking,")
     println(io, "  grid_field = call::", grid_name)
   end
 
-  return ele_file
+  return ele_file, grid_file
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -165,22 +170,20 @@ end
 # GeneralizedGradients.jl.
 
 # ---------------------------------------------------------------------------
-# Write
-# ---------------------------------------------------------------------------
+# write_field_grid_hdf5
 
 """
-    write_field_grid_hdf5(path, fg::FieldGridTable)
+    write_field_grid_hdf5(hdf5_output_file::AbstractString, fg::FieldGridTable)
 
 Write a `FieldGridTable` as an openPMD HDF5 `field_grid` file matching Bmad's
-`hdf5_write_grid_field` (geometry = xyz).  The `fg.magnetic` and/or `fg.electric`
-OffsetArrays are indexed `(ix_lo:ix_hi, iy_lo:iy_hi, iz_lo:iz_hi)` with each
-element a `[Bx,By,Bz]` 3-vector; an empty array means that field type is omitted.
-`gridLowerBound` is taken from the array's index ranges (the grids are not assumed
-to start at zero) and `fg.r0` is written as `gridOriginOffset`, so a grid point
-`(ix,iy,iz)` is at `dr .* (ix,iy,iz) + r0` relative to the anchor.  A non-zero
-`fg.g_ref` sets `gridCurvatureRadius = 1/g_ref` so Bmad enables `curved_ref_frame`.
+`hdf5_write_grid_field` with `geometry = xyz`. 
+
+## Input
+
+- `hdf5_output_file`  -- Output file name.
+- `fg`                -- Field grid table.
 """
-function write_field_grid_hdf5(path::AbstractString, fg::FieldGridTable)
+function write_field_grid_hdf5(hdf5_output_file::AbstractString, fg::FieldGridTable)
   has_mag = !isempty(fg.magnetic)
   has_elec = !isempty(fg.electric)
   (has_mag || has_elec) ||
@@ -190,7 +193,7 @@ function write_field_grid_hdf5(path::AbstractString, fg::FieldGridTable)
   lb = (first(ax[1]), first(ax[2]), first(ax[3]))
   nx, ny, nz = length(ax[1]), length(ax[2]), length(ax[3])
 
-  h5open(path, "w") do f
+  h5open(hdf5_output_file, "w") do f
     attributes(f)["dataType"]          = "Bmad:grid_field"
     attributes(f)["openPMD"]           = "2.0.0"
     attributes(f)["openPMDextension"]  = "BeamPhysics;SpeciesType"
@@ -223,7 +226,7 @@ function write_field_grid_hdf5(path::AbstractString, fg::FieldGridTable)
     has_mag  && _write_field_group(g1, "magneticField", fg.magnetic, _DIM_TESLA, "Tesla")
     has_elec && _write_field_group(g1, "electricField", fg.electric, _DIM_VPERM, "V/m")
   end
-  return path
+  return hdf5_output_file
 end
 
 # --------------------------------------------------------------------------------------------------

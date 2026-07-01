@@ -487,16 +487,6 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-  _grid_num(x::Real) -> String
-
-Format a real for a Bmad lattice file: compact but lossless. `iszero` guard
-avoids printing a signed "-0".
-"""
-_grid_num(x::Real) = iszero(x) ? "0" : @sprintf("%.15g", float(x))
-
-#---------------------------------------------------------------------------------------------------
-
-"""
     _write_field_grid_text(path, mag, r0, dr, is_bend, field_scale)
 
 Write the plain-text field-grid block from an (ix, iy, iz) OffsetArray of
@@ -511,14 +501,14 @@ function _write_field_grid_text(path, mag, r0, dr, is_bend, field_scale)
     println(io, "  field_type = magnetic,")
     println(io, "  ele_anchor_pt = beginning,")
     is_bend && println(io, "  curved_ref_frame = T,")
-    field_scale != 1 && println(io, "  field_scale = ", _grid_num(field_scale), ",")
-    println(io, "  r0 = (", _grid_num(r0[1]), ", ", _grid_num(r0[2]), ", ", _grid_num(r0[3]), "),")
-    println(io, "  dr = (", _grid_num(dr[1]), ", ", _grid_num(dr[2]), ", ", _grid_num(dr[3]), "),")
+    field_scale != 1 && println(io, "  field_scale = ", string(field_scale), ",")
+    println(io, "  r0 = (", string(r0[1]), ", ", string(r0[2]), ", ", string(r0[3]), "),")
+    println(io, "  dr = (", string(dr[1]), ", ", string(dr[2]), ", ", string(dr[3]), "),")
     println(io, "  {")
     for iz in ax[3], iy in ax[2], ix in ax[1]
       B = mag[ix, iy, iz]
       @printf(io, "    %d %d %d: %s %s %s,\n",
-          ix, iy, iz, _grid_num(B[1]), _grid_num(B[2]), _grid_num(B[3]))
+          ix, iy, iz, string(B[1]), string(B[2]), string(B[3]))
     end
     println(io, "  }")
     println(io, "}")

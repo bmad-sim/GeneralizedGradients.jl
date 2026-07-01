@@ -44,8 +44,9 @@ end
 # can exercise finite curvature g_ref, which the example file (g_ref = 0) does not.
 synth(z_base, a, b, bs, g_ref; m_max, dz_grid) = (
   GGCoefs(; z_base = collect(float.(z_base)), a, b, bs,
-                 m_max, rms_plane = fill(NaN, length(z_base)), g_ref),
-  (; origin = [0.0, 0.0], dz_grid))
+                 m_max, rms_plane = fill(NaN, length(z_base)), g_ref,
+                 origin = [0.0, 0.0], dz_grid),
+  (;))
 
 const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.007, 0.0))
 
@@ -54,11 +55,8 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
   @testset "read_gg_fit" begin
     fit, meta = read_gg_fit(EXAMPLE)
     @test fit isa GGCoefs
-    for k in (:z_base, :a, :b, :bs, :m_max, :rms_plane, :g_ref)
+    for k in (:z_base, :a, :b, :bs, :m_max, :rms_plane, :g_ref, :origin, :dz_grid)
       @test hasproperty(fit, k)
-    end
-    for k in (:origin, :dz_grid)
-      @test hasproperty(meta, k)
     end
     @test length(fit.z_base) == length(fit.rms_plane)
     @test fit.a isa Dict && fit.b isa Dict && fit.bs isa Dict
@@ -67,8 +65,8 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
   @testset "curl(A) == B at grid planes (example, g_ref=0)" begin
     fit, meta = read_gg_fit(EXAMPLE)
     for ip in 1:length(fit.z_base), (x, y) in PTS
-      B, A, dA = field_and_potential_evaluate(fit, meta, ip, x, y)
-      Bc = curl_from(A, dA, x - meta.origin[1], fit.g_ref)
+      B, A, dA = field_and_potential_evaluate(fit, ip, x, y)
+      Bc = curl_from(A, dA, x - fit.origin[1], fit.g_ref)
       @test maximum(abs, B .- Bc) < 1e-12
     end
   end
@@ -82,7 +80,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
     vbs = Dict(k => [v] for (k, v) in bs)
     fit, meta = synth([0.0], va, vb, vbs, 0.6; m_max = 2, dz_grid = 0.1)
     for (x, y) in PTS
-      B, A, dA = field_and_potential_evaluate(fit, meta, 1, x, y)
+      B, A, dA = field_and_potential_evaluate(fit, 1, x, y)
       Bc = curl_from(A, dA, x, fit.g_ref)
       @test maximum(abs, B .- Bc) < 1e-12
     end
@@ -109,7 +107,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
 
   @testset "curl(A) == B, multi-plane (g_ref=0.5)" begin
     for ip in 1:length(zg), (x, y) in PTS
-      B, A, dA = field_and_potential_evaluate(fitM, metaM, ip, x, y)
+      B, A, dA = field_and_potential_evaluate(fitM, ip, x, y)
       Bc = curl_from(A, dA, x, fitM.g_ref)
       @test maximum(abs, B .- Bc) < 1e-12
     end
@@ -117,10 +115,10 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
 
   @testset "∂A/∂s matches finite difference" begin
     ip = 6; sc = zg[ip]; xq, yq = 0.006, -0.004
-    _, _, dA = field_and_potential_evaluate(fitM, metaM, ip, xq, yq)
+    _, _, dA = field_and_potential_evaluate(fitM, ip, xq, yq)
     δ = 1e-5
-    _, Ap, _ = field_and_potential_evaluate_at(fitM, metaM, xq, yq, sc + δ)
-    _, Am, _ = field_and_potential_evaluate_at(fitM, metaM, xq, yq, sc - δ)
+    _, Ap, _ = field_and_potential_evaluate_at(fitM, xq, yq, sc + δ)
+    _, Am, _ = field_and_potential_evaluate_at(fitM, xq, yq, sc - δ)
     dAs_fd = (Ap .- Am) ./ (2δ)
     @test maximum(abs, dA[:, 3] .- dAs_fd) < 1e-6
   end
@@ -128,7 +126,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
   @testset "gg_coefficients_at_plane matches direct indexing" begin
     fit, meta = read_gg_fit(EXAMPLE)
     ip = 3
-    a, b, bs = gg_coefficients_at_plane(fit, meta, ip)
+    a, b, bs = gg_coefficients_at_plane(fit, ip)
     @test a isa Dict{Tuple{Int,Int},Float64}
     @test bs isa Dict{Int,Float64}
     for (nm, v) in fit.a; @test a[nm] == v[ip]; end
@@ -140,16 +138,16 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
     fit, meta = read_gg_fit(EXAMPLE)
     ip = 4; s = fit.z_base[ip]
 
-    a, b, bs = gg_coefficients_at_plane(fit, meta, ip)
-    as, bsd, bss = gg_coefficients_at_s(fit, meta, s)
+    a, b, bs = gg_coefficients_at_plane(fit, ip)
+    as, bsd, bss = gg_coefficients_at_s(fit, s)
     @test as == a && bsd == b && bss == bs
 
-    CBx, CBy, CBs = field_coefficients_at_plane(fit, meta, ip)
-    CBxs, CBys, CBss = field_coefficients_at_s(fit, meta, s)
+    CBx, CBy, CBs = field_coefficients_at_plane(fit, ip)
+    CBxs, CBys, CBss = field_coefficients_at_s(fit, s)
     @test CBxs == CBx && CBys == CBy && CBss == CBs
 
-    B, A, dA = field_and_potential_evaluate(fit, meta, ip, 0.004, 0.003)
-    Bs, As, dAs = field_and_potential_evaluate_at(fit, meta, 0.004, 0.003, s)
+    B, A, dA = field_and_potential_evaluate(fit, ip, 0.004, 0.003)
+    Bs, As, dAs = field_and_potential_evaluate_at(fit, 0.004, 0.003, s)
     @test Bs ≈ B && As ≈ A && dAs ≈ dA
   end
 
@@ -172,7 +170,7 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
       @test out == p.output_file && isfile(out)
       fit, meta = read_gg_fit(out)
       @test fit.m_max == res.m_max
-      @test meta.dz_grid ≈ field.dr[3]
+      @test fit.dz_grid ≈ field.dr[3]
       @test length(fit.z_base) == length(res.z_base)
       @test Set(keys(fit.a)) == Set(keys(res.a))
       @test Set(keys(fit.bs)) == Set(keys(res.bs))
@@ -282,14 +280,14 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
       @test occursin("em_field", read(ele, String))
 
       fit, meta = read_gg_fit(EXAMPLE)
-      cs, cc, c0c, npl, mmax, kmax = GeneralizedGradients.gg_to_bmad_curves(fit, meta)
+      cs, cc, c0c, npl, mmax, kmax = GeneralizedGradients.gg_to_bmad_curves(fit)
       @test npl == length(fit.z_base)
       @test mmax == fit.m_max
       @test kmax >= 1
 
-      # In-memory (fit, meta) method writes the same element.
+      # In-memory GGCoefs method writes the same element.
       basem = joinpath(dir, "gg_mem")
-      elem = write_bmad_gg_fit(fit, meta; output_base = basem)
+      elem = write_bmad_gg_fit(fit; output_base = basem)
       @test elem == basem * ".bmad" && isfile(elem) && isfile(basem * "_gg.bmad")
 
       # Curved reference (g_ref ≠ 0) with a solenoid term: fit a synthetic field,

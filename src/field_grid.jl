@@ -34,9 +34,7 @@ input grid and shifts z so the first grid plane sits at the element entrance.
   (`<output_base>_grid.h5`) instead of a plain-text block.
 
 ## Output
-
-
-
+- `(ele_file, grid_file)` - Tuple of file names.
 """
 function write_bmad_field_grid_element(field::Union{AbstractString,FieldGridTable};
                                ele_name::AbstractString = "fieldmap_ele",
@@ -106,18 +104,18 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    write_field_grid(path, fg::FieldGridTable)
+    write_field_grid(output_file::AbstractString, fg::FieldGridTable)
 
-Write a `FieldGridTable`.  If `path` ends in `.h5`/`.hdf5` it is written as a
+Write a `FieldGridTable`.  If `output_file` ends in `.h5`/`.hdf5` it is written as a
 Bmad openPMD `field_grid` HDF5 file (`write_field_grid_hdf5`, readable by Bmad);
 otherwise it is written as a Julia source file (like `ags-snakes/wsnk_fieldmap.jl`)
 that defines `fg` when `include`d.
 """
-function write_field_grid(path::AbstractString, fg::FieldGridTable)
-  _is_hdf5_path(path) && return write_field_grid_hdf5(path, fg)
+function write_field_grid(output_file::AbstractString, fg::FieldGridTable)
+  _is_hdf5_path(output_file) && return write_field_grid_hdf5(output_file, fg)
   ndims(fg.magnetic) == 3 ||
     error("fg.magnetic must be a 3D (ix, iy, iz) array of [Bx,By,Bz] 3-vectors.")
-  open(path, "w") do io
+  open(output_file, "w") do io
     println(io, "# Field grid for GeneralizedGradients. `include` this file to define `fg`.")
     println(io, "# A point fg.magnetic[ix, iy, iz] is at (x, y, z) = r0 + dr .* (ix, iy, iz)")
     println(io)
@@ -137,7 +135,7 @@ function write_field_grid(path::AbstractString, fg::FieldGridTable)
     _write_field_component_jl(io, "magnetic", fg.magnetic)
     isempty(fg.electric) || _write_field_component_jl(io, "electric", fg.electric)
   end
-  return path
+  return output_file
 end
 
 # ===========================================================================

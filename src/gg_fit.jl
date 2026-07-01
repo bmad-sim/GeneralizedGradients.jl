@@ -270,7 +270,8 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
     rms_plane[pidx] = norm(Aw * theta - bw) / sqrt(nrows)
   end
 
-  return GGCoefs(; z_base, params = params_list, a, b, bs, rms_plane, m_max, g_ref = field.g_ref)
+  return GGCoefs(; z_base, params = params_list, a, b, bs, rms_plane, m_max,
+                    g_ref = field.g_ref, origin, dz_grid)
 end
 
 #---------------------------------------------------------------------------------------------------

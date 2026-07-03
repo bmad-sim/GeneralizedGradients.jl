@@ -41,6 +41,7 @@ module GeneralizedGradients
        write_field_grid_hdf5,
        field_and_potential_evaluate,
        field_and_potential_evaluate_at,
+       potential_evaluate_at,
        field_coefficients_at_plane,
        field_coefficients_at_s,
        gg_coefficients_at_plane,

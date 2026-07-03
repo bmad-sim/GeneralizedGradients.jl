@@ -932,3 +932,50 @@ component.
   return val, dvx, dvy
 end
 
+#---------------------------------------------------------------------------------------------------
+
+"""
+    _eval_scratch(plan, x, y, s) -> (gvals, xp, yq)
+
+Prepare the per-call scratch for evaluating `plan` at `(x, y, s)`: interpolate
+every GG tower onto `s` (`gvals`) and build the `x`/`y` power tables
+(`xp[i+1] = x^i`, `yq[j+1] = y^j`, with `fit.origin` already subtracted). All
+three returned arrays are `view`s into a single backing allocation, so a call
+allocates once. Shared by `field_and_potential_evaluate_at` and
+`potential_evaluate_at`.
+"""
+function _eval_scratch(plan::GGEvalPlan, x::Real, y::Real, s::Real)
+  xr = float(x) - plan.origin[1]
+  yr = float(y) - plan.origin[2]
+  ng = plan.ngvals; nu = plan.maxdeg + 1; nx = plan.pmax + 1; ny = plan.qmax + 1
+  scratch = Vector{Float64}(undef, ng + nu + nx + ny)
+  gvals = view(scratch, 1:ng)
+  upow  = view(scratch, ng+1:ng+nu)
+  xp    = view(scratch, ng+nu+1:ng+nu+nx)
+  yq    = view(scratch, ng+nu+nx+1:ng+nu+nx+ny)
+  _fill_gvals!(gvals, upow, plan, s)
+  xp[1] = 1.0; @inbounds for i in 1:plan.pmax; xp[i+1] = xp[i] * xr; end
+  yq[1] = 1.0; @inbounds for i in 1:plan.qmax; yq[i+1] = yq[i] * yr; end
+  return gvals, xp, yq
+end
+
+#---------------------------------------------------------------------------------------------------
+
+"""
+    _make_dA(Axx, Axy, dAxv, Ayx, Ayy, dAyv, Asx, Asy, dAsv) -> Matrix{Float64}
+
+Assemble the 3x3 Jacobian `dA[i,j] = ∂A_i/∂u_j` (rows `Ax,Ay,As`; columns
+`x,y,s`). Filled element-wise on purpose: the `[a b c; …]` matrix-literal syntax
+boxes each scalar argument (≈9 extra allocations per call), while explicit stores
+do not.
+"""
+@inline function _make_dA(Axx, Axy, dAxv, Ayx, Ayy, dAyv, Asx, Asy, dAsv)
+  dA = Matrix{Float64}(undef, 3, 3)
+  @inbounds begin
+    dA[1, 1] = Axx; dA[1, 2] = Axy; dA[1, 3] = dAxv
+    dA[2, 1] = Ayx; dA[2, 2] = Ayy; dA[2, 3] = dAyv
+    dA[3, 1] = Asx; dA[3, 2] = Asy; dA[3, 3] = dAsv
+  end
+  return dA
+end
+

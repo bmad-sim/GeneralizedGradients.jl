@@ -127,8 +127,51 @@ holds at `s` as before.
 
 Returns `(B, A, dA)` exactly as `field_and_potential_evaluate`.
 """
+<<<<<<< Updated upstream
 function field_and_potential_evaluate_at(fit, x::Real, y::Real, s::Real)
   return field_and_potential_evaluate(_interp_gg_fit(fit, s), 1, x, y)
+=======
+function field_and_potential_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real)
+  plan = _get_eval_plan(fit)
+  xr = float(x) - plan.origin[1]
+  yr = float(y) - plan.origin[2]
+
+  # One scratch allocation, partitioned into gvals | upow | xp | yq (each of
+  # runtime length, so not stack/`StaticArray`-able), then filled below.
+  ng = plan.ngvals; nu = plan.maxdeg + 1; nx = plan.pmax + 1; ny = plan.qmax + 1
+  scratch = Vector{Float64}(undef, ng + nu + nx + ny)
+  gvals = view(scratch, 1:ng)
+  upow  = view(scratch, ng+1:ng+nu)
+  xp    = view(scratch, ng+nu+1:ng+nu+nx)
+  yq    = view(scratch, ng+nu+nx+1:ng+nu+nx+ny)
+
+  _fill_gvals!(gvals, upow, plan, s)
+  xp[1] = 1.0; @inbounds for i in 1:plan.pmax; xp[i+1] = xp[i] * xr; end
+  yq[1] = 1.0; @inbounds for i in 1:plan.qmax; yq[i+1] = yq[i] * yr; end
+
+  c = plan.comps
+  Bx = _comp_value(c[1], gvals, xp, yq)
+  By = _comp_value(c[2], gvals, xp, yq)
+  Bs = _comp_value(c[3], gvals, xp, yq)
+  Axv, Axx, Axy = _comp_full(c[4], gvals, xp, yq)
+  Ayv, Ayx, Ayy = _comp_full(c[5], gvals, xp, yq)
+  Asv, Asx, Asy = _comp_full(c[6], gvals, xp, yq)
+  dAxv = _comp_value(c[7], gvals, xp, yq)
+  dAyv = _comp_value(c[8], gvals, xp, yq)
+  dAsv = _comp_value(c[9], gvals, xp, yq)
+
+  B  = [Bx, By, Bs]
+  A  = [Axv, Ayv, Asv]
+  # Assign the 3x3 Jacobian element-wise: the `[a b c; …]` matrix-literal syntax
+  # boxes each scalar (≈9 extra allocations per call); explicit stores do not.
+  dA = Matrix{Float64}(undef, 3, 3)
+  @inbounds begin
+    dA[1, 1] = Axx; dA[1, 2] = Axy; dA[1, 3] = dAxv
+    dA[2, 1] = Ayx; dA[2, 2] = Ayy; dA[2, 3] = dAyv
+    dA[3, 1] = Asx; dA[3, 2] = Asy; dA[3, 3] = dAsv
+  end
+  return B, A, dA
+>>>>>>> Stashed changes
 end
 
 #---------------------------------------------------------------------------------------------------

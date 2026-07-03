@@ -962,20 +962,12 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    _make_dA(Axx, Axy, dAxv, Ayx, Ayy, dAyv, Asx, Asy, dAsv) -> Matrix{Float64}
+    _make_dA(Axx, Axy, dAxv, Ayx, Ayy, dAyv, Asx, Asy, dAsv) -> SMatrix{3,3,Float64}
 
 Assemble the 3x3 Jacobian `dA[i,j] = ∂A_i/∂u_j` (rows `Ax,Ay,As`; columns
-`x,y,s`). Filled element-wise on purpose: the `[a b c; …]` matrix-literal syntax
-boxes each scalar argument (≈9 extra allocations per call), while explicit stores
-do not.
+`x,y,s`) as a stack-allocated `SMatrix` (no heap allocation). Arguments are given
+row-major; the `SMatrix` constructor takes them column-major.
 """
-@inline function _make_dA(Axx, Axy, dAxv, Ayx, Ayy, dAyv, Asx, Asy, dAsv)
-  dA = Matrix{Float64}(undef, 3, 3)
-  @inbounds begin
-    dA[1, 1] = Axx; dA[1, 2] = Axy; dA[1, 3] = dAxv
-    dA[2, 1] = Ayx; dA[2, 2] = Ayy; dA[2, 3] = dAyv
-    dA[3, 1] = Asx; dA[3, 2] = Asy; dA[3, 3] = dAsv
-  end
-  return dA
-end
+@inline _make_dA(Axx, Axy, dAxv, Ayx, Ayy, dAyv, Asx, Asy, dAsv) =
+  SMatrix{3,3,Float64}(Axx, Ayx, Asx,  Axy, Ayy, Asy,  dAxv, dAyv, dAsv)
 

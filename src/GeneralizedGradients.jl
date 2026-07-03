@@ -2,6 +2,7 @@ module GeneralizedGradients
 
   using HDF5, OffsetArrays, Dates, EnumX
   using LinearAlgebra, Printf
+  using StaticArrays: SVector, SMatrix
 
   # Package-wide constants (referenced by the helpers in low_level.jl and the
   # evaluation / field-grid code).

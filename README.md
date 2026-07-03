@@ -36,7 +36,7 @@ fundamental requirement. In fact, it may be advantageous to have unequal spacing
 the field of a magnet body is fairly uniform, so that a coarse spacing is adequate, but the fringe
 regions need a fine spacing.
 
-## write_bmad_field_grid_element (src/field_grid.jl) and programs/run_write_bmad_field_grid_element.jl
+## write_bmad_field_grid_element (src/field_grid_utils.jl) and programs/run_write_bmad_field_grid_element.jl
 
 `write_bmad_field_grid_element(field; ele_name, output_base, field_scale, hdf5)` is a
 function in the `GeneralizedGradients` package that writes a 3D field grid out in

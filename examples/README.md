@@ -77,6 +77,17 @@ with Runge-Kutta tracking.
 ```
 write_bmad_gg_fit(fit)
 ```
+This function creates two files: An GG table, called in this case `gen_grad_ele_gg.bmad`,
+and a Bmad lattice, in this case called `gen_grad_ele.bmad` with a single element using the grid
+with Runge-Kutta tracking.
+
+## Calculating the Vector Potential
+
+```
+field_and_potential_evaluate_at(fit, x::Real, y::Real, s::Real) -> (B, A, dA)
+```
+
+
 
 
 

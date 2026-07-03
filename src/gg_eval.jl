@@ -184,6 +184,28 @@ function potential_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real)
 end
 
 #---------------------------------------------------------------------------------------------------
+
+"""
+    field_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real) -> B
+
+Like [`field_and_potential_evaluate_at`](@ref) but returns only the magnetic
+field `B = [Bx, By, Bs]`, skipping the vector potential `A` and its Jacobian.
+`B` is identical to that of the full evaluator. See
+`field_and_potential_evaluate_at` for the `(x, y, s)` conventions.
+"""
+function field_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real)
+  plan = _get_eval_plan(fit)
+  gvals, xp, yq = _eval_scratch(plan, x, y, s)
+
+  c = plan.comps
+  Bx = _comp_value(c[1], gvals, xp, yq)
+  By = _comp_value(c[2], gvals, xp, yq)
+  Bs = _comp_value(c[3], gvals, xp, yq)
+
+  return [Bx, By, Bs]
+end
+
+#---------------------------------------------------------------------------------------------------
 """
     field_coefficients_at_plane(fit, ip::Integer) -> (CBx, CBy, CBs)
 

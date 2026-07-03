@@ -1,3 +1,17 @@
+# ---------------------------------------------------------------------------
+# low_level.jl
+#
+# Low-level, underscore-prefixed helper functions for the package: monomial
+# coefficient assembly and polynomial evaluation, Hermite/Taylor interpolation
+# of the GG derivative towers, the compiled fast-evaluation plan build/eval used
+# by `field_and_potential_evaluate_at`, and the HDF5 / field-grid / Bmad
+# read-write helpers.
+#
+# The `GGEvalPlan`, `_Tower` and `_CompTerms` types are defined in struct.jl (so
+# `GGCoefs` can hold a plan in its `eval_plan` field); the functions below build
+# and evaluate them (see the "Fast evaluation" section).
+# ---------------------------------------------------------------------------
+
 #---------------------------------------------------------------------------------------------------
 
 """
@@ -585,3 +599,336 @@ function _read_field_group(g1, name, lb, nx, ny, nz)
       for a in 1:nx, b in 1:ny, k in 1:nz]
   return OffsetArray(field, lb[1]:lb[1]+nx-1, lb[2]:lb[2]+ny-1, lb[3]:lb[3]+nz-1)
 end
+
+# ===================================================================================================
+# Fast evaluation of `field_and_potential_evaluate_at`.
+#
+# The reference path (`field_and_potential_evaluate` + `_interp_gg_fit`) rebuilds
+# everything per call through type-unstable closures over the abstract-typed
+# monomial tables (`Vector{Tuple{Real,Int,Int,Int}}`): ~120k allocations and ~1 MB
+# per evaluation. Instead we compile, once per `fit`, a fully concrete `GGEvalPlan`
+# (cached in `fit.eval_plan`):
+#
+#   * `towers`: precomputed monomial coefficients of the Hermite (or single-plane
+#     Taylor) interpolant on each straddling plane-pair. Interpolating at `s` is
+#     then evaluating a small polynomial and its first N derivatives into a dense
+#     `Float64` value vector `gvals` -- no divided differences, no `Dict`s.
+#   * `comps`: for each output component, a flat list of monomial terms
+#     `(slot, w, p, q)` with `w = coeff * g_ref^k` folded in and `slot` an index
+#     into `gvals`. Evaluating a component is then a single monomorphic loop.
+#
+# Results are identical to the reference path up to floating-point summation order.
+# ===================================================================================================
+#---------------------------------------------------------------------------------------------------
+
+"""
+    _hermite_poly(zL, zR, fL, fR) -> Vector{Float64}
+
+Monomial coefficients (in `u = s - zL`) of the degree-`(2N+1)` two-point Hermite
+interpolant with `fL[j+1] = f⁽ʲ⁾(zL)`, `fR[j+1] = f⁽ʲ⁾(zR)`, `j = 0..N`. Same
+confluent-Newton construction as `_hermite_derivs`, but returns the polynomial
+rather than evaluating it.
+"""
+function _hermite_poly(zL, zR, fL, fR)
+  N = length(fL) - 1
+  K = 2N + 1
+  hstep = zR - zL
+  fval(i, j) = (i <= N ? fL : fR)[j+1]
+  isR(i) = i > N
+
+  DD = zeros(Float64, K + 1, K + 1)          # DD[i+1, k+1] = f[t_i, …, t_{i+k}]
+  for i in 0:K
+    DD[i+1, 1] = fval(i, 0)
+  end
+  for k in 1:K, i in 0:K-k
+    DD[i+1, k+1] = isR(i) == isR(i + k) ? fval(i, k) / factorial(k) :
+                   (DD[i+2, k] - DD[i+1, k]) / hstep
+  end
+  c = [DD[1, k+1] for k in 0:K]              # Newton coefficients
+  tnode(i) = i <= N ? 0.0 : hstep
+
+  poly  = zeros(Float64, K + 1)
+  basis = [1.0]
+  for k in 0:K
+    for d in 1:length(basis)
+      poly[d] += c[k+1] * basis[d]
+    end
+    if k < K
+      tk = tnode(k)
+      nb = zeros(Float64, length(basis) + 1)
+      for d in 1:length(basis)
+        nb[d+1] += basis[d]
+        nb[d]   -= tk * basis[d]
+      end
+      basis = nb
+    end
+  end
+  return poly
+end
+
+"""
+    _taylor_poly(f0) -> Vector{Float64}
+
+Monomial coefficients (in `u = s - z0`) of the single-plane Taylor series:
+`poly[d+1] = f0[d+1] / d!`, so that `P⁽ᵐ⁾(u)` matches `_taylor_derivs`.
+"""
+_taylor_poly(f0) = [f0[d+1] / factorial(d) for d in 0:length(f0)-1]
+
+#---------------------------------------------------------------------------------------------------
+
+"""
+    _make_tower(z, Fn, slots, extra_slots, extra_planevals) -> _Tower
+
+Build one tower from a per-`n` value matrix `Fn[j+1, plane] = f⁽ʲ⁾` at that
+plane, its `slots`, and any extras. `z` are the base planes. Precomputes the
+interpolant's monomial coefficients on every straddling plane-pair (or the
+single-plane Taylor series when there is one plane).
+"""
+function _make_tower(z, Fn, slots, extra_slots, extra_planevals)
+  P = length(z)
+  N = length(slots) - 1
+  if P == 1
+    deg = N
+    poly = reshape(_taylor_poly(Fn[:, 1]), deg + 1, 1)
+    zref = [z[1]]
+  else
+    deg = 2N + 1
+    npair = P - 1
+    poly = Matrix{Float64}(undef, deg + 1, npair)
+    zref = Vector{Float64}(undef, npair)
+    for ip in 1:npair
+      fL = @view Fn[:, ip]
+      fR = @view Fn[:, ip+1]
+      poly[:, ip] = _hermite_poly(z[ip], z[ip+1], fL, fR)
+      zref[ip] = z[ip]
+    end
+  end
+  return _Tower(N, deg, slots, poly, zref, extra_slots, extra_planevals)
+end
+
+"""
+    _build_towers_nm!(towers, z, d, slotmap, next) -> next
+
+Assign `gvals` slots for the keys of an `(n,m)`-keyed dict `d` (`a` or `b`),
+build one `_Tower` per multipole `n`, and append them to `towers`. Returns the
+next free slot index.
+"""
+function _build_towers_nm!(towers, z, d::Dict{Tuple{Int,Int},Vector{Float64}}, slotmap, next)
+  for k in keys(d)
+    slotmap[k] = next
+    next += 1
+  end
+  byn = Dict{Int,Vector{Int}}()
+  for (n, m) in keys(d)
+    push!(get!(byn, n, Int[]), m)
+  end
+  P = length(z)
+  for (n, ms) in byn
+    sort!(ms)
+    N = _contiguous_order(ms)
+    slots = [slotmap[(n, j)] for j in 0:N]
+    Fn = Matrix{Float64}(undef, N + 1, P)
+    for j in 0:N, ip in 1:P
+      Fn[j+1, ip] = d[(n, j)][ip]
+    end
+    extra = [m for m in ms if m > N]
+    extra_slots = [slotmap[(n, m)] for m in extra]
+    push!(towers, _make_tower(z, Fn, slots, extra_slots, [d[(n, m)] for m in extra]))
+  end
+  return next
+end
+
+"""
+    _build_towers_m!(towers, z, d, slotmap, next) -> next
+
+Like `_build_towers_nm!` but for the `m`-keyed `bs` dict: a single `_Tower`.
+"""
+function _build_towers_m!(towers, z, d::Dict{Int,Vector{Float64}}, slotmap, next)
+  for k in keys(d)
+    slotmap[k] = next
+    next += 1
+  end
+  isempty(d) && return next
+  ms = sort(collect(keys(d)))
+  N = _contiguous_order(ms)
+  P = length(z)
+  slots = [slotmap[j] for j in 0:N]
+  Fn = Matrix{Float64}(undef, N + 1, P)
+  for j in 0:N, ip in 1:P
+    Fn[j+1, ip] = d[j][ip]
+  end
+  extra = [m for m in ms if m > N]
+  extra_slots = [slotmap[m] for m in extra]
+  push!(towers, _make_tower(z, Fn, slots, extra_slots, [d[m] for m in extra]))
+  return next
+end
+
+#---------------------------------------------------------------------------------------------------
+
+"""
+    _build_comp(Ta, Tb, Tbs, bump, g_ref, slot_a, slot_b, slot_bs) -> _CompTerms
+
+Flatten one output component's `(a, b, bs)` monomial tables into a flat term
+list, folding `g_ref^k` into each weight and resolving every `(n,m)`/`m` key to a
+`gvals` slot. `bump` shifts the GG derivative order by one (used for `∂A/∂s`).
+Terms whose GG value is structurally zero (missing key) are dropped.
+"""
+function _build_comp(Ta, Tb, Tbs, bump::Bool, g_ref,
+                     slot_a::Dict{Tuple{Int,Int},Int},
+                     slot_b::Dict{Tuple{Int,Int},Int},
+                     slot_bs::Dict{Int,Int})
+  slot = Int[]; w = Float64[]; ps = Int[]; qs = Int[]
+  wk(c, k) = float(c) * (k == 0 ? 1.0 : float(g_ref)^k)
+  for (T, smap) in ((Ta, slot_a), (Tb, slot_b))
+    for ((n, m), terms) in T
+      s = get(smap, (n, bump ? m + 1 : m), 0)
+      s == 0 && continue
+      for (c, p, q, k) in terms
+        push!(slot, s); push!(w, wk(c, k)); push!(ps, p); push!(qs, q)
+      end
+    end
+  end
+  for (m, terms) in Tbs
+    s = get(slot_bs, bump ? m + 1 : m, 0)
+    s == 0 && continue
+    for (c, p, q, k) in terms
+      push!(slot, s); push!(w, wk(c, k)); push!(ps, p); push!(qs, q)
+    end
+  end
+  return _CompTerms(slot, w, ps, qs)
+end
+
+#---------------------------------------------------------------------------------------------------
+
+"""
+    _build_eval_plan(fit::GGCoefs) -> GGEvalPlan
+
+Compile `fit` into a `GGEvalPlan`: assign a dense `gvals` slot to every GG value,
+build the interpolation towers, and flatten the nine output components' monomial
+tables into term lists. Called once per `fit` and cached by `_get_eval_plan`.
+"""
+function _build_eval_plan(fit::GGCoefs)
+  g_ref = fit.g_ref
+  z = copy(fit.z_base)
+  slot_a  = Dict{Tuple{Int,Int},Int}()
+  slot_b  = Dict{Tuple{Int,Int},Int}()
+  slot_bs = Dict{Int,Int}()
+  towers = _Tower[]
+  next = 2                                   # slot 1 is the always-zero sentinel
+  next = _build_towers_nm!(towers, z, fit.a,  slot_a,  next)
+  next = _build_towers_nm!(towers, z, fit.b,  slot_b,  next)
+  next = _build_towers_m!( towers, z, fit.bs, slot_bs, next)
+  ngvals = next - 1
+
+  comps = (
+    _build_comp(Bx_a, Bx_b, Bx_bs, false, g_ref, slot_a, slot_b, slot_bs),
+    _build_comp(By_a, By_b, By_bs, false, g_ref, slot_a, slot_b, slot_bs),
+    _build_comp(Bs_a, Bs_b, Bs_bs, false, g_ref, slot_a, slot_b, slot_bs),
+    _build_comp(Ax_a, Ax_b, Ax_bs, false, g_ref, slot_a, slot_b, slot_bs),
+    _build_comp(Ay_a, Ay_b, Ay_bs, false, g_ref, slot_a, slot_b, slot_bs),
+    _build_comp(As_a, As_b, As_bs, false, g_ref, slot_a, slot_b, slot_bs),
+    _build_comp(Ax_a, Ax_b, Ax_bs, true,  g_ref, slot_a, slot_b, slot_bs),
+    _build_comp(Ay_a, Ay_b, Ay_bs, true,  g_ref, slot_a, slot_b, slot_bs),
+    _build_comp(As_a, As_b, As_bs, true,  g_ref, slot_a, slot_b, slot_bs),
+  )
+  pmax = 0; qmax = 0
+  for ct in comps, t in 1:length(ct)
+    pmax = max(pmax, ct.p[t]); qmax = max(qmax, ct.q[t])
+  end
+  maxdeg = isempty(towers) ? 0 : maximum(tw.deg for tw in towers)
+  return GGEvalPlan((float(fit.origin[1]), float(fit.origin[2])),
+                    z, towers, maxdeg, ngvals, comps, pmax, qmax)
+end
+
+#---------------------------------------------------------------------------------------------------
+
+"""
+    _get_eval_plan(fit::GGCoefs) -> GGEvalPlan
+
+Return `fit`'s compiled `GGEvalPlan`, building it and storing it in
+`fit.eval_plan` on first use. Assumes `fit` is not mutated after the first
+evaluation (a stale plan is not detected).
+"""
+function _get_eval_plan(fit::GGCoefs)
+  plan = fit.eval_plan
+  plan === nothing || return plan
+  plan = _build_eval_plan(fit)
+  fit.eval_plan = plan
+  return plan
+end
+
+#---------------------------------------------------------------------------------------------------
+
+"""
+    _fill_gvals!(gvals, upow, plan, s) -> gvals
+
+Interpolate every tower onto `s`, scattering the results into the dense value
+vector `gvals`. `upow` is a caller-provided scratch buffer of length
+`plan.maxdeg + 1` for the powers of `u = s - zref`.
+"""
+function _fill_gvals!(gvals, upow, plan::GGEvalPlan, s::Real)
+  z = plan.z; P = length(z); sq = float(s)
+  if P == 1
+    pair = 1
+  else
+    i0 = searchsortedlast(z, sq)
+    pair = clamp(i0, 1, P - 1)
+  end
+  fill!(gvals, 0.0)
+  @inbounds for tw in plan.towers
+    u = sq - tw.zref[pair]
+    deg = tw.deg
+    upow[1] = 1.0
+    for d in 1:deg
+      upow[d+1] = upow[d] * u
+    end
+    for m in 0:tw.N
+      acc = 0.0
+      for d in m:deg
+        ff = 1.0                     # falling factorial d·(d-1)···(d-m+1)
+        for r in 0:m-1
+          ff *= (d - r)
+        end
+        acc += tw.poly[d+1, pair] * ff * upow[d-m+1]
+      end
+      gvals[tw.slots[m+1]] = acc
+    end
+    for e in eachindex(tw.extra_slots)
+      gvals[tw.extra_slots[e]] = tw.extra_planevals[e][pair]
+    end
+  end
+  return gvals
+end
+
+"""
+    _comp_value(ct, gvals, xp, yq) -> val
+
+Evaluate a component's value `Σ w * gvals[slot] * x^p * y^q`, where `xp[i+1] = x^i`
+and `yq[j+1] = y^j` are precomputed power tables.
+"""
+@inline function _comp_value(ct::_CompTerms, gvals, xp, yq)
+  val = 0.0
+  @inbounds for t in eachindex(ct.slot)
+    val += ct.w[t] * gvals[ct.slot[t]] * xp[ct.p[t]+1] * yq[ct.q[t]+1]
+  end
+  return val
+end
+
+"""
+    _comp_full(ct, gvals, xp, yq) -> (val, dvx, dvy)
+
+Like `_comp_value` but also returns the `x` and `y` partial derivatives of the
+component.
+"""
+@inline function _comp_full(ct::_CompTerms, gvals, xp, yq)
+  val = 0.0; dvx = 0.0; dvy = 0.0
+  @inbounds for t in eachindex(ct.slot)
+    base = ct.w[t] * gvals[ct.slot[t]]
+    p = ct.p[t]; q = ct.q[t]
+    val += base * xp[p+1] * yq[q+1]
+    p > 0 && (dvx += base * p * xp[p] * yq[q+1])
+    q > 0 && (dvy += base * q * xp[p+1] * yq[q])
+  end
+  return val, dvx, dvy
+end
+

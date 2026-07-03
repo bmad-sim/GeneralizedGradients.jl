@@ -1,12 +1,3 @@
-# ===========================================================================
-# Bmad grid_field export
-#
-# Read a 3D field grid and write it out in Bmad `grid_field` format (a lattice
-# element with the field grid attached). `write_bmad_field_grid_element` is the public
-# function; programs/run_write_bmad_field_grid_element.jl is a shell wrapper.
-# The underscore-prefixed helper functions used here live in src/helpers.jl.
-# ===========================================================================
-
 """
     write_bmad_field_grid_element(field::Union{AbstractString,FieldGridTable};
                                ele_name::AbstractString = "fieldmap_ele",

@@ -23,7 +23,7 @@ module GeneralizedGradients
   include("gg_eval.jl")
   include("gg_fit.jl")
   include("gg_utils.jl")
-  include("field_grid.jl")
+  include("field_grid_utils.jl")
 
   export FieldGridTable,
        GridAnchorPt,

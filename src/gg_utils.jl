@@ -198,20 +198,16 @@ function write_bmad_gg_fit(fit::GGCoefs;
   open(ele_file, "w") do io
     println(io, "! Bmad lattice element with attached generalized-gradient map.")
     println(io, "! Generated from gg_fit GG coefficients by write_bmad_gg_fit.")
-    println(io, "!")
+    println(io)
+
     if is_bend
-      println(io, "! Reference curve is an arc (g = ", _gg_num(g_ref),
-            " 1/m) => sbend; GGs are in the bend curvilinear frame.")
-      println(io)
       println(io, ele_name, ": sbend,")
-      println(io, "  l = ", _gg_num(L), ",")
       println(io, "  g = ", _gg_num(g_ref), ",")
     else
-      println(io, "! Reference curve is straight => em_field.")
-      println(io)
       println(io, ele_name, ": em_field,")
-      println(io, "  l = ", _gg_num(L), ",")
     end
+
+    println(io, "  l = ", _gg_num(L), ",")
     println(io, "  field_calc = fieldmap,")
     println(io, "  tracking_method = runge_kutta,")
     println(io, "  mat6_calc_method = tracking,")

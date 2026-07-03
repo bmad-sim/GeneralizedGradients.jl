@@ -125,7 +125,10 @@ holds at `s` as before.
 - `x`, `y` — absolute transverse coordinates (`fit.origin` subtracted internally).
 - `s` — absolute longitudinal coordinate.
 
-Returns `(B, A, dA)` exactly as `field_and_potential_evaluate`.
+Returns `(B, A, dA)` with the same values as `field_and_potential_evaluate`, but
+as stack-allocated `StaticArrays`: `B`, `A` are `SVector{3,Float64}` and `dA` is
+an `SMatrix{3,3,Float64}` (so evaluation allocates only the internal scratch, not
+the returned data). They index like ordinary vectors/matrices (`A[1]`, `dA[1,3]`).
 
 Uses a type-stable evaluation plan compiled once per `fit` and cached by object
 identity (see low_level.jl); this is what makes it fast enough for tracking.
@@ -147,8 +150,8 @@ function field_and_potential_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real
   dAyv = _comp_value(c[8], gvals, xp, yq)
   dAsv = _comp_value(c[9], gvals, xp, yq)
 
-  B = [Bx, By, Bs]
-  A = [Axv, Ayv, Asv]
+  B = SVector(Bx, By, Bs)
+  A = SVector(Axv, Ayv, Asv)
   dA = _make_dA(Axx, Axy, dAxv, Ayx, Ayy, dAyv, Asx, Asy, dAsv)
   return B, A, dA
 end
@@ -164,7 +167,8 @@ potential `A` and its Jacobian `dA`, skipping the magnetic field `B`.
 For tracking, only `A` and `dA` are needed. The `B` field is the majority of the
 per-call work (its monomial expansion has more terms than `A`'s), so skipping it
 is roughly `1.8x` faster than the full evaluator while returning identical
-`A`, `dA`. See `field_and_potential_evaluate_at` for the `(x, y, s)` conventions.
+`A`, `dA`. `A` is an `SVector{3,Float64}` and `dA` an `SMatrix{3,3,Float64}`. See
+`field_and_potential_evaluate_at` for the `(x, y, s)` conventions.
 """
 function potential_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real)
   plan = _get_eval_plan(fit)
@@ -178,7 +182,7 @@ function potential_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real)
   dAyv = _comp_value(c[8], gvals, xp, yq)
   dAsv = _comp_value(c[9], gvals, xp, yq)
 
-  A = [Axv, Ayv, Asv]
+  A = SVector(Axv, Ayv, Asv)
   dA = _make_dA(Axx, Axy, dAxv, Ayx, Ayy, dAyv, Asx, Asy, dAsv)
   return A, dA
 end
@@ -189,8 +193,8 @@ end
     field_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real) -> B
 
 Like [`field_and_potential_evaluate_at`](@ref) but returns only the magnetic
-field `B = [Bx, By, Bs]`, skipping the vector potential `A` and its Jacobian.
-`B` is identical to that of the full evaluator. See
+field `B = [Bx, By, Bs]` as an `SVector{3,Float64}`, skipping the vector potential
+`A` and its Jacobian. `B` is identical to that of the full evaluator. See
 `field_and_potential_evaluate_at` for the `(x, y, s)` conventions.
 """
 function field_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real)
@@ -202,10 +206,11 @@ function field_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real)
   By = _comp_value(c[2], gvals, xp, yq)
   Bs = _comp_value(c[3], gvals, xp, yq)
 
-  return [Bx, By, Bs]
+  return SVector(Bx, By, Bs)
 end
 
 #---------------------------------------------------------------------------------------------------
+
 """
     field_coefficients_at_plane(fit, ip::Integer) -> (CBx, CBy, CBs)
 

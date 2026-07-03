@@ -42,6 +42,7 @@ module GeneralizedGradients
        field_and_potential_evaluate,
        field_and_potential_evaluate_at,
        potential_evaluate_at,
+       field_evaluate_at,
        field_coefficients_at_plane,
        field_coefficients_at_s,
        gg_coefficients_at_plane,

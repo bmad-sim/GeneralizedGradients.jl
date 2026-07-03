@@ -170,6 +170,8 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
         @test approx(Bf, Br) && approx(Af, Ar) && approx(dAf, dAr)
         Ap, dAp = potential_evaluate_at(f, x, y, s)
         @test Ap == Af && dAp == dAf     # identical: same code path minus B
+        Bp = field_evaluate_at(f, x, y, s)
+        @test Bp == Bf                   # identical: same code path, B only
       end
     end
   end

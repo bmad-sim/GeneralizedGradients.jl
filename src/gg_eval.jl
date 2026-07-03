@@ -29,7 +29,7 @@
 # derivative order ( ∂_s a(n,m) = a(n,m+1), etc. ) — exactly as for the field.
 #
 # The underscore-prefixed evaluation/interpolation helpers used below live in
-# src/gg_low_level.jl.
+# src/low_level.jl.
 
 # The gg_coef tables (Bx_a … As_bs), `_NMAX`, and the other package constants are
 # defined in GeneralizedGradients.jl; read_gg_fit lives in gg_utils.jl.
@@ -128,7 +128,7 @@ holds at `s` as before.
 Returns `(B, A, dA)` exactly as `field_and_potential_evaluate`.
 
 Uses a type-stable evaluation plan compiled once per `fit` and cached by object
-identity (see gg_low_level.jl); this is what makes it fast enough for tracking.
+identity (see low_level.jl); this is what makes it fast enough for tracking.
 The plan assumes `fit` is not mutated after its first evaluation — changing
 `fit.a`/`fit.b`/`fit.bs`/`fit.g_ref` afterward leaves the cached plan stale.
 """

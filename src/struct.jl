@@ -106,7 +106,7 @@ end
 #---------------------------------------------------------------------------------------------------
 # Compiled fast-evaluation plan for `field_and_potential_evaluate_at`. Built once
 # per `GGCoefs` and cached in its `eval_plan` field; the build and per-call
-# evaluation live in gg_low_level.jl.
+# evaluation live in low_level.jl.
 
 """
     _CompTerms
@@ -145,7 +145,7 @@ end
 """
     GGEvalPlan
 
-Compiled, type-stable evaluation plan built once per `fit` (see gg_low_level.jl).
+Compiled, type-stable evaluation plan built once per `fit` (see low_level.jl).
 Holds the interpolation `towers` and the per-component monomial term lists
 `comps` (order `Bx By Bs  Ax Ay As  dAx dAy dAs`), together with the sizing
 constants used to allocate per-call scratch (`ngvals`, `maxdeg`, `pmax`, `qmax`).

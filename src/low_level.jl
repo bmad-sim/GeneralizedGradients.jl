@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# gg_low_level.jl
+# low_level.jl
 #
 # Low-level, underscore-prefixed helper functions for the package: monomial
 # coefficient assembly and polynomial evaluation, Hermite/Taylor interpolation

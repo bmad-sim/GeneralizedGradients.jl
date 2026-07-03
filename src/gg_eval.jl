@@ -127,10 +127,6 @@ holds at `s` as before.
 
 Returns `(B, A, dA)` exactly as `field_and_potential_evaluate`.
 """
-<<<<<<< Updated upstream
-function field_and_potential_evaluate_at(fit, x::Real, y::Real, s::Real)
-  return field_and_potential_evaluate(_interp_gg_fit(fit, s), 1, x, y)
-=======
 function field_and_potential_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real)
   plan = _get_eval_plan(fit)
   xr = float(x) - plan.origin[1]
@@ -171,7 +167,6 @@ function field_and_potential_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real
     dA[3, 1] = Asx; dA[3, 2] = Asy; dA[3, 3] = dAsv
   end
   return B, A, dA
->>>>>>> Stashed changes
 end
 
 #---------------------------------------------------------------------------------------------------

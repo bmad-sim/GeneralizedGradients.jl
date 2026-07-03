@@ -7,7 +7,7 @@ import Beamlines as bl
 fit, meta = read_gg_fit("gg_fit_result.h5")
 
 function four_potential(x, y, s, t, p)
-  B, A, dA = field_and_potential_evaluate_at(p, x, y, s) 
+  A, dA = potential_evaluate_at(p, x, y, s)   # B field not needed for tracking
   potential = (0.0, A[1], A[2], A[3])
   jac = (0.0, 0.0, 0.0, 0.0,
          dA[1,1], dA[1,2], dA[1,3], 0.0,

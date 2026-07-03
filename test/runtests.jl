@@ -151,6 +151,29 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
     @test Bs ≈ B && As ≈ A && dAs ≈ dA
   end
 
+  @testset "fast evaluate_at matches reference path" begin
+    # The GGCoefs method of field_and_potential_evaluate_at uses a cached,
+    # type-stable plan (low_level.jl); it must reproduce the generic reference
+    # composition field_and_potential_evaluate(_interp_gg_fit(...)). And
+    # potential_evaluate_at must return exactly the A/dA of the full evaluator.
+    fit, _ = read_gg_fit(EXAMPLE)
+    reference(f, x, y, s) =
+      field_and_potential_evaluate(GeneralizedGradients._interp_gg_fit(f, s), 1, x, y)
+    approx(P, Q) = maximum(abs, P .- Q) ≤ 1e-9 * max(1.0, maximum(abs, Q))
+    for f in (fit, fitM)
+      zlo, zhi = first(f.z_base), last(f.z_base)
+      ss = (zlo, zhi, (zlo+zhi)/2, zlo + 0.37(zhi-zlo),
+            f.z_base[min(3, length(f.z_base))], zlo - 0.01, zhi + 0.01)  # incl. extrapolation
+      for (x, y) in PTS, s in ss
+        Bf, Af, dAf = field_and_potential_evaluate_at(f, x, y, s)
+        Br, Ar, dAr = reference(f, x, y, s)
+        @test approx(Bf, Br) && approx(Af, Ar) && approx(dAf, dAr)
+        Ap, dAp = potential_evaluate_at(f, x, y, s)
+        @test Ap == Af && dAp == dAf     # identical: same code path minus B
+      end
+    end
+  end
+
   @testset "gg_fit + show + write round-trip" begin
     field = make_field()
     p = GGFitInputParams()

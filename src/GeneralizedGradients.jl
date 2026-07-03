@@ -3,7 +3,7 @@ module GeneralizedGradients
   using HDF5, OffsetArrays, Dates, EnumX
   using LinearAlgebra, Printf
 
-  # Package-wide constants (referenced by the helpers in helpers.jl and the
+  # Package-wide constants (referenced by the helpers in low_level.jl and the
   # evaluation / field-grid code).
 
   # Working size for the truncated (x,y) coefficient arrays.  The gg_coef table
@@ -19,7 +19,7 @@ module GeneralizedGradients
   include(_TABLE_FILE)
 
   include("struct.jl")
-  include("helpers.jl")
+  include("low_level.jl")
   include("gg_eval.jl")
   include("gg_fit.jl")
   include("gg_utils.jl")
@@ -41,6 +41,7 @@ module GeneralizedGradients
        write_field_grid_hdf5,
        field_and_potential_evaluate,
        field_and_potential_evaluate_at,
+       potential_evaluate_at,
        field_coefficients_at_plane,
        field_coefficients_at_s,
        gg_coefficients_at_plane,

@@ -29,7 +29,7 @@
 # derivative order ( ∂_s a(n,m) = a(n,m+1), etc. ) — exactly as for the field.
 #
 # The underscore-prefixed evaluation/interpolation helpers used below live in
-# src/helpers.jl.
+# src/gg_low_level.jl.
 
 # The gg_coef tables (Bx_a … As_bs), `_NMAX`, and the other package constants are
 # defined in GeneralizedGradients.jl; read_gg_fit lives in gg_utils.jl.
@@ -100,7 +100,7 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    field_and_potential_evaluate_at(fit, x::Real, y::Real, s::Real) -> (B, A, dA)
+    field_and_potential_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real) -> (B, A, dA)
 
 Evaluate at an arbitrary `(x, y, s)` point.
 
@@ -126,9 +126,43 @@ holds at `s` as before.
 - `s` — absolute longitudinal coordinate.
 
 Returns `(B, A, dA)` exactly as `field_and_potential_evaluate`.
+
+Uses a type-stable evaluation plan compiled once per `fit` and cached by object
+identity (see gg_low_level.jl); this is what makes it fast enough for tracking.
+The plan assumes `fit` is not mutated after its first evaluation — changing
+`fit.a`/`fit.b`/`fit.bs`/`fit.g_ref` afterward leaves the cached plan stale.
 """
-function field_and_potential_evaluate_at(fit, x::Real, y::Real, s::Real)
-  return field_and_potential_evaluate(_interp_gg_fit(fit, s), 1, x, y)
+function field_and_potential_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real)
+  plan = _get_eval_plan(fit)
+  xr = float(x) - plan.origin[1]
+  yr = float(y) - plan.origin[2]
+
+  gvals = zeros(Float64, plan.ngvals)
+  upow  = Vector{Float64}(undef, plan.maxdeg + 1)
+  _fill_gvals!(gvals, upow, plan, s)
+
+  xp = Vector{Float64}(undef, plan.pmax + 1); xp[1] = 1.0
+  @inbounds for i in 1:plan.pmax; xp[i+1] = xp[i] * xr; end
+  yq = Vector{Float64}(undef, plan.qmax + 1); yq[1] = 1.0
+  @inbounds for i in 1:plan.qmax; yq[i+1] = yq[i] * yr; end
+
+  c = plan.comps
+  Bx = _comp_value(c[1], gvals, xp, yq)
+  By = _comp_value(c[2], gvals, xp, yq)
+  Bs = _comp_value(c[3], gvals, xp, yq)
+  Axv, Axx, Axy = _comp_full(c[4], gvals, xp, yq)
+  Ayv, Ayx, Ayy = _comp_full(c[5], gvals, xp, yq)
+  Asv, Asx, Asy = _comp_full(c[6], gvals, xp, yq)
+  dAxv = _comp_value(c[7], gvals, xp, yq)
+  dAyv = _comp_value(c[8], gvals, xp, yq)
+  dAsv = _comp_value(c[9], gvals, xp, yq)
+
+  B  = [Bx, By, Bs]
+  A  = [Axv, Ayv, Asv]
+  dA = [Axx Axy dAxv;
+        Ayx Ayy dAyv;
+        Asx Asy dAsv]
+  return B, A, dA
 end
 
 #---------------------------------------------------------------------------------------------------

@@ -104,6 +104,64 @@ Name of the output file.
 end
 
 #---------------------------------------------------------------------------------------------------
+# Compiled fast-evaluation plan for `field_and_potential_evaluate_at`. Built once
+# per `GGCoefs` and cached in its `eval_plan` field; the build and per-call
+# evaluation live in gg_low_level.jl.
+
+"""
+    _CompTerms
+
+One output component's monomial terms. Evaluating the component accumulates
+`value += Σ w[t] * gvals[slot[t]] * x^p[t] * y^q[t]` over all terms `t`.
+"""
+struct _CompTerms
+  slot::Vector{Int}
+  w::Vector{Float64}
+  p::Vector{Int}
+  q::Vector{Int}
+end
+
+Base.length(ct::_CompTerms) = length(ct.slot)
+
+"""
+    _Tower
+
+One GG derivative tower (a fixed multipole `n`, or the single `bs` tower).
+`poly[d+1, pair]` is the coefficient of `u^d` (with `u = s - zref[pair]`) of the
+interpolant on plane-pair `pair`; interpolating gives `H⁽ᵐ⁾(s)` for the tower's
+orders `m = 0..N`, scattered into `gvals` at `slots[m+1]`. Non-contiguous orders
+(`m > N`) are taken from the nearest (left) plane via `extra_planevals`.
+"""
+struct _Tower
+  N::Int
+  deg::Int                          # polynomial degree (2N+1 Hermite, or N Taylor)
+  slots::Vector{Int}                # gvals slot for order 0..N
+  poly::Matrix{Float64}             # (deg+1) x npairs
+  zref::Vector{Float64}             # left-plane position per pair (length npairs)
+  extra_slots::Vector{Int}          # non-contiguous orders m > N (rare)
+  extra_planevals::Vector{Vector{Float64}}  # per extra order, value at each base plane
+end
+
+"""
+    GGEvalPlan
+
+Compiled, type-stable evaluation plan built once per `fit` (see gg_low_level.jl).
+Holds the interpolation `towers` and the per-component monomial term lists
+`comps` (order `Bx By Bs  Ax Ay As  dAx dAy dAs`), together with the sizing
+constants used to allocate per-call scratch (`ngvals`, `maxdeg`, `pmax`, `qmax`).
+"""
+struct GGEvalPlan
+  origin::NTuple{2,Float64}
+  z::Vector{Float64}
+  towers::Vector{_Tower}
+  maxdeg::Int
+  ngvals::Int
+  comps::NTuple{9,_CompTerms}   # Bx By Bs  Ax Ay As  dAx dAy dAs
+  pmax::Int
+  qmax::Int
+end
+
+#---------------------------------------------------------------------------------------------------
 """
     mutable struct GGCoefs
 
@@ -125,6 +183,10 @@ Fields:
   straight reference frame).
 - `origin` — `(x, y)` line about which the GG coefficients are computed.
 - `dz_grid` — spacing between base planes [m].
+- `eval_plan` — internal cache: the compiled `GGEvalPlan` used by
+  `field_and_potential_evaluate_at`, built lazily on first evaluation. Not part
+  of the fit data (not serialized); assumes the other fields are not mutated
+  afterward.
 """
 @kwdef mutable struct GGCoefs
   z_base::Vector{Float64} = Float64[]
@@ -137,4 +199,5 @@ Fields:
   g_ref::Float64 = 0.0
   origin::Vector{Float64} = [0.0, 0.0]   # (x, y) origin about which the generalized gradients coefs are computed
   dz_grid::Float64 = 0.0                 # spacing between base planes [m]
+  eval_plan::Union{Nothing,GGEvalPlan} = nothing  # lazily built fast-eval plan (internal cache)
 end

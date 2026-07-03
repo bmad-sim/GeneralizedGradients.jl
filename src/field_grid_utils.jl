@@ -145,7 +145,7 @@ end
 # both succeed.  On read, HDF5.jl likewise hands back a (nx,ny,nz) array == the
 # field, so no transpose is needed.
 #
-# The underscore-prefixed read/write helpers used below live in src/helpers.jl.
+# The underscore-prefixed read/write helpers used below live in src/gg_low_level.jl.
 # ---------------------------------------------------------------------------
 
 # openPMD complex field samples are a compound type with real ("r") and

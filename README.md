@@ -5,7 +5,7 @@
 
 Julia based code to calculate and manipulate generalized gradients.
 
-Generalized gradients are functions that can be used to describe magnetic or electric fields.
+Generalized gradients are functions that can be used to describe magnetic or electric fields in particle accelerators or storage rings.
 Currently, this repository is geared towards magnetic fields.
 
 The notation follows that of S. Van der Schueren et al. “Magnetic Field Modelling and Symplectic Integration of Magnetic Fields on Curved Reference Frames for Improved Synchrotron Design: First Steps”

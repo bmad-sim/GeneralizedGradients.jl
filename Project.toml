@@ -17,7 +17,9 @@ Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 Dates = "1.10"
 EnumX = "1.0.7"
 HDF5 = "0.17"
+OffsetArrays = "1.17"
 StaticArrays = "1"
+Symbolics = "7.28"
 julia = "1.10"
 
 [extras]

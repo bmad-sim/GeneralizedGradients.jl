@@ -109,57 +109,79 @@ end
 # evaluation live in low_level.jl.
 
 """
-    _CompTerms
+    _CompTerms{VI,VF}
 
 One output component's monomial terms. Evaluating the component accumulates
 `value += Σ w[t] * gvals[slot[t]] * x^p[t] * y^q[t]` over all terms `t`.
+
+Generic over its backing-array types (`VI` for the integer arrays, `VF` for the
+weights) so the same struct is `Vector`-backed on the host and device-array
+backed after `Adapt.adapt` — see [`GGEvalPlan`](@ref).
 """
-struct _CompTerms
-  slot::Vector{Int}
-  w::Vector{Float64}
-  p::Vector{Int}
-  q::Vector{Int}
+struct _CompTerms{VI,VF}
+  slot::VI
+  w::VF
+  p::VI
+  q::VI
 end
 
 Base.length(ct::_CompTerms) = length(ct.slot)
+Adapt.@adapt_structure _CompTerms
 
 """
-    _Tower
+    _Tower{VI,VF,MF}
 
 One GG derivative tower (a fixed multipole `n`, or the single `bs` tower).
 `poly[d+1, pair]` is the coefficient of `u^d` (with `u = s - zref[pair]`) of the
 interpolant on plane-pair `pair`; interpolating gives `H⁽ᵐ⁾(s)` for the tower's
 orders `m = 0..N`, scattered into `gvals` at `slots[m+1]`. Non-contiguous orders
-(`m > N`) are taken from the nearest (left) plane via `extra_planevals`.
+(`m > N`) are taken from the nearest (left) plane via `extra_vals[e, pair]`.
+
+Generic over its backing-array types (`VI`/`VF`/`MF` for the integer vectors,
+float vectors and float matrices) so it survives `Adapt.adapt` to the GPU.
 """
-struct _Tower
+struct _Tower{VI,VF,MF}
   N::Int
   deg::Int                          # polynomial degree (2N+1 Hermite, or N Taylor)
-  slots::Vector{Int}                # gvals slot for order 0..N
-  poly::Matrix{Float64}             # (deg+1) x npairs
-  zref::Vector{Float64}             # left-plane position per pair (length npairs)
-  extra_slots::Vector{Int}          # non-contiguous orders m > N (rare)
-  extra_planevals::Vector{Vector{Float64}}  # per extra order, value at each base plane
+  slots::VI                         # gvals slot for order 0..N
+  poly::MF                          # (deg+1) x npairs
+  zref::VF                          # left-plane position per pair (length npairs)
+  extra_slots::VI                   # non-contiguous orders m > N (rare)
+  extra_vals::MF                    # (n_extra x P) value of each extra order per plane
 end
 
+Adapt.@adapt_structure _Tower
+
 """
-    GGEvalPlan
+    GGEvalPlan{VF,TWS,CPS,NG,NP,NQ}
 
 Compiled, type-stable evaluation plan built once per `fit` (see low_level.jl).
-Holds the interpolation `towers` and the per-component monomial term lists
-`comps` (order `Bx By Bs  Ax Ay As  dAx dAy dAs`), together with the sizing
-constants used to allocate per-call scratch (`ngvals`, `maxdeg`, `pmax`, `qmax`).
+Holds the interpolation `towers` (an `NTuple` of [`_Tower`](@ref)) and the
+per-component monomial term lists `comps` (order `Bx By Bs  Ax Ay As  dAx dAy
+dAs`).
+
+The scratch-sizing constants are carried as `Val` **fields** (`ng = ngvals`,
+`np = pmax+1`, `nq = qmax+1`) rather than plain integers so that (a) they are
+compile-time constants inside the evaluator — sizing the stack-resident
+`SVector`s with no heap allocation — and (b) they pass through `Adapt.adapt`
+unchanged. Every array field is generic over its backing type, and the whole
+plan is `Adapt.@adapt_structure`d, so `adapt(CuArray, plan)` (or whatever backend
+`Adapt` targets) yields a plan whose evaluation runs inside a GPU kernel. The GG
+value getters (`_interp_gvals`) and component evaluators (`_comp_value` /
+`_comp_full`) are all allocation-free and generic over the coordinate type, so
+the same plan tracks in `Float64`, `Float32`, or `ForwardDiff.Dual`.
 """
-struct GGEvalPlan
+struct GGEvalPlan{VF,TWS,CPS,NG,NP,NQ}
   origin::NTuple{2,Float64}
-  z::Vector{Float64}
-  towers::Vector{_Tower}
-  maxdeg::Int
-  ngvals::Int
-  comps::NTuple{9,_CompTerms}   # Bx By Bs  Ax Ay As  dAx dAy dAs
-  pmax::Int
-  qmax::Int
+  z::VF
+  towers::TWS                   # NTuple{NT,_Tower}
+  comps::CPS                    # NTuple{9,_CompTerms}: Bx By Bs  Ax Ay As  dAx dAy dAs
+  ng::Val{NG}                   # ngvals            (gvals length)
+  np::Val{NP}                   # pmax + 1          (x power-table length)
+  nq::Val{NQ}                   # qmax + 1          (y power-table length)
 end
+
+Adapt.@adapt_structure GGEvalPlan
 
 #---------------------------------------------------------------------------------------------------
 """

@@ -683,6 +683,10 @@ Build one tower from a per-`n` value matrix `Fn[j+1, plane] = f⁽ʲ⁾` at that
 plane, its `slots`, and any extras. `z` are the base planes. Precomputes the
 interpolant's monomial coefficients on every straddling plane-pair (or the
 single-plane Taylor series when there is one plane).
+
+`extra_planevals[e]` is the per-plane value vector of extra order `e`; it is
+flattened into the `n_extra x P` matrix `_Tower.extra_vals` so the tower holds
+only plain arrays (adaptable to the GPU; a vector-of-vectors is not).
 """
 function _make_tower(z, Fn, slots, extra_slots, extra_planevals)
   P = length(z)
@@ -703,7 +707,12 @@ function _make_tower(z, Fn, slots, extra_slots, extra_planevals)
       zref[ip] = z[ip]
     end
   end
-  return _Tower(N, deg, slots, poly, zref, extra_slots, extra_planevals)
+  ne = length(extra_slots)
+  extra_vals = Matrix{Float64}(undef, ne, P)
+  for e in 1:ne, ip in 1:P
+    extra_vals[e, ip] = extra_planevals[e][ip]
+  end
+  return _Tower(N, deg, slots, poly, zref, extra_slots, extra_vals)
 end
 
 """
@@ -805,7 +814,7 @@ end
 
 Compile `fit` into a `GGEvalPlan`: assign a dense `gvals` slot to every GG value,
 build the interpolation towers, and flatten the nine output components' monomial
-tables into term lists. Called once per `fit` and cached by `_get_eval_plan`.
+tables into term lists. Called once per `fit` and cached by `eval_plan`.
 """
 function _build_eval_plan(fit::GGCoefs)
   g_ref = fit.g_ref
@@ -835,21 +844,35 @@ function _build_eval_plan(fit::GGCoefs)
   for ct in comps, t in 1:length(ct)
     pmax = max(pmax, ct.p[t]); qmax = max(qmax, ct.q[t])
   end
-  maxdeg = isempty(towers) ? 0 : maximum(tw.deg for tw in towers)
+  # Towers become an NTuple (fixed count -> unrolled, GPU-capturable); the scratch
+  # sizes become Val fields (compile-time constants that survive Adapt).
   return GGEvalPlan((float(fit.origin[1]), float(fit.origin[2])),
-                    z, towers, maxdeg, ngvals, comps, pmax, qmax)
+                    z, Tuple(towers), comps, Val(ngvals), Val(pmax + 1), Val(qmax + 1))
 end
 
 #---------------------------------------------------------------------------------------------------
 
 """
-    _get_eval_plan(fit::GGCoefs) -> GGEvalPlan
+    eval_plan(fit::GGCoefs) -> GGEvalPlan
 
-Return `fit`'s compiled `GGEvalPlan`, building it and storing it in
+Return `fit`'s compiled [`GGEvalPlan`](@ref), building it and caching it in
 `fit.eval_plan` on first use. Assumes `fit` is not mutated after the first
 evaluation (a stale plan is not detected).
+
+The `plan` is the object every evaluator takes: build it once with `eval_plan`
+and pass it to `field_and_potential_evaluate_at`, `potential_evaluate_at` or
+`field_evaluate_at` (there is no `GGCoefs` method — evaluating from the plan is
+what keeps every call type-stable and allocation-free). The plan is also the
+GPU-ready, `Adapt`-able evaluation object: for GPU tracking pass `eval_plan(fit)`
+(not the `fit` itself, which holds `Dict`s and cannot cross to the device) as the
+field-evaluation parameters, then call the evaluators inside the kernel.
+
+```julia
+plan = eval_plan(fit)
+A, dA = potential_evaluate_at(plan, x, y, s)
+```
 """
-function _get_eval_plan(fit::GGCoefs)
+function eval_plan(fit::GGCoefs)
   plan = fit.eval_plan
   plan === nothing || return plan
   plan = _build_eval_plan(fit)
@@ -860,56 +883,72 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    _fill_gvals!(gvals, upow, plan, s) -> gvals
+    _val(::Val{N}) -> N
 
-Interpolate every tower onto `s`, scattering the results into the dense value
-vector `gvals`. `upow` is a caller-provided scratch buffer of length
-`plan.maxdeg + 1` for the powers of `u = s - zref`.
+Recover the wrapped integer of a `Val` field as a compile-time constant (used to
+size the stack-resident `SVector` scratch).
 """
-function _fill_gvals!(gvals, upow, plan::GGEvalPlan, s::Real)
-  z = plan.z; P = length(z); sq = float(s)
-  if P == 1
-    pair = 1
-  else
-    i0 = searchsortedlast(z, sq)
-    pair = clamp(i0, 1, P - 1)
-  end
-  fill!(gvals, 0.0)
+@inline _val(::Val{N}) where {N} = N
+
+"""
+    _interp_gvals(plan, s) -> gvals::SVector
+
+Interpolate every tower onto `s`, returning the dense GG value vector as a
+stack-resident `SVector{ngvals, T}` (`T = typeof(s)`). Allocation-free and
+GPU-safe: the accumulator is an immutable `SVector` updated with `Base.setindex`
+(no `MArray`, no heap), and the power `u^(d-m)` is carried incrementally so no
+scratch buffer is needed. Iterating the `NTuple` of towers is unrolled by the
+compiler.
+"""
+@inline function _interp_gvals(plan::GGEvalPlan, s::T) where {T}
+  NG = _val(plan.ng)
+  gvals = zero(SVector{NG,T})
+
+  z = plan.z; P = length(z)
+  pair = P == 1 ? 1 : clamp(searchsortedlast(z, s), 1, P - 1)
+
   @inbounds for tw in plan.towers
-    u = sq - tw.zref[pair]
+    u = s - T(tw.zref[pair])
     deg = tw.deg
-    upow[1] = 1.0
-    for d in 1:deg
-      upow[d+1] = upow[d] * u
-    end
     for m in 0:tw.N
-      acc = 0.0
+      acc = zero(T)
+      ud  = one(T)                     # u^(d-m), carried up from d = m
       for d in m:deg
-        ff = 1.0                     # falling factorial d·(d-1)···(d-m+1)
+        ff = one(T)                    # falling factorial d·(d-1)···(d-m+1)
         for r in 0:m-1
           ff *= (d - r)
         end
-        acc += tw.poly[d+1, pair] * ff * upow[d-m+1]
+        acc += T(tw.poly[d+1, pair]) * ff * ud
+        ud  *= u
       end
-      gvals[tw.slots[m+1]] = acc
+      gvals = Base.setindex(gvals, acc, tw.slots[m+1])
     end
     for e in eachindex(tw.extra_slots)
-      gvals[tw.extra_slots[e]] = tw.extra_planevals[e][pair]
+      gvals = Base.setindex(gvals, T(tw.extra_vals[e, pair]), tw.extra_slots[e])
     end
   end
   return gvals
 end
 
 """
+    _pow_table(::Val{N}, x) -> SVector{N}
+
+Stack-resident power table `xp[i+1] = x^i` for `i = 0..N-1`, as an immutable
+`SVector` (no heap, GPU-safe).
+"""
+@inline _pow_table(::Val{N}, x::T) where {N,T} = SVector(ntuple(i -> x^(i - 1), Val(N)))
+
+"""
     _comp_value(ct, gvals, xp, yq) -> val
 
 Evaluate a component's value `Σ w * gvals[slot] * x^p * y^q`, where `xp[i+1] = x^i`
-and `yq[j+1] = y^j` are precomputed power tables.
+and `yq[j+1] = y^j` are the power tables. Generic over the coordinate type.
 """
 @inline function _comp_value(ct::_CompTerms, gvals, xp, yq)
-  val = 0.0
+  T = eltype(gvals)
+  val = zero(T)
   @inbounds for t in eachindex(ct.slot)
-    val += ct.w[t] * gvals[ct.slot[t]] * xp[ct.p[t]+1] * yq[ct.q[t]+1]
+    val += T(ct.w[t]) * gvals[ct.slot[t]] * xp[ct.p[t]+1] * yq[ct.q[t]+1]
   end
   return val
 end
@@ -921,9 +960,10 @@ Like `_comp_value` but also returns the `x` and `y` partial derivatives of the
 component.
 """
 @inline function _comp_full(ct::_CompTerms, gvals, xp, yq)
-  val = 0.0; dvx = 0.0; dvy = 0.0
+  T = eltype(gvals)
+  val = zero(T); dvx = zero(T); dvy = zero(T)
   @inbounds for t in eachindex(ct.slot)
-    base = ct.w[t] * gvals[ct.slot[t]]
+    base = T(ct.w[t]) * gvals[ct.slot[t]]
     p = ct.p[t]; q = ct.q[t]
     val += base * xp[p+1] * yq[q+1]
     p > 0 && (dvx += base * p * xp[p] * yq[q+1])
@@ -939,35 +979,32 @@ end
 
 Prepare the per-call scratch for evaluating `plan` at `(x, y, s)`: interpolate
 every GG tower onto `s` (`gvals`) and build the `x`/`y` power tables
-(`xp[i+1] = x^i`, `yq[j+1] = y^j`, with `fit.origin` already subtracted). All
-three returned arrays are `view`s into a single backing allocation, so a call
-allocates once. Shared by `field_and_potential_evaluate_at` and
-`potential_evaluate_at`.
+(`xp[i+1] = x^i`, `yq[j+1] = y^j`, with `plan.origin` already subtracted). All
+three are stack-resident `SVector`s, so a call allocates nothing on the heap and
+runs unchanged on the GPU. Generic over the coordinate type `T` (so `Float64`,
+`Float32`, and `ForwardDiff.Dual` all work). Shared by
+`field_and_potential_evaluate_at` and `potential_evaluate_at`.
 """
-function _eval_scratch(plan::GGEvalPlan, x::Real, y::Real, s::Real)
-  xr = float(x) - plan.origin[1]
-  yr = float(y) - plan.origin[2]
-  ng = plan.ngvals; nu = plan.maxdeg + 1; nx = plan.pmax + 1; ny = plan.qmax + 1
-  scratch = Vector{Float64}(undef, ng + nu + nx + ny)
-  gvals = view(scratch, 1:ng)
-  upow  = view(scratch, ng+1:ng+nu)
-  xp    = view(scratch, ng+nu+1:ng+nu+nx)
-  yq    = view(scratch, ng+nu+nx+1:ng+nu+nx+ny)
-  _fill_gvals!(gvals, upow, plan, s)
-  xp[1] = 1.0; @inbounds for i in 1:plan.pmax; xp[i+1] = xp[i] * xr; end
-  yq[1] = 1.0; @inbounds for i in 1:plan.qmax; yq[i+1] = yq[i] * yr; end
+@inline function _eval_scratch(plan::GGEvalPlan, x, y, s)
+  T  = float(promote_type(typeof(x), typeof(y), typeof(s)))
+  xr = T(x) - T(plan.origin[1])
+  yr = T(y) - T(plan.origin[2])
+  gvals = _interp_gvals(plan, T(s))
+  xp = _pow_table(plan.np, xr)
+  yq = _pow_table(plan.nq, yr)
   return gvals, xp, yq
 end
 
 #---------------------------------------------------------------------------------------------------
 
 """
-    _make_dA(Axx, Axy, dAxv, Ayx, Ayy, dAyv, Asx, Asy, dAsv) -> SMatrix{3,3,Float64}
+    _make_dA(Axx, Axy, dAxv, Ayx, Ayy, dAyv, Asx, Asy, dAsv) -> SMatrix{3,3}
 
 Assemble the 3x3 Jacobian `dA[i,j] = ∂A_i/∂u_j` (rows `Ax,Ay,As`; columns
-`x,y,s`) as a stack-allocated `SMatrix` (no heap allocation). Arguments are given
-row-major; the `SMatrix` constructor takes them column-major.
+`x,y,s`) as a stack-allocated `SMatrix` (no heap allocation; eltype inferred from
+the arguments). Arguments are given row-major; the `SMatrix` constructor takes
+them column-major.
 """
 @inline _make_dA(Axx, Axy, dAxv, Ayx, Ayy, dAyv, Asx, Asy, dAsv) =
-  SMatrix{3,3,Float64}(Axx, Ayx, Asx,  Axy, Ayy, Asy,  dAxv, dAyv, dAsv)
+  SMatrix{3,3}(Axx, Ayx, Asx,  Axy, Ayy, Asy,  dAxv, dAyv, dAsv)
 

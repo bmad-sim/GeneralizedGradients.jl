@@ -6,6 +6,11 @@ import Beamlines as bl
 
 fit, meta = read_gg_fit("gg_fit_result.h5")
 
+# The evaluators take the compiled plan (from `eval_plan`), not the `fit` itself.
+# Build it once and reuse it: `potential_evaluate_at(plan, ...)` is allocation-free
+# and type-stable, so tracking is fast on the CPU and works unchanged on the GPU.
+plan = eval_plan(fit)
+
 function four_potential(x, y, s, t, p)
   A, dA = potential_evaluate_at(p, x, y, s)   # B field not needed for tracking
   potential = (0.0, A[1], A[2], A[3])
@@ -23,14 +28,14 @@ p_over_q = bl.E_to_R(species, E0)
 P0 = bl.E_to_pc(species, E0) / C_LIGHT
 L = 0.055
 
-ele = LineElement(four_potential = four_potential, four_potential_params = fit, 
+ele = LineElement(four_potential = four_potential, four_potential_params = plan,
           four_potential_normalized = false, L = L, 
           tracking_method=Yoshida(order=8, n_steps=60, radiation_damping_on=false))
 
 v = [0.0 0.0 0.0 0.0 0.0 0.0]
 q = [1.0 0.0 0.0 0.0]
 
-B, A, dA = field_and_potential_evaluate_at(fit, v[1], v[3], 0.0)
+B, A, dA = field_and_potential_evaluate_at(plan, v[1], v[3], 0.0)
 v[2] = v[2] + chargeof(species) * A[1] / P0
 v[4] = v[4] + chargeof(species) * A[3] / P0
 
@@ -41,7 +46,7 @@ track!(b0, bline)
 v2 = b0.coords.v
 q2 = b0.coords.q
 
-B, A, dA = field_and_potential_evaluate_at(fit, v2[1], v2[3], L)
+B, A, dA = field_and_potential_evaluate_at(plan, v2[1], v2[3], L)
 
 v2[2] = v2[2] - chargeof(species) * A[1] / P0
 v2[4] = v2[4] - chargeof(species) * A[3] / P0

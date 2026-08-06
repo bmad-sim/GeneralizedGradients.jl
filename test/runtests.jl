@@ -2,6 +2,8 @@ using GeneralizedGradients
 using Test
 using OffsetArrays
 using HDF5
+using KernelAbstractions
+using Adapt: adapt
 
 # Self-contained test fixture (HDF5 gg_fit result).
 const EXAMPLE = joinpath(@__DIR__, "data", "gg_fit_result.h5")
@@ -49,6 +51,31 @@ synth(z_base, a, b, bs, g_ref; m_max, dz_grid) = (
   (;))
 
 const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.007, 0.0))
+
+# Top-level (type-stable) sweep used for the per-particle allocation check: no
+# captured variables, so any allocation reported is the evaluator's own.
+@noinline function _gg_sweep(plan, xs, ys, ss)
+  A1, dA1 = potential_evaluate_at(plan, xs[1], ys[1], ss[1])
+  acc = A1[1] + dA1[1, 1]
+  @inbounds for i in 2:length(xs)
+    A, dA = potential_evaluate_at(plan, xs[i], ys[i], ss[i])
+    acc += A[1] + dA[1, 1]
+  end
+  return acc
+end
+
+# KernelAbstractions kernel: evaluate the (Adapt-ed) plan per particle. Defined at
+# top level so `@kernel` expands in module scope.
+@kernel function _gg_pot_kernel!(Aout, dAout, plan, xs, ys, ss)
+  i = @index(Global, Linear)
+  A, dA = potential_evaluate_at(plan, xs[i], ys[i], ss[i])
+  @inbounds for k in 1:3
+    Aout[k, i] = A[k]
+  end
+  @inbounds for c in 1:3, r in 1:3
+    dAout[r, c, i] = dA[r, c]
+  end
+end
 
 @testset "GeneralizedGradients" begin
 
@@ -117,8 +144,9 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
     ip = 6; sc = zg[ip]; xq, yq = 0.006, -0.004
     _, _, dA = field_and_potential_evaluate(fitM, ip, xq, yq)
     δ = 1e-5
-    _, Ap, _ = field_and_potential_evaluate_at(fitM, xq, yq, sc + δ)
-    _, Am, _ = field_and_potential_evaluate_at(fitM, xq, yq, sc - δ)
+    planM = eval_plan(fitM)
+    _, Ap, _ = field_and_potential_evaluate_at(planM, xq, yq, sc + δ)
+    _, Am, _ = field_and_potential_evaluate_at(planM, xq, yq, sc - δ)
     dAs_fd = (Ap .- Am) ./ (2δ)
     @test maximum(abs, dA[:, 3] .- dAs_fd) < 1e-6
   end
@@ -147,13 +175,12 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
     @test CBxs == CBx && CBys == CBy && CBss == CBs
 
     B, A, dA = field_and_potential_evaluate(fit, ip, 0.004, 0.003)
-    Bs, As, dAs = field_and_potential_evaluate_at(fit, 0.004, 0.003, s)
+    Bs, As, dAs = field_and_potential_evaluate_at(eval_plan(fit), 0.004, 0.003, s)
     @test Bs ≈ B && As ≈ A && dAs ≈ dA
   end
 
   @testset "fast evaluate_at matches reference path" begin
-    # The GGCoefs method of field_and_potential_evaluate_at uses a cached,
-    # type-stable plan (low_level.jl); it must reproduce the generic reference
+    # The compiled plan (low_level.jl) must reproduce the generic reference
     # composition field_and_potential_evaluate(_interp_gg_fit(...)). And
     # potential_evaluate_at must return exactly the A/dA of the full evaluator.
     fit, _ = read_gg_fit(EXAMPLE)
@@ -161,19 +188,75 @@ const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.
       field_and_potential_evaluate(GeneralizedGradients._interp_gg_fit(f, s), 1, x, y)
     approx(P, Q) = maximum(abs, P .- Q) ≤ 1e-9 * max(1.0, maximum(abs, Q))
     for f in (fit, fitM)
+      plan = eval_plan(f)
       zlo, zhi = first(f.z_base), last(f.z_base)
       ss = (zlo, zhi, (zlo+zhi)/2, zlo + 0.37(zhi-zlo),
             f.z_base[min(3, length(f.z_base))], zlo - 0.01, zhi + 0.01)  # incl. extrapolation
       for (x, y) in PTS, s in ss
-        Bf, Af, dAf = field_and_potential_evaluate_at(f, x, y, s)
+        Bf, Af, dAf = field_and_potential_evaluate_at(plan, x, y, s)
         Br, Ar, dAr = reference(f, x, y, s)
         @test approx(Bf, Br) && approx(Af, Ar) && approx(dAf, dAr)
-        Ap, dAp = potential_evaluate_at(f, x, y, s)
+        Ap, dAp = potential_evaluate_at(plan, x, y, s)
         @test Ap == Af && dAp == dAf     # identical: same code path minus B
-        Bp = field_evaluate_at(f, x, y, s)
+        Bp = field_evaluate_at(plan, x, y, s)
         @test Bp == Bf                   # identical: same code path, B only
       end
     end
+  end
+
+  @testset "plan evaluator is GPU-capable (Adapt + KA kernel, generic T)" begin
+    # The compiled GGEvalPlan is Adapt-able and its evaluator is allocation-free
+    # and generic over the coordinate type, so tracking with a GG fit can run on
+    # the GPU. We check that here against a real fit, on the portable KA CPU
+    # backend (which exercises the same code path a GPU backend would compile):
+    #   * Adapt round-trips the plan and gives identical results,
+    #   * potential_evaluate_at runs inside a KA kernel and equals the host,
+    #   * for both Float64 and Float32 inputs,
+    #   * with zero per-particle heap allocation.
+    fit, _ = read_gg_fit(EXAMPLE)
+    plan = eval_plan(fit)
+    zlo, zhi = first(fit.z_base), last(fit.z_base)
+    backend = CPU()
+
+    # Adapt round-trip: adapt(Array, plan) reproduces the host result bit-for-bit.
+    aplan = adapt(Array, plan)
+    for (x, y) in PTS
+      s = (zlo + zhi) / 2
+      @test potential_evaluate_at(aplan, x, y, s) == potential_evaluate_at(plan, x, y, s)
+    end
+
+    for T in (Float64, Float32)
+      pts = [(T(x), T(y), T(zlo + f * (zhi - zlo))) for (x, y) in PTS for f in range(0, 1; length = 5)]
+      N  = length(pts)
+      xs = T[p[1] for p in pts]; ys = T[p[2] for p in pts]; ss = T[p[3] for p in pts]
+
+      Aref  = zeros(T, 3, N)
+      dAref = zeros(T, 3, 3, N)
+      for i in 1:N
+        A, dA = potential_evaluate_at(plan, xs[i], ys[i], ss[i])
+        Aref[:, i]     .= A
+        dAref[:, :, i] .= dA
+      end
+
+      Aout  = KernelAbstractions.zeros(backend, T, 3, N)
+      dAout = KernelAbstractions.zeros(backend, T, 3, 3, N)
+      _gg_pot_kernel!(backend)(Aout, dAout, aplan, xs, ys, ss; ndrange = N)
+      KernelAbstractions.synchronize(backend)
+
+      @test Array(Aout)  == Aref        # exact: kernel runs the same code as host
+      @test Array(dAout) == dAref
+    end
+
+    # Zero per-particle heap: total allocation must not grow with the particle
+    # count (a real per-call heap of even 8 bytes would add ~144 KB over the gap).
+    mk(n) = (collect(range(-0.005, 0.005; length = n)),
+             collect(range(-0.004, 0.004; length = n)),
+             collect(range(zlo, zhi; length = n)))
+    xa, ya, sa = mk(2_000); xb, yb, sb = mk(20_000)
+    _gg_sweep(plan, xa, ya, sa)                       # compile
+    a1 = @allocated _gg_sweep(plan, xa, ya, sa)
+    a2 = @allocated _gg_sweep(plan, xb, yb, sb)
+    @test abs(a2 - a1) < 4096
   end
 
   @testset "gg_fit + show + write round-trip" begin

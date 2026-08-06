@@ -100,19 +100,33 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    field_and_potential_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real) -> (B, A, dA)
+    field_and_potential_evaluate_at(plan::GGEvalPlan, x, y, s) -> (B, A, dA)
 
-Evaluate at an arbitrary `(x, y, s)` point.
+Evaluate the field, vector potential and Jacobian of `A` at an arbitrary
+`(x, y, s)` point, given the compiled evaluation `plan`.
 
-The GG coefficients are stored only at the grid planes `fit.z_base`, but the
-fit gives, at each plane, the whole derivative tower of every GG function:
+Obtain the plan once from a fit with [`eval_plan`](@ref) and reuse it:
+
+```julia
+plan = eval_plan(fit)
+B, A, dA = field_and_potential_evaluate_at(plan, x, y, s)
+```
+
+Taking the `plan` (rather than the `fit`) is what makes evaluation fast: this
+method is `@inline`, allocation-free (stack-resident `SVector` scratch), and
+generic over the coordinate type, so it can be called inside a GPU kernel on an
+`Adapt.adapt`-ed plan and with `Float32` or `ForwardDiff.Dual` coordinates.
+
+The GG coefficients are stored only at the grid planes `fit.z_base`, but the fit
+gives, at each plane, the whole derivative tower of every GG function:
 `a(n,0..N)`, `b(n,0..N)`, `bs(0..N)` with `a(n,m) = dᵐaₙ/dsᵐ` and `N` the
 maximum order. So for an `s` between two planes `z_L`, `z_R` we have, for each
 function `f`, the value and its first `N` `s`-derivatives at both ends —
 `2(N+1)` data — which fix a unique two-point Hermite polynomial `H(s)` of degree
 `2N+1`. Each interpolated derivative is taken from the SAME polynomial,
 `a(n,m)(s) = H_aₙ⁽ᵐ⁾(s)`, so the tower stays self-consistent: the interpolated
-`a(n,1)` is exactly `d/ds` of the interpolated `a(n,0)`, etc.
+`a(n,1)` is exactly `d/ds` of the interpolated `a(n,0)`, etc. The plan compiles
+these Hermite polynomials once (see low_level.jl).
 
 This is more accurate than independent per-order interpolation (error
 `O(h^{2N+2})` for the base coefficient, using only the two straddling planes)
@@ -121,22 +135,17 @@ and, because the orders are mutually consistent, the `∂A/∂s` that
 true `s`-derivative of the interpolated field. The curl identity `B = ∇×A`
 holds at `s` as before.
 
-- `fit` — the `GGCoefs` struct from `read_gg_fit`.
-- `x`, `y` — absolute transverse coordinates (`fit.origin` subtracted internally).
+- `plan` — the compiled [`GGEvalPlan`](@ref) from `eval_plan(fit)`.
+- `x`, `y` — absolute transverse coordinates (the fit's `origin` subtracted internally).
 - `s` — absolute longitudinal coordinate.
 
 Returns `(B, A, dA)` with the same values as `field_and_potential_evaluate`, but
-as stack-allocated `StaticArrays`: `B`, `A` are `SVector{3,Float64}` and `dA` is
-an `SMatrix{3,3,Float64}` (so evaluation allocates only the internal scratch, not
-the returned data). They index like ordinary vectors/matrices (`A[1]`, `dA[1,3]`).
-
-Uses a type-stable evaluation plan compiled once per `fit` and cached by object
-identity (see low_level.jl); this is what makes it fast enough for tracking.
-The plan assumes `fit` is not mutated after its first evaluation — changing
-`fit.a`/`fit.b`/`fit.bs`/`fit.g_ref` afterward leaves the cached plan stale.
+as stack-allocated `StaticArrays`: `B`, `A` are `SVector{3,T}` and `dA` is an
+`SMatrix{3,3,T}` where `T` is the promoted coordinate type (`Float64` for the
+usual `Float64` inputs). They index like ordinary vectors/matrices (`A[1]`,
+`dA[1,3]`).
 """
-function field_and_potential_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real)
-  plan = _get_eval_plan(fit)
+@inline function field_and_potential_evaluate_at(plan::GGEvalPlan, x, y, s)
   gvals, xp, yq = _eval_scratch(plan, x, y, s)
 
   c = plan.comps
@@ -159,19 +168,21 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    potential_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real) -> (A, dA)
+    potential_evaluate_at(plan::GGEvalPlan, x, y, s) -> (A, dA)
 
 Like [`field_and_potential_evaluate_at`](@ref) but returns only the vector
-potential `A` and its Jacobian `dA`, skipping the magnetic field `B`.
+potential `A` and its Jacobian `dA`, skipping the magnetic field `B`. This is the
+entry point used for tracking; get `plan` from a fit with `eval_plan(fit)` and
+reuse it.
 
 For tracking, only `A` and `dA` are needed. The `B` field is the majority of the
 per-call work (its monomial expansion has more terms than `A`'s), so skipping it
 is roughly `1.8x` faster than the full evaluator while returning identical
-`A`, `dA`. `A` is an `SVector{3,Float64}` and `dA` an `SMatrix{3,3,Float64}`. See
+`A`, `dA`. `A` is an `SVector{3,T}` and `dA` an `SMatrix{3,3,T}` for the promoted
+coordinate type `T`. Allocation-free, GPU-capable and type-generic. See
 `field_and_potential_evaluate_at` for the `(x, y, s)` conventions.
 """
-function potential_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real)
-  plan = _get_eval_plan(fit)
+@inline function potential_evaluate_at(plan::GGEvalPlan, x, y, s)
   gvals, xp, yq = _eval_scratch(plan, x, y, s)
 
   c = plan.comps
@@ -190,15 +201,16 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    field_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real) -> B
+    field_evaluate_at(plan::GGEvalPlan, x, y, s) -> B
 
 Like [`field_and_potential_evaluate_at`](@ref) but returns only the magnetic
-field `B = [Bx, By, Bs]` as an `SVector{3,Float64}`, skipping the vector potential
-`A` and its Jacobian. `B` is identical to that of the full evaluator. See
-`field_and_potential_evaluate_at` for the `(x, y, s)` conventions.
+field `B = [Bx, By, Bs]` as an `SVector{3,T}` for the promoted coordinate type
+`T`, skipping the vector potential `A` and its Jacobian. `B` is identical to that
+of the full evaluator. Allocation-free, GPU-capable and type-generic; get `plan`
+from a fit with `eval_plan(fit)`. See `field_and_potential_evaluate_at` for the
+`(x, y, s)` conventions.
 """
-function field_evaluate_at(fit::GGCoefs, x::Real, y::Real, s::Real)
-  plan = _get_eval_plan(fit)
+@inline function field_evaluate_at(plan::GGEvalPlan, x, y, s)
   gvals, xp, yq = _eval_scratch(plan, x, y, s)
 
   c = plan.comps

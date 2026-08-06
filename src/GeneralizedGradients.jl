@@ -3,6 +3,7 @@ module GeneralizedGradients
   using HDF5, OffsetArrays, Dates, EnumX
   using LinearAlgebra, Printf
   using StaticArrays: SVector, SMatrix
+  using Adapt
 
   # Package-wide constants (referenced by the helpers in low_level.jl and the
   # evaluation / field-grid code).
@@ -44,6 +45,7 @@ module GeneralizedGradients
        field_and_potential_evaluate_at,
        potential_evaluate_at,
        field_evaluate_at,
+       eval_plan,
        field_coefficients_at_plane,
        field_coefficients_at_s,
        gg_coefficients_at_plane,

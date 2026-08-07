@@ -117,12 +117,13 @@ How a scan picks its winner. Each candidate model is given a score and the lowes
 score wins. Enlarging the model can only lower the residual (the smaller model's
 unknowns are a subset of the larger one's), so a usable criterion has to charge
 for coefficients. Writing `RSS` for the weighted sum of squared residuals pooled
-over all base planes, `N` for the number of fitted field-component values, and
+over all base planes, `N` for the number of fitted field-component values, `W`
+for the sum of the weights of those values (`W = N` for uniform weighting), and
 `k` for the total number of fitted coefficients (per-plane count times the number
 of base planes):
 
 ```
-:rms    score = sqrt(RSS / N)          # goodness of fit only, no charge for k
+:rms    score = sqrt(RSS / W)          # goodness of fit only, no charge for k
 :aic    score = N * ln(RSS/N) + 2 * k         # Akaike information criterion
 :bic    score = N * ln(RSS/N) + k * ln(N)     # Bayesian, and the default
 ```
@@ -164,10 +165,16 @@ Collected in the `scan` field of the returned `GGCoefs` and printed by
 Fields:
 - `m_max`, `nd_max` — the model this row is for.
 - `n_coef` — number of fitted coefficients per base plane.
-- `rms` — weighted RMS residual pooled over all base planes.
+- `rms_weighted` — weighted RMS residual pooled over all base planes,
+  `sqrt(Σ w·δ² / Σ w)` over every fitted field-component value.
+- `rms_weighted_comp` — the same quantity restricted to one field component at a
+  time, as the 3-tuple `(Bx, By, Bs)`. Each entry is normalized by that
+  component's own weight sum, so the three are directly comparable to each other
+  and to `rms_weighted`, which is their weighted quadrature mean. A fit that is
+  bad in only one component shows up here and nowhere else.
 - `rms_unweighted` — the same residual with all point weights set to 1.
 - `score` — value of the selection criterion; the scanned model with the lowest
-  score is the one `gg_fit` returns. For `:rms` this is just `rms`. For `:aic`
+  score is the one `gg_fit` returns. For `:rms` this is just `rms_weighted`. For `:aic`
   and `:bic` it is `N*ln(RSS/N)` plus a penalty of `2` or `ln(N)` per fitted
   coefficient, where `RSS` is the pooled weighted sum of squared residuals and
   `N` the number of fitted field-component values. Only differences between
@@ -180,7 +187,8 @@ Fields:
   m_max::Int = 0
   nd_max::Int = 0
   n_coef::Int = 0
-  rms::Float64 = NaN
+  rms_weighted::Float64 = NaN
+  rms_weighted_comp::NTuple{3,Float64} = (NaN, NaN, NaN)   # (Bx, By, Bs)
   rms_unweighted::Float64 = NaN
   score::Float64 = NaN
   criterion::Symbol = :bic
@@ -282,14 +290,15 @@ Fields:
 - `a` — fitted `a(m,nd)` functions, `Dict (m,nd) => values_over_planes`.
 - `b` — fitted `b(m,nd)` functions, `Dict (m,nd) => values_over_planes`.
 - `bs` — fitted `bs(nd)` functions, `Dict nd => values_over_planes`.
-- `rms_plane` — weighted RMS fit residual at each base plane.
+- `rms_weighted_plane` — weighted RMS fit residual at each base plane,
+  `sqrt(Σ w·δ² / Σ w)` over the points of that plane's fit region.
 - `rms_unweighted_plane` — RMS fit residual at each base plane over the same
-  points as `rms_plane` but with all point weights set to 1. Equal to
-  `rms_plane` when `core_weight = outer_plane_weight = 1`.
+  points as `rms_weighted_plane` but with all point weights set to 1. Equal to
+  `rms_weighted_plane` when `core_weight = outer_plane_weight = 1`.
 - `field_ave_plane` — average field magnitude `|B|` over the grid points of each
   base plane [T]. Unweighted, and taken from the base plane alone (not the added
   planes), so it gives the field profile along `z` and a scale against which
-  `rms_plane` can be judged.
+  `rms_weighted_plane` can be judged.
 - `m_max` — highest multipole order `m` retained by the fit.
 - `nd_max` — highest derivative order `nd` retained by the fit.
 - `scan` — one `GGFitScanPoint` per `(m_max, nd_max)` combination tried, in the
@@ -309,7 +318,7 @@ Fields:
   a::Dict{Tuple{Int,Int},Vector{Float64}} = Dict{Tuple{Int,Int},Vector{Float64}}()
   b::Dict{Tuple{Int,Int},Vector{Float64}} = Dict{Tuple{Int,Int},Vector{Float64}}()
   bs::Dict{Int,Vector{Float64}} = Dict{Int,Vector{Float64}}()
-  rms_plane::Vector{Float64} = Float64[]
+  rms_weighted_plane::Vector{Float64} = Float64[]
   rms_unweighted_plane::Vector{Float64} = Float64[]
   field_ave_plane::Vector{Float64} = Float64[]
   m_max::Int = 0

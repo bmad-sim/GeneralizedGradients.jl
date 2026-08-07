@@ -265,7 +265,7 @@ function _interp_gg_fit(fit, s::Real)
 
   fit2 = GGCoefs(; z_base = [sq], a = a2, b = b2, bs = bs2,
                         m_max = fit.m_max, nd_max = fit.nd_max,
-                        rms_plane = [NaN], g_ref = fit.g_ref,
+                        rms_weighted_plane = [NaN], g_ref = fit.g_ref,
                         origin = fit.origin, dz_grid = fit.dz_grid)
   return fit2
 end

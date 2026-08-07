@@ -30,7 +30,7 @@
 #  f(m,nd)(z0+dz) = Σ_{j≥nd} dz^(j-nd)/(j-nd)! · f(m,j)(z0)
 # ```
 # where `f` is either `a`, `b`, or `bs`.
-# Substituting makes the model linear in the base-plane unknowns `f(m,j)(z0)`:
+# Substituting makes the fit linear in the base-plane unknowns `f(m,j)(z0)`:
 # ```
 # design entry for unknown f(m,j) = Σ_{nd=0}^{j} CS_c,f(m,nd; x,y) · dz^(j-nd)/(j-nd)!
 # ```
@@ -62,16 +62,17 @@ See `examples/run_gg_fit.jl` for a complete, runnable example.
 
 The GG coefficients are computed at the equally spaced `z`-positions coincident with the
 input field-table planes. These planes are sometimes called "principal planes".
-The fit is done plane by plane: the coefficients at a given principal plane (the "base plane") 
+The principal plane where a fit is being done is called the "base plane".
+The fit is done plane by plane: the coefficients at a given base plane
 are computed independently of the calculation of the coefficients at every other plane, and
-all coefficients of a base plane are solved for simultaneously by minimizing a merit function
+all coefficients of a given plane are solved for simultaneously by minimizing a merit function
 
 ```
 Merit = Σₖ  weightₖ · (field_from_tableₖ - field_from_GG_coefsₖ)^2
 ```
 
 The sum runs over all field points lying in a plane within `n_planes_add` of the
-base plane. For example, `n_planes_add = 2` adds two planes on either side, so
+base plane. For example, `n_planes_add = 2` adds two principal planes on either side, so
 five planes are used in total. Near the ends of the table the count is reduced —
 a base plane at the very end of the table uses only three planes when
 `n_planes_add = 2`.
@@ -83,62 +84,67 @@ points lying within `n_planes_add` planes of the base plane.
 Adding extra planes smooths the computed values between planes at the cost of making the fit
 at the principal planes worse. So adding more planes can give a worse fit.
 
-## Scanning over the model size
+## Scanning over the fit size
 
-Which unknowns exist at all is set by two cutoffs: `m_max` on the multipole order
-and `nd_max` on the derivative order. Giving either as a vector or range makes
-`gg_fit` fit the full grid of combinations and keep the best one. For example
+Convention: `m` denotes the multipole order for GG functions `a_m` and `b_m` while
+for `a(m, nd)`, `b(m, nd)`, and `bs(nd)`, the `nd` here denotes the derivative order.
+
+A fit to the field are done up to some maximum multipole order `m_max` and some maximum
+derivative order `nd_max`. 
+The "size" of a fit is the number of GG coefficients per plane that is needed.
+To optimize for the best fit with the lowest number of GG coefficients,
+The user can specify a range of `m_max` and `nd_max` to use.
+For example:
 
 ```julia
 p.m_max  = 1:10       # try m_max = 1, 2, … 10
-p.nd_max = 0:6        # crossed with nd_max = 0, 1, … 6
+p.nd_max = 2:6        # crossed with nd_max = 2, 3, … 6
 ```
+This runs 66 fits. Note: a fit is done with a given `m_max`/`nd_max` applied to every base plane.
+That is, `m_max` and `nd_max` do not vary plane to plane within a given fit.
+Each fit is recorded as a `GGFitScanPoint` in the `scan` field of the result (and printed
+by `gg_fit_show_results`) with its coefficient count, its pooled RMS residual, and that
+residual broken out by field component (`Bx`, `By`, `Bs` separately).
 
-runs 77 fits. A single `m_max`/`nd_max` applies to every base plane — the model
-never varies plane to plane — so the scan is over whole-fit models, not per-plane
-ones. Each combination is recorded as a `GGFitScanPoint` in the `scan` field of
-the result (and printed by `gg_fit_show_results`) with its coefficient count and
-pooled RMS residual.
+## Choosing between fits (`fit_criterion`)
 
-Cost scales with the number of combinations: the design matrix is built once per
-base plane at the largest requested model and each combination is then a least
-squares solve on a subset of its columns.
-
-## Choosing between models (`fit_criterion`)
-
-Enlarging the model can only lower the residual: the unknowns of a smaller model
-are a subset of those of a larger one, so the larger fit can always reproduce the
-smaller one and least squares will never do worse. A scan therefore cannot pick
-its winner by residual alone — it needs a rule that charges for coefficients.
-`fit_criterion` selects that rule. Each scanned model gets a `score` (recorded in
-its `GGFitScanPoint`, printed in the scan table) and the **lowest score wins**.
+A fit with larger `m_max` and/or `nd_max` will always have a lower RMS residual
+at the cost of more coefficients.
+A scan therefore cannot pick its winner by residual alone — it needs a rule that charges for coefficients.
+The input `fit_criterion` parameter selects that rule. 
+Each scanned fit gets a score and the lowest score wins.
 
 All three rules are built from two numbers:
 
 ```
 RSS = Σ_planes Σ_points  weight · (field_from_table - field_from_GG_coefs)^2
 N   = total number of fitted field-component values, summed over base planes
-      = Σ_planes 3 · (points in that plane's fit region)
+      = Σ_planes · 3 · (points in that plane's fit region)
+W   = Σ_planes Σ_points  weight, over those same values
 k   = total number of fitted coefficients
-      = (coefficients per plane) · (number of base planes)
+      = (coefficients per plane) · (number of principal planes)
 ```
 
 `RSS` is the weighted residual — the merit function the fit actually minimized,
 pooled over every base plane. `N` counts `Bx`, `By` and `Bs` at each field point
 of each plane's fit region, so a point used by several base planes is counted
-once per base plane. `k` likewise counts the whole fit, since each base plane is
-solved for its own copy of the coefficients.
+once per base plane. `W` is the weight total over that same set, and equals `N`
+when `core_weight = outer_plane_weight = 1`. `k` likewise counts the whole fit,
+since each base plane is solved for its own copy of the coefficients.
 
     fit_criterion = :rms
 
 ```
-score = sqrt(RSS / N)
+score = sqrt(RSS / W)
 ```
 
-The pooled weighted RMS residual, which is also the `rms` column of the scan
-table. This is a pure goodness-of-fit measure with no charge for coefficients, so
-by the argument above it will select the largest model offered. Use it to see the
-raw residual ranking, not to choose a model.
+The pooled weighted RMS residual, which is also the `rms_weighted` column of the
+scan table. Normalizing by `W` rather than `N` keeps it a weighted mean of the
+squared deviations, so it can be compared directly against the unweighted
+residual and against `<|B|>`.
+This is a pure goodness-of-fit measure with no charge for coefficients, so
+by the argument above it will select the largest fit offered. Use it to see the
+raw residual ranking, not to choose a fit.
 
     fit_criterion = :aic          # Akaike information criterion
 
@@ -156,10 +162,10 @@ Both are the standard information criteria for a least-squares fit with unknown
 error variance. The first term, `N·ln(RSS/N)`, is (up to an additive constant
 that is the same for every candidate, and so cannot affect the ranking) minus
 twice the maximized Gaussian log-likelihood; it rewards a smaller residual. The
-second term is the penalty for model size. They differ only in what one
+second term is the penalty for fit size. They differ only in what one
 coefficient costs: `2` for AIC, `ln(N)` for BIC. Since `ln(N) > 2` for any
 `N > 7`, **BIC always penalizes more heavily than AIC and so selects equal or
-smaller models**. The scores are large negative numbers whose absolute value is
+smaller fits**. The scores are large negative numbers whose absolute value is
 meaningless — only differences between candidates matter.
 
 To read the trade-off quantitatively: adding `Δk` coefficients improves the BIC
@@ -178,7 +184,7 @@ is the default.
 
 There is a further caveat specific to this problem. AIC and BIC assume the
 residuals are independent draws from a common Gaussian. Here the residual is
-dominated by systematic truncation error — the field the model cannot represent
+dominated by systematic truncation error — the field the fit cannot represent
 — which is smooth and strongly correlated from point to point, not noise. The
 effective number of independent measurements is therefore far below `N`, and the
 penalty far weaker than the theory intends. Treat the criteria as a defensible
@@ -266,10 +272,10 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
   npa     = n_planes_add
   dz_grid = dr[3]
 
-  # ---- Resolve the (m_max, nd_max) models to try -------------------------
-  # A scalar pins the model; a vector asks for a scan. Candidates are clamped to
+  # ---- Resolve the (m_max, nd_max) fits to try -------------------------
+  # A scalar pins the fit; a vector asks for a scan. Candidates are clamped to
   # what the coefficient table actually holds so that, say, `nd_max = 0:100` does
-  # not fit the same top model over and over.
+  # not fit the same top fit over and over.
   m_table_max  = maximum(k[1] for d in (a_dicts..., b_dicts...) for k in keys(d))
   nd_table_max = maximum(k[2] for d in (a_dicts..., b_dicts...) for k in keys(d))
   m_cands  = _fit_candidates(params.m_max, m_table_max, m_table_max)
@@ -279,7 +285,7 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
   params.fit_criterion in (:bic, :aic, :rms) ||
       error("Unknown fit_criterion: $(params.fit_criterion). Expecting :bic, :aic, or :rms.")
 
-  # The master model is the union of every candidate: the design matrix is built
+  # The master fit is the union of every candidate: the design matrix is built
   # once at this size and each candidate then uses a subset of its columns.
   m_max_all  = maximum(m_cands)
   nd_max_all = maximum(nd_cands)
@@ -311,11 +317,11 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
   master_list = sort!(collect(pset))
   ncols_all   = length(master_list)
 
-  # Column subset of the master list belonging to each candidate model. `bs`
+  # Column subset of the master list belonging to each candidate fit. `bs`
   # unknowns describe a_0 and carry no multipole order, so `m_max` never drops them.
-  cand_models = [(mx, ndx) for mx in m_cands for ndx in nd_cands]
+  cand_fits = [(mx, ndx) for mx in m_cands for ndx in nd_cands]
   cand_cols   = [[c for (c, (typ, m, nd)) in enumerate(master_list)
-                    if nd <= ndx && (typ == :bs || m <= mx)] for (mx, ndx) in cand_models]
+                    if nd <= ndx && (typ == :bs || m <= mx)] for (mx, ndx) in cand_fits]
 
   # ---- Precompute CB (field-coefficient) grids: (comp,type,m,nd) => matrix over (ix,iy) --
   # comp: 1=Bx, 2=By, 3=Bs.   type: :a,:b,:bs.
@@ -344,14 +350,20 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
   # ---- Result containers ------------------------------------------------
   nplanes = length(izs_grid)
   z_base  = [r0[3] + dr[3] * iz for iz in izs_grid]
-  ncand   = length(cand_models)
+  ncand   = length(cand_fits)
   # Per candidate: fitted coefficients (rows follow that candidate's column
   # subset) and the two per-plane residuals. Only the winner is expanded into
   # the a/b/bs dictionaries at the end.
   thetas   = [zeros(length(cols), nplanes) for cols in cand_cols]
-  rms_c    = [fill(NaN, nplanes) for _ in 1:ncand]
+  rmsw_c   = [fill(NaN, nplanes) for _ in 1:ncand]
   rmsu_c   = [fill(NaN, nplanes) for _ in 1:ncand]
+  # Same weighted residual as rmsw_c but split by field component: [comp, plane]
+  # with comp = 1, 2, 3 for Bx, By, Bs. Reported per candidate in the scan table
+  # so a fit that fails on one component only can be recognized as such.
+  rmsw_comp_c = [fill(NaN, 3, nplanes) for _ in 1:ncand]
   nrow_pl  = zeros(Int, nplanes)
+  wsum_pl  = zeros(nplanes)     # Σ weight over the rows of each plane's fit
+  wsum_comp_pl = zeros(3, nplanes)   # the same sum, per field component
   field_ave_plane = fill(NaN, nplanes)
 
   # ---- Loop over base planes -------------------------------------------
@@ -400,6 +412,11 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
     # Weighted least squares (pinv = stable min-norm solution if rank-deficient).
     Aw = A .* sw
     bw = bvec .* sw
+    wsum_pl[pidx] = sum(abs2, sw)
+    # Rows cycle Bx, By, Bs at each field point, so component `k` owns rows k:3:nrows.
+    for k in 1:3
+      wsum_comp_pl[k, pidx] = sum(abs2, view(sw, k:3:nrows))
+    end
     for c in 1:ncand
       cols  = cand_cols[c]
       Awc   = length(cols) == ncols_all ? Aw : Aw[:, cols]
@@ -407,8 +424,15 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
       thetas[c][:, pidx] = theta
       # Residual of the same fit, scored with and without the point weights. The
       # unweighted value says how well the field itself is reproduced; the weighted
-      # one is the quantity the fit actually minimized.
-      rms_c[c][pidx]  = norm(Awc * theta - bw) / sqrt(nrows)
+      # one is the quantity the fit actually minimized. The weighted residual is
+      # normalized by Σ weight rather than by the row count so that it stays a
+      # weighted mean of the squared deviations (and so reduces to the unweighted
+      # value when every weight is 1).
+      resw = Awc * theta - bw
+      rmsw_c[c][pidx] = norm(resw) / sqrt(wsum_pl[pidx])
+      for k in 1:3
+        rmsw_comp_c[c][k, pidx] = norm(view(resw, k:3:nrows)) / sqrt(wsum_comp_pl[k, pidx])
+      end
       rmsu_c[c][pidx] = norm(view(A, :, cols) * theta - bvec) / sqrt(nrows)
     end
 
@@ -420,21 +444,27 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
 
   # ---- Score the candidates and pick the winner -------------------------
   ndata = sum(nrow_pl)
+  wdata = sum(wsum_pl)
+  wcomp = [sum(view(wsum_comp_pl, k, :)) for k in 1:3]
   scan  = GGFitScanPoint[]
   for c in 1:ncand
-    mx, ndx = cand_models[c]
+    mx, ndx = cand_fits[c]
     ncoef   = length(cand_cols[c])
     # Pool the per-plane residuals back into one sum of squares over all planes.
-    rss  = sum(rms_c[c][p]^2 * nrow_pl[p] for p in 1:nplanes)
+    rss  = sum(rmsw_c[c][p]^2 * wsum_pl[p] for p in 1:nplanes)
     rssu = sum(rmsu_c[c][p]^2 * nrow_pl[p] for p in 1:nplanes)
+    rmswc = ntuple(k -> sqrt(sum(rmsw_comp_c[c][k, p]^2 * wsum_comp_pl[k, p]
+                                 for p in 1:nplanes) / wcomp[k]), 3)
     push!(scan, GGFitScanPoint(; m_max = mx, nd_max = ndx, n_coef = ncoef,
-                                 rms = sqrt(rss / ndata), rms_unweighted = sqrt(rssu / ndata),
-                                 score = _fit_score(params.fit_criterion, rss, ndata,
+                                 rms_weighted = sqrt(rss / wdata),
+                                 rms_weighted_comp = rmswc,
+                                 rms_unweighted = sqrt(rssu / ndata),
+                                 score = _fit_score(params.fit_criterion, rss, ndata, wdata,
                                                     ncoef * nplanes),
                                  criterion = params.fit_criterion))
   end
   best = argmin([s.score for s in scan])
-  m_max, nd_max = cand_models[best]
+  m_max, nd_max = cand_fits[best]
 
   # ---- Expand the winning fit into the coefficient dictionaries ---------
   params_list = master_list[cand_cols[best]]
@@ -448,7 +478,7 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
   end
 
   return GGCoefs(; z_base, params = params_list, a, b, bs,
-                    rms_plane = rms_c[best], rms_unweighted_plane = rmsu_c[best],
+                    rms_weighted_plane = rmsw_c[best], rms_unweighted_plane = rmsu_c[best],
                     field_ave_plane, m_max, nd_max, scan = scanning ? scan : GGFitScanPoint[],
                     g_ref = field.g_ref, origin, dz_grid)
 end
@@ -462,7 +492,7 @@ Resolve an `m_max`/`nd_max` input-parameter setting into the list of values
 `gg_fit` should try. `-1` means "use `default`"; any other `Int` pins that value;
 a vector or range is taken as-is. Values are clamped to `table_max` (the largest
 the coefficient table supports) and deduplicated, so an over-wide request such as
-`0:100` does not refit the same top model repeatedly.
+`0:100` does not refit the same top fit repeatedly.
 """
 function _fit_candidates(spec::Union{Int,AbstractVector{Int}}, default::Int, table_max::Int)
   vals = spec isa Int ? [spec == -1 ? default : spec] : collect(spec)
@@ -472,18 +502,24 @@ function _fit_candidates(spec::Union{Int,AbstractVector{Int}}, default::Int, tab
 end
 
 """
-    _fit_score(criterion, rss, ndata, nparam) -> Float64
+    _fit_score(criterion, rss, ndata, wdata, nparam) -> Float64
 
-Selection score for one scanned model; the lowest score wins. `rss` is the pooled
-weighted sum of squared residuals over `ndata` field-component values, and
-`nparam` the total number of fitted coefficients (per-plane count times the
-number of base planes). With `RSS = rss`, `N = ndata` and `k = nparam`:
+Selection score for one scanned fit; the lowest score wins. `rss` is the pooled
+weighted sum of squared residuals over `ndata` field-component values, `wdata`
+the sum of the weights of those same values, and `nparam` the total number of
+fitted coefficients (per-plane count times the number of base planes). With
+`RSS = rss`, `N = ndata`, `W = wdata` and `k = nparam`:
 
 ```
-:rms    sqrt(RSS / N)                  goodness of fit only, no charge for k
+:rms    sqrt(RSS / W)                  goodness of fit only, no charge for k
 :aic    N*log(RSS/N) + 2k              Akaike information criterion
 :bic    N*log(RSS/N) + k*log(N)        Bayesian information criterion
 ```
+
+`:rms` divides by `W` so the score is exactly the `rms_weighted` column of the
+scan table; `W` is the same for every candidate, so this is only a rescaling of
+the ranking. `:aic`/`:bic` keep `N` in the log term, where it is the count of
+data values entering the Gaussian log-likelihood, not a weight total.
 
 `:aic` and `:bic` share the leading term — minus twice the maximized Gaussian
 log-likelihood, dropping an additive constant that is common to every candidate
@@ -492,13 +528,80 @@ coefficient, `2` versus `log(N)`. See the `gg_fit` docstring for how to read the
 trade-off and for the caveats that apply when the residual is dominated by
 systematic truncation error rather than by noise.
 """
-function _fit_score(criterion::Symbol, rss::Float64, ndata::Int, nparam::Int)
-  criterion == :rms && return sqrt(rss / ndata)
-  # Guard the log against an (effectively) exact fit, which a model with as many
+function _fit_score(criterion::Symbol, rss::Float64, ndata::Int, wdata::Float64, nparam::Int)
+  criterion == :rms && return sqrt(rss / wdata)
+  # Guard the log against an (effectively) exact fit, which a fit with as many
   # coefficients as data points can produce.
   ll = ndata * log(max(rss, floatmin(Float64)) / ndata)
   criterion == :bic && return ll + nparam * log(ndata)
   return ll + 2 * nparam                                  # :aic
+end
+
+#---------------------------------------------------------------------------------------------------
+
+"""
+    _gg_field_contributions(results::GGCoefs, field::FieldGridTable) -> (rows, b_ave)
+
+How much field each fitted GG function actually produces, measured over every
+transverse grid point of every base plane.
+
+`rows` holds one `(label, ave, max)` per GG function — `a_m` and `b_m` for each
+multipole order `m` present in the fit, plus `b_s` — where `ave` and `max` are
+the mean and the largest `|B|` [T] that function generates with every other GG
+coefficient set to zero. All derivative orders `nd` of the function are included,
+since they too contribute to the field at the plane. The field is linear in the
+GG coefficients, so a row is exactly what dropping that function from the fit
+would remove from the modeled field. `b_ave` is the mean `|B|` of the field table
+itself, the scale the rows are to be read against.
+
+This is the useful form of "how big is this coefficient": the raw `a`/`b` values
+are not comparable across `m`, since the basis function each multiplies carries a
+different power of `r` and so a different size over the grid.
+"""
+function _gg_field_contributions(results::GGCoefs, field::FieldGridTable)
+  mag = field.magnetic
+  ixs = first(axes(mag, 1)):last(axes(mag, 1))
+  iys = first(axes(mag, 2)):last(axes(mag, 2))
+  # Coordinates relative to the GG expansion axis, as the coefficient tables want.
+  xs  = [field.r0[1] + field.dr[1] * ix - results.origin[1] for ix in ixs]
+  ys  = [field.r0[2] + field.dr[2] * iy - results.origin[2] for iy in iys]
+  nplanes = length(results.z_base)
+  npts    = nplanes * length(xs) * length(ys)
+
+  groups = vcat([(:a, m) for m in sort!(unique(k[1] for k in keys(results.a)))],
+                [(:b, m) for m in sort!(unique(k[1] for k in keys(results.b)))],
+                isempty(results.bs) ? Tuple{Symbol,Int}[] : [(:bs, 0)])
+
+  rows = Tuple{String,Float64,Float64}[]
+  for (typ, m) in groups
+    tot = 0.0
+    mx  = 0.0
+    for ip in 1:nplanes
+      # Value getters masked to this one group: every coefficient outside it reads
+      # as zero, so the polynomials below are this function's share of the field.
+      aval(mm, nd) = typ === :a && mm == m ? get(results.a, (mm, nd), nothing) : nothing
+      bval(mm, nd) = typ === :b && mm == m ? get(results.b, (mm, nd), nothing) : nothing
+      bsval(nd)    = typ === :bs ? get(results.bs, nd, nothing) : nothing
+      at(v) = v === nothing ? 0.0 : v[ip]
+      KBx = _comp_array(Bx_a, Bx_b, Bx_bs, (mm, nd) -> at(aval(mm, nd)),
+                        (mm, nd) -> at(bval(mm, nd)), nd -> at(bsval(nd)), results.g_ref)
+      KBy = _comp_array(By_a, By_b, By_bs, (mm, nd) -> at(aval(mm, nd)),
+                        (mm, nd) -> at(bval(mm, nd)), nd -> at(bsval(nd)), results.g_ref)
+      KBs = _comp_array(Bs_a, Bs_b, Bs_bs, (mm, nd) -> at(aval(mm, nd)),
+                        (mm, nd) -> at(bval(mm, nd)), nd -> at(bsval(nd)), results.g_ref)
+      for x in xs, y in ys
+        nb = sqrt(_polyval(KBx, x, y)[1]^2 + _polyval(KBy, x, y)[1]^2 +
+                  _polyval(KBs, x, y)[1]^2)
+        tot += nb
+        mx   = max(mx, nb)
+      end
+    end
+    label = typ === :bs ? "b_s" : string(typ, "_", m)
+    push!(rows, (label, npts == 0 ? NaN : tot / npts, mx))
+  end
+
+  b_ave = length(mag) == 0 ? NaN : sum(norm, mag) / length(mag)
+  return rows, b_ave
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -510,11 +613,26 @@ Print a human-readable summary of a `gg_fit` `results`: the fit settings, the
 `(m_max, nd_max)` scan table if a scan was run, a per-plane table of the weighted
 and unweighted RMS residuals alongside the average field magnitude of the plane,
 and the leading multipoles at the central plane as a quick sanity check.
+
+The scan table breaks the weighted residual out by field component (`wRMS Bx`,
+`wRMS By`, `wRMS Bs`) next to the pooled `wRMS resid`. When a fit is poor, the
+split says whether all three components are equally bad — pointing at a model
+too small, or at a grid the GG expansion cannot represent — or whether one
+component alone carries the error.
 """
 function gg_fit_show_results(results::GGCoefs, field::FieldGridTable, params::GGFitInputParams)
   println("="^72)
   println("GG fit:")
   println("  field grid        : ", join(size(field.magnetic), " x "), "  (ix, iy, iz)")
+  # Grid extent from the index ranges, which need not start at 0 or 1:
+  # a grid point (ix, iy, iz) sits at r0 + dr .* (ix, iy, iz).
+  ax   = axes(field.magnetic)
+  gmin = [field.r0[k] + field.dr[k] * first(ax[k]) for k in 1:3]
+  gmax = [field.r0[k] + field.dr[k] * last(ax[k]) for k in 1:3]
+  @printf("  grid spacing [m]  : %.6g, %.6g, %.6g   (dx, dy, dz)\n", field.dr...)
+  for (k, nam) in enumerate(("x", "y", "z"))
+    @printf("  grid %s range [m]  : %.6g to %.6g\n", nam, gmin[k], gmax[k])
+  end
   println("  g_ref             : ", field.g_ref)
   println("  origin (x,y)      : ", params.origin)
   println("  n_planes_add      : ", params.n_planes_add)
@@ -528,15 +646,18 @@ function gg_fit_show_results(results::GGCoefs, field::FieldGridTable, params::GG
   # ---- (m_max, nd_max) scan table, when a scan was run -------------------
   if !isempty(results.scan)
     crit = results.scan[1].criterion
-    println("-"^72)
+    println("-"^104)
     println("Model scan (", length(results.scan), " combinations, best by ", crit, " marked *):")
-    @printf("%-2s %-6s  %-6s  %-8s  %-12s  %-12s  %-12s\n",
-            "", "m_max", "nd_max", "# coefs", "wRMS resid", "RMS resid", string(crit))
+    println("The three per-component columns are the wRMS residual of Bx, By and Bs alone.")
+    @printf("%-2s %-5s  %-6s  %-7s  %-11s  %-11s  %-11s  %-11s  %-11s  %-12s\n",
+            "", "m_max", "nd_max", "# coefs", "wRMS resid", "wRMS Bx", "wRMS By", "wRMS Bs",
+            "RMS resid", string(crit))
     bestscore = minimum(s.score for s in results.scan)
     for s in results.scan
-      @printf("%-2s %-6d  %-6d  %-8d  %-12.4e  %-12.4e  %-12.6g\n",
+      @printf("%-2s %-5d  %-6d  %-7d  %-11.4e  %-11.4e  %-11.4e  %-11.4e  %-11.4e  %-12.6g\n",
               s.score == bestscore ? "*" : "", s.m_max, s.nd_max, s.n_coef,
-              s.rms, s.rms_unweighted, s.score)
+              s.rms_weighted, s.rms_weighted_comp[1], s.rms_weighted_comp[2],
+              s.rms_weighted_comp[3], s.rms_unweighted, s.score)
     end
   end
 
@@ -547,25 +668,23 @@ function gg_fit_show_results(results::GGCoefs, field::FieldGridTable, params::GG
   cell(v, i) = length(v) == length(results.z_base) ? @sprintf("%-12.4e", v[i]) :
                                                      @sprintf("%-12s", "-")
   for i in eachindex(results.z_base)
-    @printf("%-6d  %-12.6g  %-12.4e  %s  %s\n", i, results.z_base[i], results.rms_plane[i],
+    @printf("%-6d  %-12.6g  %-12.4e  %s  %s\n", i, results.z_base[i], results.rms_weighted_plane[i],
             cell(results.rms_unweighted_plane, i), cell(results.field_ave_plane, i))
   end
   println("-"^72)
 
-  # Show the leading multipoles at the central plane for a quick sanity check.
-  ic = cld(length(results.z_base), 2)
-  println("Leading coefficients at central plane (z = ",
-      @sprintf("%.6g", results.z_base[ic]), "):")
-  for m in 1:6
-    b00 = get(results.b, (m, 0), nothing)
-    a00 = get(results.a, (m, 0), nothing)
-    bstr = b00 === nothing ? "     -      " : @sprintf("% .6e", b00[ic])
-    astr = a00 === nothing ? "     -      " : @sprintf("% .6e", a00[ic])
-    @printf("  m=%-2d   b(m,0)=%s   a(m,0)=%s\n", m, bstr, astr)
+  # How much field each GG function actually produces. This, rather than the raw
+  # coefficient values, is what says whether a function is pulling its weight:
+  # the values themselves are not comparable across m, each multiplying a basis
+  # function with a different power of r and so a different size over the grid.
+  rows, b_ave = _gg_field_contributions(results, field)
+  println("Field contribution of each GG function, over all grid points of all base planes.")
+  println("|B| from that function alone, every other GG coefficient zeroed:")
+  @printf("  %-9s %-14s %-14s %10s\n", "function", "ave |B| [T]", "max |B| [T]", "ave/<|B|>")
+  for (label, ave, mx) in rows
+    @printf("  %-9s %-14.4e %-14.4e %8.2f %%\n", label, ave, mx, 100 * ave / b_ave)
   end
-  if haskey(results.bs, 0)
-    @printf("  bs(0) = % .6e\n", results.bs[0][ic])
-  end
+  @printf("  <|B|> of the field table = %.4e T\n", b_ave)
   println("="^72)
 end
 
@@ -582,7 +701,7 @@ is written to `params.output_file` and its path is returned.
 
 ## HDF5 schema
 
-    root datasets   : z_base, rms_plane, rms_unweighted_plane,
+    root datasets   : z_base, rms_weighted_plane, rms_unweighted_plane,
                       field_ave_plane, origin                     (Float64[])
     root attributes : g_ref, dz_grid (Float64); m_max, nd_max, n_planes_add (Int);
                       core_weight, outer_plane_weight (Float64)
@@ -595,7 +714,7 @@ function write_gg_fit(results::GGCoefs, field::FieldGridTable, params::GGFitInpu
   outfile = params.output_file
   h5open(outfile, "w") do f
     f["z_base"]    = collect(Float64, results.z_base)
-    f["rms_plane"] = collect(Float64, results.rms_plane)
+    f["rms_weighted_plane"]   = collect(Float64, results.rms_weighted_plane)
     f["rms_unweighted_plane"] = collect(Float64, results.rms_unweighted_plane)
     f["field_ave_plane"]      = collect(Float64, results.field_ave_plane)
     f["origin"]    = collect(Float64, params.origin)

@@ -306,6 +306,70 @@ end
     @test all(isfinite, res0.rms_weighted_plane)
   end
 
+  @testset "gg_fit prunes GG functions with negligible field contribution" begin
+    field = make_field()
+    base() = (p = GGFitInputParams(); p.n_planes_add = 1; p.m_max = 4; p.nd_max = 2; p)
+
+    # On this field a_3 and b_3 produce ~1e-4 of <|B|> while every other function
+    # is at 5e-3 or above, so the two are the ones any sane limit removes.
+    full = gg_fit(field, base())
+    @test isempty(full.pruned)                    # both limits default to 0 = off
+
+    for (ave_lim, max_lim) in ((0.0, 1e-3), (1e-4, 0.0), (1e-4, 1e-3))
+      p = base()
+      p.prune_ave_limit = ave_lim
+      p.prune_max_limit = max_lim
+      res = gg_fit(field, p)
+      @test res.pruned == [(:a, 3), (:b, 3)]
+      # A pruned function is gone from the coefficient dicts and the unknown list.
+      @test !any(k -> k[1] == 3, keys(res.a)) && !any(k -> k[1] == 3, keys(res.b))
+      @test !any(q -> GeneralizedGradients._gg_group(q) in res.pruned, res.params)
+      @test length(res.params) < length(full.params)
+      # Everything else survives, and the refit of the survivors is a real fit.
+      @test Set(keys(res.a)) == Set(k for k in keys(full.a) if k[1] != 3)
+      @test Set(keys(res.bs)) == Set(keys(full.bs))
+      @test all(isfinite, res.rms_weighted_plane)
+    end
+
+    # A function has to fall below every limit that is in force. On its own an
+    # ave limit of 2e-3 also drops a_4 (ave 1.2e-3 of <|B|>); adding a max limit
+    # of 1e-3 saves it, since a_4 reaches 3.7e-3 somewhere on the grid.
+    p = base(); p.prune_ave_limit = 2e-3
+    @test gg_fit(field, p).pruned == [(:a, 3), (:a, 4), (:b, 3)]
+    p.prune_max_limit = 1e-3
+    @test gg_fit(field, p).pruned == [(:a, 3), (:b, 3)]
+
+    # Limits that would leave nothing to fit are a mis-set parameter, not a fit.
+    p = base(); p.prune_max_limit = 10.0
+    @test_throws ErrorException gg_fit(field, p)
+
+    # The sparse fit must survive both evaluation paths -- the plan builder groups
+    # towers by the m actually present, so a gap at m = 3 is the case to check --
+    # and an HDF5 round trip.
+    p = base(); p.prune_max_limit = 1e-3
+    res  = gg_fit(field, p)
+    plan = eval_plan(res)
+    for ip in eachindex(res.z_base), (x, y) in PTS
+      Bref, Aref, _ = field_and_potential_evaluate(res, ip, x, y)
+      Bpl, Apl, _   = field_and_potential_evaluate_at(plan, x, y, res.z_base[ip])
+      @test collect(Bpl) ≈ Bref
+      @test collect(Apl) ≈ Aref
+    end
+    mktempdir() do dir
+      p.output_file = joinpath(dir, "pruned.h5")
+      quiet(() -> write_gg_fit(res, field, p))
+      back, _ = read_gg_fit(p.output_file)
+      @test Set(keys(back.a)) == Set(keys(res.a))
+      @test Set(keys(back.b)) == Set(keys(res.b))
+      @test !any(k -> k[1] == 3, keys(back.a))
+      B1, _, _ = field_and_potential_evaluate(back, 2, PTS[1]...)
+      B2, _, _ = field_and_potential_evaluate(res, 2, PTS[1]...)
+      @test B1 ≈ B2
+    end
+
+    quiet(() -> gg_fit_show_results(res, field, p))
+  end
+
   @testset "public docstrings are attached" begin
     # A blank line between a docstring and its definition silently detaches it,
     # which once dropped the whole GGFitInputParams parameter reference.
@@ -363,11 +427,11 @@ end
     # Field contribution of each GG function: one row per a_m / b_m actually
     # fitted, plus b_s, each a magnitude with ave no larger than max.
     rows, b_ave = GeneralizedGradients._gg_field_contributions(res, field)
-    @test [r[1] for r in rows] ==
-          vcat(["a_$m" for m in sort!(unique(k[1] for k in keys(res.a)))],
-               ["b_$m" for m in sort!(unique(k[1] for k in keys(res.b)))],
-               isempty(res.bs) ? String[] : ["b_s"])
-    @test all(r -> 0 <= r[2] <= r[3], rows)
+    @test [(r[1], r[2]) for r in rows] ==
+          vcat([(:a, m) for m in sort!(unique(k[1] for k in keys(res.a)))],
+               [(:b, m) for m in sort!(unique(k[1] for k in keys(res.b)))],
+               isempty(res.bs) ? Tuple{Symbol,Int}[] : [(:bs, 0)])
+    @test all(r -> 0 <= r[3] <= r[4], rows)
     @test isfinite(b_ave) && b_ave > 0
 
     # More coefficients can only reduce the residual, so :rms takes the top model.

@@ -243,8 +243,51 @@ planes.
   Default `1` (uniform).
 - `outer_plane_weight` — merit-function weight for the outer `z`-planes.
   Default `1`.
+- `prune_ave_limit`, `prune_max_limit` — drop GG functions that produce
+  negligible field (see "Pruning" below). Default `0`, `0` (no pruning).
 - `output_file` — name of the output HDF5 file written by
   `write_gg_fit`. Default `"gg_fit_results.h5"`.
+
+## Pruning
+
+`m_max` and `nd_max` cut the model along the order axes, which is a blunt
+instrument: a magnet with a symmetry may need `m = 1, 3, 5` and have no use at
+all for `m = 2, 4`, yet `m_max = 5` fits and stores all five. Pruning removes
+what does not earn its place, one GG function at a time.
+
+The contribution of a function — a whole `a_m`, a whole `b_m`, or `b_s`, all of
+its derivative orders `nd` together — is the `|B|` it alone produces with every
+other GG coefficient set to zero, over every transverse grid point of every base
+plane. Because the field is linear in the GG coefficients, that is exactly what
+dropping the function would remove from the modeled field. It is also the honest
+measure of size: the raw `a`/`b` values are not comparable across `m`, since each
+multiplies a basis function carrying a different power of `r`.
+
+```
+prune_ave_limit = 1e-4      # against the function's average contribution
+prune_max_limit = 1e-3      # against its largest contribution
+```
+
+Both are fractions of the field table's mean `|B|`, so they carry over between
+magnets of different strength. A function is dropped only when it falls below
+**every** limit in force; a limit of `0` (the default for both) switches that
+test off. Setting only `prune_max_limit` is the conservative choice — a function
+survives if it matters anywhere on the grid. Setting only `prune_ave_limit`
+prunes harder and can discard a function that is small on average but significant
+out near the aperture, where its maximum lives.
+
+Pruning runs after a scan has picked its `(m_max, nd_max)` winner, and the
+survivors are then **refit**. Coefficients left over from a larger fit would no
+longer minimize anything — each was fitted in the presence of the ones now gone
+— so the stored values are the least-squares solution of the model that was
+actually kept. The functions removed are listed in the `pruned` field of the
+result and printed by `gg_fit_show_results`; `m_max` and `nd_max` report the
+orders that survived, which can be lower than the ones the scan chose.
+
+A pruned function is simply absent from the `a`/`b`/`bs` dictionaries. They are
+sparse in `m` throughout — the evaluator, the compiled evaluation plan and the
+HDF5 file all treat a missing key as an identically zero function — so nothing
+downstream needs to know that pruning happened.
 
 ## Side note
 
@@ -347,26 +390,163 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
                                            for ndd in 0:j if haskey(CB, (comp, typ, m, ndd))]
                 for (typ, m, j) in master_list] for comp in 1:3]
 
-  # ---- Result containers ------------------------------------------------
+  # ---- Solve every candidate at every base plane ------------------------
   nplanes = length(izs_grid)
   z_base  = [r0[3] + dr[3] * iz for iz in izs_grid]
   ncand   = length(cand_fits)
-  # Per candidate: fitted coefficients (rows follow that candidate's column
-  # subset) and the two per-plane residuals. Only the winner is expanded into
-  # the a/b/bs dictionaries at the end.
-  thetas   = [zeros(length(cols), nplanes) for cols in cand_cols]
-  rmsw_c   = [fill(NaN, nplanes) for _ in 1:ncand]
-  rmsu_c   = [fill(NaN, nplanes) for _ in 1:ncand]
+  # Everything the per-plane solve needs that does not depend on which columns
+  # are being fitted, so that the pruning pass below can re-solve a reduced
+  # column set without rebuilding any of it.
+  geom = (; mag, ixs, iys, izs_grid, xs, ys, rmax2, npa, dz_grid, nd_max_all,
+            core_weight, outer_plane_weight, master_list, col_terms, ncols_all)
+  sol = _fit_over_planes(cand_cols, geom)
+  (; nrow_pl, wsum_pl, wsum_comp_pl, field_ave_plane) = sol
+
+  # ---- Score the candidates and pick the winner -------------------------
+  ndata = sum(nrow_pl)
+  wdata = sum(wsum_pl)
+  wcomp = [sum(view(wsum_comp_pl, k, :)) for k in 1:3]
+  scan  = GGFitScanPoint[]
+  for c in 1:ncand
+    mx, ndx = cand_fits[c]
+    ncoef   = length(cand_cols[c])
+    # Pool the per-plane residuals back into one sum of squares over all planes.
+    rss  = sum(sol.rmsw_c[c][p]^2 * wsum_pl[p] for p in 1:nplanes)
+    rssu = sum(sol.rmsu_c[c][p]^2 * nrow_pl[p] for p in 1:nplanes)
+    rmswc = ntuple(k -> sqrt(sum(sol.rmsw_comp_c[c][k, p]^2 * wsum_comp_pl[k, p]
+                                 for p in 1:nplanes) / wcomp[k]), 3)
+    push!(scan, GGFitScanPoint(; m_max = mx, nd_max = ndx, n_coef = ncoef,
+                                 rms_weighted = sqrt(rss / wdata),
+                                 rms_weighted_comp = rmswc,
+                                 rms_unweighted = sqrt(rssu / ndata),
+                                 score = _fit_score(params.fit_criterion, rss, ndata, wdata,
+                                                    ncoef * nplanes),
+                                 criterion = params.fit_criterion))
+  end
+  best = argmin([s.score for s in scan])
+  m_max, nd_max = cand_fits[best]
+
+  # ---- Drop GG functions that produce negligible field ------------------
+  # Measured on the winning fit, then the survivors are refit: dropping columns
+  # from a finished solve would leave coefficients that no longer minimize
+  # anything, since each was fitted in the presence of the ones now gone.
+  keep_cols = cand_cols[best]
+  theta     = sol.thetas[best]
+  rmsw_pl   = sol.rmsw_c[best]
+  rmsu_pl   = sol.rmsu_c[best]
+  pruned    = Tuple{Symbol,Int}[]
+  if params.prune_ave_limit > 0 || params.prune_max_limit > 0
+    trial = GGCoefs(; z_base, _expand_coefs(master_list[keep_cols], theta)...,
+                      g_ref = field.g_ref, origin, dz_grid)
+    rows, b_ave = _gg_field_contributions(trial, field)
+    # A function has to fall below every limit that is in force; a limit of 0 is
+    # switched off and so cannot by itself keep a function alive.
+    drop = Set{Tuple{Symbol,Int}}()
+    for (typ, m, ave, mx) in rows
+      (params.prune_ave_limit <= 0 || ave < params.prune_ave_limit * b_ave) &&
+        (params.prune_max_limit <= 0 || mx < params.prune_max_limit * b_ave) &&
+        push!(drop, (typ, m))
+    end
+    if !isempty(drop)
+      keep_cols = [c for c in keep_cols if !(_gg_group(master_list[c]) in drop)]
+      isempty(keep_cols) && error("prune_ave_limit = $(params.prune_ave_limit), " *
+          "prune_max_limit = $(params.prune_max_limit) drops every GG function. " *
+          "Lower the limits: they are fractions of the mean |B| of the field table.")
+      refit   = _fit_over_planes([keep_cols], geom)
+      theta   = refit.thetas[1]
+      rmsw_pl = refit.rmsw_c[1]
+      rmsu_pl = refit.rmsu_c[1]
+      pruned  = sort!(collect(drop))
+      # The retained orders, which pruning can have lowered below the scan winner's.
+      m_max  = maximum((m for (typ, m, _) in master_list[keep_cols] if typ !== :bs), init = 0)
+      nd_max = maximum((nd for (_, _, nd) in master_list[keep_cols]), init = 0)
+    end
+  end
+
+  # ---- Expand the fitted coefficients into the dictionaries -------------
+  params_list = master_list[keep_cols]
+  a, b, bs = _expand_coefs(params_list, theta)
+
+  return GGCoefs(; z_base, params = params_list, a, b, bs,
+                    rms_weighted_plane = rmsw_pl, rms_unweighted_plane = rmsu_pl,
+                    field_ave_plane, m_max, nd_max, pruned,
+                    scan = scanning ? scan : GGFitScanPoint[],
+                    g_ref = field.g_ref, origin, dz_grid)
+end
+
+#---------------------------------------------------------------------------------------------------
+
+"""
+    _gg_group(param) -> (typ, m)
+
+The GG function a `(typ, m, nd)` unknown belongs to: all derivative orders of one
+`a_m` or `b_m` share a group, and every `bs` unknown lands in `(:bs, 0)`. This is
+the granularity at which contributions are measured and functions are pruned.
+"""
+_gg_group(param::Tuple{Symbol,Int,Int}) =
+    param[1] === :bs ? (:bs, 0) : (param[1], param[2])
+
+"""
+    _gg_label(typ, m) -> String
+
+Printable name of a GG function group: `"a_3"`, `"b_5"`, `"b_s"`.
+"""
+_gg_label(typ::Symbol, m::Integer) = typ === :bs ? "b_s" : string(typ, "_", m)
+
+"""
+    _expand_coefs(params_list, theta) -> (a, b, bs)
+
+Scatter a solved coefficient matrix (`theta[col, plane]`, rows following
+`params_list`) into the `a`, `b` and `bs` dictionaries of a `GGCoefs`. Only the
+unknowns in `params_list` get keys, so a pruned function is simply absent.
+"""
+function _expand_coefs(params_list, theta)
+  a  = Dict{Tuple{Int,Int},Vector{Float64}}()
+  b  = Dict{Tuple{Int,Int},Vector{Float64}}()
+  bs = Dict{Int,Vector{Float64}}()
+  for (col, (typ, m, nd)) in enumerate(params_list)
+    typ === :a  && (a[(m, nd)]  = theta[col, :])
+    typ === :b  && (b[(m, nd)]  = theta[col, :])
+    typ === :bs && (bs[nd]      = theta[col, :])
+  end
+  return (; a, b, bs)
+end
+
+#---------------------------------------------------------------------------------------------------
+
+"""
+    _fit_over_planes(cand_cols, geom) -> NamedTuple
+
+Solve the weighted least-squares fit at every base plane, for every candidate
+column subset in `cand_cols`, from one shared design matrix per plane. `geom`
+carries the grid, weighting and basis data that does not depend on which columns
+are fitted (see the call site in `gg_fit`), so this can be re-run on a reduced
+column set — as the pruning pass does — without rebuilding any of it.
+
+Returns `(; thetas, rmsw_c, rmsu_c, rmsw_comp_c, nrow_pl, wsum_pl, wsum_comp_pl,
+field_ave_plane)`: per candidate the fitted coefficients (`thetas[c][col, plane]`,
+rows following that candidate's column subset), the weighted and unweighted
+per-plane residuals, and the weighted residual split by field component; then the
+per-plane row counts and weight sums, and the average `|B|` of each base plane.
+"""
+function _fit_over_planes(cand_cols, geom)
+  (; mag, ixs, iys, izs_grid, xs, ys, rmax2, npa, dz_grid, nd_max_all,
+     core_weight, outer_plane_weight, master_list, col_terms, ncols_all) = geom
+
+  nplanes = length(izs_grid)
+  ncand   = length(cand_cols)
+  thetas  = [zeros(length(cols), nplanes) for cols in cand_cols]
+  rmsw_c  = [fill(NaN, nplanes) for _ in 1:ncand]
+  rmsu_c  = [fill(NaN, nplanes) for _ in 1:ncand]
   # Same weighted residual as rmsw_c but split by field component: [comp, plane]
   # with comp = 1, 2, 3 for Bx, By, Bs. Reported per candidate in the scan table
   # so a fit that fails on one component only can be recognized as such.
-  rmsw_comp_c = [fill(NaN, 3, nplanes) for _ in 1:ncand]
-  nrow_pl  = zeros(Int, nplanes)
-  wsum_pl  = zeros(nplanes)     # Σ weight over the rows of each plane's fit
-  wsum_comp_pl = zeros(3, nplanes)   # the same sum, per field component
+  rmsw_comp_c  = [fill(NaN, 3, nplanes) for _ in 1:ncand]
+  nrow_pl      = zeros(Int, nplanes)
+  wsum_pl      = zeros(nplanes)        # Σ weight over the rows of each plane's fit
+  wsum_comp_pl = zeros(3, nplanes)     # the same sum, per field component
   field_ave_plane = fill(NaN, nplanes)
 
-  # ---- Loop over base planes -------------------------------------------
   for (pidx, iz0) in enumerate(izs_grid)
     izs   = max(first(izs_grid), iz0 - npa):min(last(izs_grid), iz0 + npa)
     dzs   = [(iz - iz0) * dz_grid for iz in izs]
@@ -420,20 +600,20 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
     for c in 1:ncand
       cols  = cand_cols[c]
       Awc   = length(cols) == ncols_all ? Aw : Aw[:, cols]
-      theta = pinv(Awc) * bw
-      thetas[c][:, pidx] = theta
+      th    = pinv(Awc) * bw
+      thetas[c][:, pidx] = th
       # Residual of the same fit, scored with and without the point weights. The
       # unweighted value says how well the field itself is reproduced; the weighted
       # one is the quantity the fit actually minimized. The weighted residual is
       # normalized by Σ weight rather than by the row count so that it stays a
       # weighted mean of the squared deviations (and so reduces to the unweighted
       # value when every weight is 1).
-      resw = Awc * theta - bw
+      resw = Awc * th - bw
       rmsw_c[c][pidx] = norm(resw) / sqrt(wsum_pl[pidx])
       for k in 1:3
         rmsw_comp_c[c][k, pidx] = norm(view(resw, k:3:nrows)) / sqrt(wsum_comp_pl[k, pidx])
       end
-      rmsu_c[c][pidx] = norm(view(A, :, cols) * theta - bvec) / sqrt(nrows)
+      rmsu_c[c][pidx] = norm(view(A, :, cols) * th - bvec) / sqrt(nrows)
     end
 
     # Average |B| over the base plane alone (unweighted): the field scale against
@@ -442,45 +622,8 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
                             (length(ixs) * length(iys))
   end
 
-  # ---- Score the candidates and pick the winner -------------------------
-  ndata = sum(nrow_pl)
-  wdata = sum(wsum_pl)
-  wcomp = [sum(view(wsum_comp_pl, k, :)) for k in 1:3]
-  scan  = GGFitScanPoint[]
-  for c in 1:ncand
-    mx, ndx = cand_fits[c]
-    ncoef   = length(cand_cols[c])
-    # Pool the per-plane residuals back into one sum of squares over all planes.
-    rss  = sum(rmsw_c[c][p]^2 * wsum_pl[p] for p in 1:nplanes)
-    rssu = sum(rmsu_c[c][p]^2 * nrow_pl[p] for p in 1:nplanes)
-    rmswc = ntuple(k -> sqrt(sum(rmsw_comp_c[c][k, p]^2 * wsum_comp_pl[k, p]
-                                 for p in 1:nplanes) / wcomp[k]), 3)
-    push!(scan, GGFitScanPoint(; m_max = mx, nd_max = ndx, n_coef = ncoef,
-                                 rms_weighted = sqrt(rss / wdata),
-                                 rms_weighted_comp = rmswc,
-                                 rms_unweighted = sqrt(rssu / ndata),
-                                 score = _fit_score(params.fit_criterion, rss, ndata, wdata,
-                                                    ncoef * nplanes),
-                                 criterion = params.fit_criterion))
-  end
-  best = argmin([s.score for s in scan])
-  m_max, nd_max = cand_fits[best]
-
-  # ---- Expand the winning fit into the coefficient dictionaries ---------
-  params_list = master_list[cand_cols[best]]
-  a  = Dict{Tuple{Int,Int},Vector{Float64}}()
-  b  = Dict{Tuple{Int,Int},Vector{Float64}}()
-  bs = Dict{Int,Vector{Float64}}()
-  for (col, (typ, m, nd)) in enumerate(params_list)
-    typ == :a  && (a[(m, nd)] = thetas[best][col, :])
-    typ == :b  && (b[(m, nd)] = thetas[best][col, :])
-    typ == :bs && (bs[nd]     = thetas[best][col, :])
-  end
-
-  return GGCoefs(; z_base, params = params_list, a, b, bs,
-                    rms_weighted_plane = rmsw_c[best], rms_unweighted_plane = rmsu_c[best],
-                    field_ave_plane, m_max, nd_max, scan = scanning ? scan : GGFitScanPoint[],
-                    g_ref = field.g_ref, origin, dz_grid)
+  return (; thetas, rmsw_c, rmsu_c, rmsw_comp_c, nrow_pl, wsum_pl, wsum_comp_pl,
+            field_ave_plane)
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -545,14 +688,17 @@ end
 How much field each fitted GG function actually produces, measured over every
 transverse grid point of every base plane.
 
-`rows` holds one `(label, ave, max)` per GG function — `a_m` and `b_m` for each
-multipole order `m` present in the fit, plus `b_s` — where `ave` and `max` are
-the mean and the largest `|B|` [T] that function generates with every other GG
-coefficient set to zero. All derivative orders `nd` of the function are included,
-since they too contribute to the field at the plane. The field is linear in the
-GG coefficients, so a row is exactly what dropping that function from the fit
-would remove from the modeled field. `b_ave` is the mean `|B|` of the field table
-itself, the scale the rows are to be read against.
+`rows` holds one `(typ, m, ave, max)` per GG function — `(:a, m)` and `(:b, m)`
+for each multipole order `m` present in the fit, plus `(:bs, 0)` — where `ave`
+and `max` are the mean and the largest `|B|` [T] that function generates with
+every other GG coefficient set to zero. All derivative orders `nd` of the
+function are included, since they too contribute to the field at the plane. The
+field is linear in the GG coefficients, so a row is exactly what dropping that
+function from the fit would remove from the modeled field. `b_ave` is the mean
+`|B|` of the field table itself, the scale the rows are to be read against.
+
+Both `gg_fit_show_results` and the pruning pass of `gg_fit` read these rows —
+which is why they carry the `(typ, m)` group rather than a printable label.
 
 This is the useful form of "how big is this coefficient": the raw `a`/`b` values
 are not comparable across `m`, since the basis function each multiplies carries a
@@ -572,7 +718,7 @@ function _gg_field_contributions(results::GGCoefs, field::FieldGridTable)
                 [(:b, m) for m in sort!(unique(k[1] for k in keys(results.b)))],
                 isempty(results.bs) ? Tuple{Symbol,Int}[] : [(:bs, 0)])
 
-  rows = Tuple{String,Float64,Float64}[]
+  rows = Tuple{Symbol,Int,Float64,Float64}[]
   for (typ, m) in groups
     tot = 0.0
     mx  = 0.0
@@ -596,8 +742,7 @@ function _gg_field_contributions(results::GGCoefs, field::FieldGridTable)
         mx   = max(mx, nb)
       end
     end
-    label = typ === :bs ? "b_s" : string(typ, "_", m)
-    push!(rows, (label, npts == 0 ? NaN : tot / npts, mx))
+    push!(rows, (typ, m, npts == 0 ? NaN : tot / npts, mx))
   end
 
   b_ave = length(mag) == 0 ? NaN : sum(norm, mag) / length(mag)
@@ -640,6 +785,13 @@ function gg_fit_show_results(results::GGCoefs, field::FieldGridTable, params::GG
           isempty(results.scan) ? "" : "   (selected by the scan below)")
   println("  core_weight       : ", params.core_weight)
   println("  outer_plane_weight: ", params.outer_plane_weight)
+  println("  prune ave, max    : ", params.prune_ave_limit, ", ", params.prune_max_limit,
+          "   (fraction of <|B|>; 0 = off)")
+  if !isempty(results.pruned)
+    println("  pruned functions  : ",
+            join((_gg_label(typ, m) for (typ, m) in results.pruned), ", "),
+            "   (", length(results.pruned), " dropped, the rest refit)")
+  end
   println("  # GG coefficients : ", length(results.params), " per plane")
   println("  # base planes     : ", length(results.z_base))
 
@@ -681,8 +833,8 @@ function gg_fit_show_results(results::GGCoefs, field::FieldGridTable, params::GG
   println("Field contribution of each GG function, over all grid points of all base planes.")
   println("|B| from that function alone, every other GG coefficient zeroed:")
   @printf("  %-9s %-14s %-14s %10s\n", "function", "ave |B| [T]", "max |B| [T]", "ave/<|B|>")
-  for (label, ave, mx) in rows
-    @printf("  %-9s %-14.4e %-14.4e %8.2f %%\n", label, ave, mx, 100 * ave / b_ave)
+  for (typ, m, ave, mx) in rows
+    @printf("  %-9s %-14.4e %-14.4e %8.2f %%\n", _gg_label(typ, m), ave, mx, 100 * ave / b_ave)
   end
   @printf("  <|B|> of the field table = %.4e T\n", b_ave)
   println("="^72)

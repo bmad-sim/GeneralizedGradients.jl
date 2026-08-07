@@ -139,6 +139,37 @@ See the "Choosing between models" section of the `gg_fit` docstring for how to
 read the trade-off quantitatively and for why, on a field grid, these criteria
 are better treated as a ranking heuristic than as a probability statement.
 
+  prune_ave_limit = Float64
+  prune_max_limit = Float64
+
+Drop GG functions that produce negligible field, so they are neither fitted nor
+stored. A function here is a whole `a_m`, a whole `b_m`, or `b_s` — all of its
+derivative orders `nd` together — and its contribution is the `|B|` it alone
+produces, every other GG coefficient set to zero, measured over every transverse
+grid point of every base plane.
+
+Both limits are fractions of the field table's mean `|B|`, so they carry over
+unchanged between magnets of different strength. `prune_ave_limit` is compared
+against the function's average contribution and `prune_max_limit` against its
+largest. A function is dropped only when it falls below **every** limit that is
+in force; a limit of `0` (the default for both) switches that test off, and with
+both off no pruning is done at all.
+
+```
+prune_ave_limit = 1e-4      # drop if the average contribution is under 0.01% of <|B|>
+prune_max_limit = 1e-3      # ... and the largest contribution is under 0.1% of <|B|>
+```
+
+Setting only `prune_max_limit` is the conservative choice: a function survives if
+it matters anywhere on the grid, even if it averages to little. Setting only
+`prune_ave_limit` prunes harder, and can discard a function that is small on
+average but significant near the aperture, where the max lives.
+
+Pruning is applied after a scan has picked its `(m_max, nd_max)` winner, and the
+surviving functions are then **refit**. The stored coefficients are therefore the
+least-squares solution of the model that was kept, not the leftovers of a larger
+fit. The functions removed are listed in the `pruned` field of the result.
+
   output_file
 
 Name of the output file.
@@ -151,6 +182,8 @@ Name of the output file.
   fit_criterion::Symbol = :bic           # Scan selection criterion: :bic, :aic, or :rms.
   core_weight::Float64 = 1.0             # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
   outer_plane_weight::Float64 = 1.0      # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).
+  prune_ave_limit::Float64 = 0.0         # Drop a GG function whose ave contribution is below this fraction of <|B|>. 0 = test off.
+  prune_max_limit::Float64 = 0.0         # Drop a GG function whose max contribution is below this fraction of <|B|>. 0 = test off.
   output_file::String = "gg_fit_results.h5"
 end
 
@@ -299,10 +332,17 @@ Fields:
   base plane [T]. Unweighted, and taken from the base plane alone (not the added
   planes), so it gives the field profile along `z` and a scale against which
   `rms_weighted_plane` can be judged.
-- `m_max` — highest multipole order `m` retained by the fit.
+- `m_max` — highest multipole order `m` retained by the fit. Lower than the
+  cutoff the scan chose if pruning removed every function at the top orders.
 - `nd_max` — highest derivative order `nd` retained by the fit.
 - `scan` — one `GGFitScanPoint` per `(m_max, nd_max)` combination tried, in the
   order tried. Empty when no scan was requested.
+- `pruned` — GG functions dropped for producing negligible field, as
+  `(:a, m)` / `(:b, m)` / `(:bs, 0)` tuples. Empty unless `prune_ave_limit` or
+  `prune_max_limit` was set. A pruned function is absent from `a`/`b`/`bs`
+  entirely — the dicts are sparse in `m`, and every consumer treats a missing key
+  as an identically zero function. Not stored in the HDF5 file: which functions
+  are present is already evident from the keys that were written.
 - `g_ref` — reference-frame bending strength = `1/bending_radius` [1/m] (`0` for a
   straight reference frame).
 - `origin` — `(x, y)` line about which the GG coefficients are computed.
@@ -324,6 +364,7 @@ Fields:
   m_max::Int = 0
   nd_max::Int = 0
   scan::Vector{GGFitScanPoint} = GGFitScanPoint[]
+  pruned::Vector{Tuple{Symbol,Int}} = Tuple{Symbol,Int}[]
   g_ref::Float64 = 0.0
   origin::Vector{Float64} = [0.0, 0.0]   # (x, y) origin about which the generalized gradients coefs are computed
   dz_grid::Float64 = 0.0                 # spacing between base planes [m]

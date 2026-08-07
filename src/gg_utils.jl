@@ -6,9 +6,9 @@
 
 Load a `gg_fit` result HDF5 file (written by `write_gg_fit`). Returns a
 two-tuple whose first component is a `GGCoefs` struct holding the GG
-coefficient dictionaries `a`, `b`, `bs` (and `z_base`, `m_max`, `rms_plane`,
-`rms_unweighted_plane`, `field_ave_plane`, `g_ref`, `origin`, `dz_grid`), and
-whose second component is a NamedTuple of the
+coefficient dictionaries `a`, `b`, `bs` (and `z_base`, `m_max`, `n_max`,
+`rms_plane`, `rms_unweighted_plane`, `field_ave_plane`, `g_ref`, `origin`,
+`dz_grid`), and whose second component is a NamedTuple of the
 associated fit-control metadata (`n_planes_add`, `core_weight`,
 `outer_plane_weight`). The `params` field of the returned struct is empty (the
 unknown list is not stored in the file).
@@ -24,11 +24,19 @@ function read_gg_fit(path::AbstractString)
     z_base = read(f["z_base"])
     # Written only by newer versions of write_gg_fit.
     optional(name) = haskey(f, name) ? read(f[name]) : fill(NaN, length(z_base))
+    acoefs = _read_coef_group(f, "a")
+    bcoefs = _read_coef_group(f, "b")
+    # n_max is absent from files written before the model scan existed; recover it
+    # from the coefficients that are actually present.
+    nkeys  = [k[1] for k in Iterators.flatten((keys(acoefs), keys(bcoefs)))]
+    n_max  = haskey(attributes(f), "n_max") ? Int(read_attribute(f, "n_max")) :
+             (isempty(nkeys) ? 0 : maximum(nkeys))
     fit = GGCoefs(; z_base,
-                         a         = _read_coef_group(f, "a"),
-                         b         = _read_coef_group(f, "b"),
+                         a         = acoefs,
+                         b         = bcoefs,
                          bs        = _read_coef_group(f, "bs"; single = true),
                          m_max     = Int(read_attribute(f, "m_max")),
+                         n_max,
                          rms_plane = read(f["rms_plane"]),
                          rms_unweighted_plane = optional("rms_unweighted_plane"),
                          field_ave_plane      = optional("field_ave_plane"),

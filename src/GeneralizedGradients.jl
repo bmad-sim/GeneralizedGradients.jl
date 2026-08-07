@@ -32,6 +32,7 @@ module GeneralizedGradients
        GridGeometry,
        GGFitInputParams,
        GGCoefs,
+       GGFitScanPoint,
        gg_fit,
        gg_fit_show_results,
        write_gg_fit,

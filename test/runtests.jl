@@ -305,6 +305,75 @@ end
     @test all(isfinite, res0.rms_plane)
   end
 
+  @testset "public docstrings are attached" begin
+    # A blank line between a docstring and its definition silently detaches it,
+    # which once dropped the whole GGFitInputParams parameter reference.
+    undocumented(d) = occursin("No documentation found", string(d))
+    @test !undocumented(@doc GGFitInputParams)
+    @test !undocumented(@doc GGCoefs)
+    @test !undocumented(@doc GGFitScanPoint)
+    @test !undocumented(@doc gg_fit)
+    @test !undocumented(@doc gg_fit_show_results)
+    @test !undocumented(@doc read_gg_fit)
+    @test !undocumented(@doc write_gg_fit)
+    # The three fit criteria must be spelled out where a user will look for them.
+    for probe in ("fit_criterion", ":rms", ":aic", ":bic", "sqrt(RSS / N)")
+      @test occursin(probe, string(@doc GGFitInputParams))
+    end
+  end
+
+  @testset "gg_fit n_max/m_max scan" begin
+    field = make_field()
+
+    # Scalar n_max/m_max pin the model exactly and run no scan.
+    p = GGFitInputParams()
+    p.n_planes_add = 1
+    p.n_max = 4
+    p.m_max = 3
+    res = gg_fit(field, p)
+    @test isempty(res.scan)
+    @test res.n_max == 4 && res.m_max == 3
+    @test maximum(k[1] for k in keys(res.b)) <= 4
+    @test maximum(k[2] for k in keys(res.b)) <= 3
+    # bs unknowns describe a_0 and are bounded by m_max only, never by n_max.
+    @test maximum(keys(res.bs)) <= 3
+
+    # A vector on either cutoff scans the full grid of combinations.
+    p.n_max = 2:4
+    p.m_max = [1, 2]
+    res = gg_fit(field, p)
+    @test length(res.scan) == 6
+    @test Set((s.n_max, s.m_max) for s in res.scan) ==
+          Set([(n, m) for n in 2:4 for m in 1:2])
+    @test all(s -> s.n_coef > 0 && isfinite(s.rms) && isfinite(s.score), res.scan)
+    # The winner is the reported model, and its coefficient count matches its row.
+    best = res.scan[argmin([s.score for s in res.scan])]
+    @test (res.n_max, res.m_max) == (best.n_max, best.m_max)
+    @test length(res.params) == best.n_coef
+    @test length(res.rms_plane) == length(res.z_base)
+    @test all(isfinite, res.rms_plane)
+    quiet(() -> gg_fit_show_results(res, field, p))
+
+    # More coefficients can only reduce the residual, so :rms takes the top model.
+    p.fit_criterion = :rms
+    res_rms = gg_fit(field, p)
+    @test (res_rms.n_max, res_rms.m_max) == (4, 2)
+    p.fit_criterion = :aic
+    @test gg_fit(field, p) isa GGCoefs
+
+    # Candidates beyond what the table holds are clamped and deduplicated.
+    p.fit_criterion = :bic
+    p.n_max = 11:40
+    p.m_max = 0:1
+    res = gg_fit(field, p)
+    @test length(res.scan) == 6            # n_max 11,12,13 x m_max 0,1
+    @test maximum(s.n_max for s in res.scan) == 13
+
+    @test_throws ErrorException (p.m_max = Int[]; gg_fit(field, p))
+    p.m_max = 0:1
+    @test_throws ErrorException (p.fit_criterion = :bogus; gg_fit(field, p))
+  end
+
   @testset "field grid HDF5 round-trip (mag + elec, curvature, RF)" begin
     mktempdir() do dir
       field = make_field(g_ref = 0.5)

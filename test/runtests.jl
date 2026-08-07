@@ -306,6 +306,144 @@ end
     @test all(isfinite, res0.rms_weighted_plane)
   end
 
+  @testset "gg_fit exclude_functions" begin
+    field = make_field()
+    base() = (p = GGFitInputParams(); p.n_planes_add = 1; p.m_max = 4; p.nd_max = 2; p)
+
+    full = gg_fit(field, base())
+    @test !isempty(full.bs)
+
+    p = base()
+    p.exclude_functions = [(:a, 2), (:b, 3), (:bs, 0)]
+    res = gg_fit(field, p)
+    # An excluded function is never fitted: absent from the dicts, from the
+    # unknown list, and not reported as pruned (nothing was measured and dropped).
+    @test !any(k -> k[1] == 2, keys(res.a))
+    @test !any(k -> k[1] == 3, keys(res.b))
+    @test isempty(res.bs)
+    @test isempty(res.pruned)
+    @test Set(keys(res.a)) == Set(k for k in keys(full.a) if k[1] != 2)
+    @test Set(keys(res.b)) == Set(k for k in keys(full.b) if k[1] != 3)
+    @test all(isfinite, res.rms_weighted_plane)
+    # Excluding costs the fit its columns, so the model really is smaller.
+    @test length(res.params) < length(full.params)
+
+    # The m of a :bs entry is ignored, and naming something the model does not
+    # contain is a no-op.
+    p2 = base(); p2.exclude_functions = [(:bs, 7)]
+    @test isempty(gg_fit(field, p2).bs)
+    p3 = base(); p3.exclude_functions = [(:a, 99)]
+    @test Set(keys(gg_fit(field, p3).a)) == Set(keys(full.a))
+
+    # Excluding the top orders lowers the reported m_max/nd_max.
+    p4 = base(); p4.exclude_functions = [(:a, 4), (:b, 4)]
+    @test gg_fit(field, p4).m_max == 3
+
+    # Excluding a function and pruning it away must land on the same fit: both
+    # solve the same column set, so the coefficients agree exactly.
+    p5 = base(); p5.exclude_functions = [(:a, 3), (:b, 3)]
+    p6 = base(); p6.prune_max_limit = 1e-3        # drops exactly a_3 and b_3 here
+    ex, pr = gg_fit(field, p5), gg_fit(field, p6)
+    @test pr.pruned == [(:a, 3), (:b, 3)] && isempty(ex.pruned)
+    @test Set(keys(ex.a)) == Set(keys(pr.a)) && Set(keys(ex.b)) == Set(keys(pr.b))
+    for (k, v) in ex.a; @test v ≈ pr.a[k]; end
+    for (k, v) in ex.b; @test v ≈ pr.b[k]; end
+    @test ex.rms_weighted_plane ≈ pr.rms_weighted_plane
+
+    # Typos and a list that leaves nothing to fit are errors, not silent fits.
+    for bad in ([(:x, 1)], [(:a, -2)])
+      p7 = base(); p7.exclude_functions = bad
+      @test_throws ErrorException gg_fit(field, p7)
+    end
+    p8 = base()
+    p8.exclude_functions = vcat([(:a, m) for m in 0:4], [(:b, m) for m in 0:4], [(:bs, 0)])
+    @test_throws ErrorException gg_fit(field, p8)
+
+    quiet(() -> gg_fit_show_results(res, field, p))
+  end
+
+  @testset "gg_fit nd_max_for_m" begin
+    field = make_field()
+    base() = (p = GGFitInputParams(); p.n_planes_add = 2; p.m_max = 4; p.nd_max = 4; p)
+
+    full = gg_fit(field, base())
+    @test maximum(k[2] for k in keys(full.a)) == 4
+
+    p = base()
+    p.nd_max_for_m = Dict(3 => 2, 4 => 0, 0 => 1)
+    res = gg_fit(field, p)
+    # Each listed order is cut to its own limit; the unlisted ones keep nd_max.
+    # Nothing below the limit is lost: the retained top order is the highest the
+    # coefficient table offers for that m at or under the limit.
+    for (m, lim) in (1 => 4, 2 => 4, 3 => 2, 4 => 0)
+      @test all(k[2] <= lim for k in keys(res.a) if k[1] == m)
+      @test all(k[2] <= lim for k in keys(res.b) if k[1] == m)
+      avail = [k[2] for k in keys(full.a) if k[1] == m]
+      @test maximum(k[2] for k in keys(res.a) if k[1] == m) ==
+            maximum(nd for nd in avail if nd <= lim)
+    end
+    @test all(<=(1), keys(res.bs))            # key 0 is b_s
+    @test length(res.params) < length(full.params)
+    @test all(isfinite, res.rms_weighted_plane)
+    # The functions themselves survive; only their high derivative orders go.
+    @test Set(k[1] for k in keys(res.a)) == Set(k[1] for k in keys(full.a))
+    @test isempty(res.pruned)
+
+    # A limit above nd_max cannot raise the order, and an m the table does not
+    # have is a no-op.
+    p2 = base(); p2.nd_max_for_m = Dict(2 => 99, 77 => 0)
+    @test Set(keys(gg_fit(field, p2).a)) == Set(keys(full.a))
+
+    # Capping the top order lowers the reported nd_max.
+    p3 = base(); p3.nd_max_for_m = Dict(m => 1 for m in 0:4)
+    @test gg_fit(field, p3).nd_max == 1
+
+    # Same limit on every order is the global cut, exactly: same unknowns, and
+    # the same fit to the last digit.
+    p4 = base(); p4.nd_max_for_m = Dict(m => 2 for m in 0:4)
+    p5 = base(); p5.nd_max = 2
+    r4, r5 = gg_fit(field, p4), gg_fit(field, p5)
+    @test Set(keys(r4.a)) == Set(keys(r5.a)) && Set(keys(r4.b)) == Set(keys(r5.b))
+    for (k, v) in r4.a; @test v ≈ r5.a[k]; end
+    for (k, v) in r4.b; @test v ≈ r5.b[k]; end
+    @test r4.rms_weighted_plane ≈ r5.rms_weighted_plane
+
+    # A scan whose larger nd_max candidates the caps make redundant is run once
+    # per distinct model, not once per candidate.
+    p6 = base(); p6.nd_max = 2:4; p6.nd_max_for_m = Dict(m => 2 for m in 0:4)
+    scan6 = gg_fit(field, p6).scan
+    @test length(scan6) == 1 && scan6[1].nd_max == 2
+
+    # Negative orders and negative limits are mistakes, not silent fits.
+    for bad in (Dict(-1 => 2), Dict(3 => -1))
+      p7 = base(); p7.nd_max_for_m = bad
+      @test_throws ErrorException gg_fit(field, p7)
+    end
+
+    # Ragged nd -- towers of different heights from one m to the next -- is a
+    # different kind of sparsity from a missing m, so check both evaluation
+    # paths and an HDF5 round trip on it too.
+    plan = eval_plan(res)
+    for ip in eachindex(res.z_base), (x, y) in PTS
+      Bref, Aref, _ = field_and_potential_evaluate(res, ip, x, y)
+      Bpl, Apl, _   = field_and_potential_evaluate_at(plan, x, y, res.z_base[ip])
+      @test collect(Bpl) ≈ Bref
+      @test collect(Apl) ≈ Aref
+    end
+    mktempdir() do dir
+      p.output_file = joinpath(dir, "capped.h5")
+      quiet(() -> write_gg_fit(res, field, p))
+      back, _ = read_gg_fit(p.output_file)
+      @test Set(keys(back.a)) == Set(keys(res.a)) && Set(keys(back.b)) == Set(keys(res.b))
+      @test Set(keys(back.bs)) == Set(keys(res.bs))
+      B1, _, _ = field_and_potential_evaluate(back, 2, PTS[1]...)
+      B2, _, _ = field_and_potential_evaluate(res, 2, PTS[1]...)
+      @test B1 ≈ B2
+    end
+
+    quiet(() -> gg_fit_show_results(res, field, p))
+  end
+
   @testset "gg_fit prunes GG functions with negligible field contribution" begin
     field = make_field()
     base() = (p = GGFitInputParams(); p.n_planes_add = 1; p.m_max = 4; p.nd_max = 2; p)

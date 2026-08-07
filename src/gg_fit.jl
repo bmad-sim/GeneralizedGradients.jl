@@ -102,6 +102,9 @@ p.nd_max = 2:6        # crossed with nd_max = 2, 3, … 6
 ```
 This runs 66 fits. Note: a fit is done with a given `m_max`/`nd_max` applied to every base plane.
 That is, `m_max` and `nd_max` do not vary plane to plane within a given fit.
+`nd_max` is a single cut across all multipole orders; to hold the high-`m`
+functions to a lower derivative order than the low-`m` ones, see "Derivative
+order per multipole" below.
 Each fit is recorded as a `GGFitScanPoint` in the `scan` field of the result (and printed
 by `gg_fit_show_results`) with its coefficient count, its pooled RMS residual, and that
 residual broken out by field component (`Bx`, `By`, `Bs` separately).
@@ -237,23 +240,70 @@ planes.
   in the coefficient table. A vector or range scans (see "Scanning" below).
 - `nd_max` — highest derivative order `nd` kept. `-1` (the default) means
   `2*n_planes_add`. A vector or range scans.
+- `nd_max_for_m` — per-multipole override of `nd_max`, as a `Dict` mapping `m` to
+  its own derivative limit (see "Derivative order per multipole" below).
+  Default `Dict()` (`nd_max` alone).
 - `fit_criterion` — how a scan picks its winner: `:bic` (default), `:aic`, or
   `:rms`.
 - `core_weight` — merit-function weight for "core" (near-axis) points.
   Default `1` (uniform).
 - `outer_plane_weight` — merit-function weight for the outer `z`-planes.
   Default `1`.
+- `exclude_functions` — GG functions to leave out of the fit entirely, as
+  `(:a, m)` / `(:b, m)` / `(:bs, 0)` tuples (see "Excluding and pruning" below).
+  Default `[]`.
 - `prune_ave_limit`, `prune_max_limit` — drop GG functions that produce
-  negligible field (see "Pruning" below). Default `0`, `0` (no pruning).
+  negligible field (see "Excluding and pruning" below). Default `0`, `0`
+  (no pruning).
 - `output_file` — name of the output HDF5 file written by
   `write_gg_fit`. Default `"gg_fit_results.h5"`.
 
-## Pruning
+## Derivative order per multipole
+
+`nd_max` sets one derivative cut for the whole model, which is more than the
+high-`m` functions can usually support. A multipole falls off transversely as
+`r^m`, so `a_m`/`b_m` for large `m` are sampled meaningfully only near the
+aperture — over a small part of the grid and with a small dynamic range — and
+their high derivative orders are the worst-conditioned columns in the design
+matrix, frequently fitting little beyond interpolation error in the field table.
+
+`nd_max_for_m` gives those orders their own limit, keyed by multipole order, with
+`0` standing for `b_s`:
+
+```julia
+p.nd_max       = 4
+p.nd_max_for_m = Dict(4 => 2, 5 => 1, 0 => 0)
+```
+
+An `m` not listed is cut by `nd_max` alone, and a listed limit can only tighten:
+the effective cut for order `m` is `min(nd_max, nd_max_for_m[m])`, so raising one
+above `nd_max` does nothing. Naming an `m` the coefficient table does not contain
+is a harmless no-op.
+
+The limits apply to every `nd_max` a scan tries, so the scan table's `nd_max`
+column is the cut for the *unlisted* orders and `# coefs` shows what the
+overrides removed. Where the limits make two candidates the same model — the
+overrides can leave nothing for a larger `nd_max` to add — only the first is
+scanned, so the table has no duplicate rows.
+
+## Excluding and pruning
 
 `m_max` and `nd_max` cut the model along the order axes, which is a blunt
 instrument: a magnet with a symmetry may need `m = 1, 3, 5` and have no use at
-all for `m = 2, 4`, yet `m_max = 5` fits and stores all five. Pruning removes
-what does not earn its place, one GG function at a time.
+all for `m = 2, 4`, yet `m_max = 5` fits and stores all five. Two settings remove
+GG functions from anywhere in the range rather than only off the top — one for
+when the answer is known in advance, one for when it is not.
+
+    exclude_functions = [(:a, 2), (:a, 4), (:b, 2), (:b, 4), (:bs, 0)]
+
+names functions to leave out outright. They are dropped as the list of unknowns
+is assembled, so they never get a design-matrix column: not fitted, unable to
+influence the coefficients that are kept, and absent from the result. `b_s`
+carries no multipole order, so the `m` of a `:bs` entry is ignored, and naming a
+function the model does not contain anyway is a harmless no-op.
+
+Pruning answers the same question from the fit itself, for the cases where the
+negligible functions are not known ahead of time.
 
 The contribution of a function — a whole `a_m`, a whole `b_m`, or `b_s`, all of
 its derivative orders `nd` together — is the `|B|` it alone produces with every
@@ -346,25 +396,45 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
   rmax2 = maximum(xs[i]^2 + ys[j]^2 for i in eachindex(xs), j in eachindex(ys))
 
   # ---- Assemble the master parameter (unknown) list from the table keys --
-  # a/b indexed by (m,nd); bs indexed by nd (stored as (0,nd)).
+  # a/b indexed by (m,nd); bs indexed by nd (stored as (0,nd)). Functions the
+  # user excluded are left out here, so they are never fitted at all: they cost
+  # no design-matrix column and cannot influence the coefficients that are kept.
+  # `nd_cap(m)` is the derivative cut for multipole order `m` (m = 0 is b_s),
+  # tighter than `nd_max` wherever the user set a per-order override.
+  excluded = _gg_exclude_set(params.exclude_functions)
+  nd_caps  = _gg_nd_caps(params.nd_max_for_m)
+  nd_cap(m, ndx = nd_max_all) = min(ndx, get(nd_caps, m, ndx))
   pset = Set{Tuple{Symbol,Int,Int}}()
   for d in a_dicts, k in keys(d)
-    k[1] <= m_max_all && k[2] <= nd_max_all && push!(pset, (:a, k[1], k[2]))
+    k[1] <= m_max_all && k[2] <= nd_cap(k[1]) && !((:a, k[1]) in excluded) &&
+        push!(pset, (:a, k[1], k[2]))
   end
   for d in b_dicts, k in keys(d)
-    k[1] <= m_max_all && k[2] <= nd_max_all && push!(pset, (:b, k[1], k[2]))
+    k[1] <= m_max_all && k[2] <= nd_cap(k[1]) && !((:b, k[1]) in excluded) &&
+        push!(pset, (:b, k[1], k[2]))
   end
   for d in bs_dicts, nd in keys(d)
-    nd <= nd_max_all && push!(pset, (:bs, 0, nd))
+    nd <= nd_cap(0) && !((:bs, 0) in excluded) && push!(pset, (:bs, 0, nd))
   end
   master_list = sort!(collect(pset))
   ncols_all   = length(master_list)
+  ncols_all == 0 && error("No GG unknowns left to fit: exclude_functions = " *
+      "$(params.exclude_functions) and nd_max_for_m = $(params.nd_max_for_m) remove " *
+      "everything m_max = $(params.m_max), nd_max = $(params.nd_max) would otherwise keep.")
 
   # Column subset of the master list belonging to each candidate fit. `bs`
   # unknowns describe a_0 and carry no multipole order, so `m_max` never drops them.
-  cand_fits = [(mx, ndx) for mx in m_cands for ndx in nd_cands]
-  cand_cols   = [[c for (c, (typ, m, nd)) in enumerate(master_list)
-                    if nd <= ndx && (typ == :bs || m <= mx)] for (mx, ndx) in cand_fits]
+  # Candidates that the per-order caps (or an exclusion) collapse onto an earlier
+  # candidate's column set are dropped: they would refit an identical model.
+  cand_fits = Tuple{Int,Int}[]
+  cand_cols = Vector{Int}[]
+  for mx in m_cands, ndx in nd_cands
+    cols = [c for (c, (typ, m, nd)) in enumerate(master_list)
+              if nd <= nd_cap(typ == :bs ? 0 : m, ndx) && (typ == :bs || m <= mx)]
+    any(isequal(cols), cand_cols) && continue
+    push!(cand_fits, (mx, ndx))
+    push!(cand_cols, cols)
+  end
 
   # ---- Precompute CB (field-coefficient) grids: (comp,type,m,nd) => matrix over (ix,iy) --
   # comp: 1=Bx, 2=By, 3=Bs.   type: :a,:b,:bs.
@@ -377,7 +447,7 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
   for ((comp, typ), d) in comp_dicts
     for (key, terms) in d
       m, nd = typ == :bs ? (0, key) : (key[1], key[2])
-      (nd <= nd_max_all && m <= m_max_all) || continue
+      (nd <= nd_cap(m) && m <= m_max_all) || continue
       grid = [_coefsum(terms, xs[i], ys[j], g_ref) for i in eachindex(xs), j in eachindex(ys)]
       CB[(comp, typ, m, nd)] = grid
     end
@@ -457,15 +527,17 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
       rmsw_pl = refit.rmsw_c[1]
       rmsu_pl = refit.rmsu_c[1]
       pruned  = sort!(collect(drop))
-      # The retained orders, which pruning can have lowered below the scan winner's.
-      m_max  = maximum((m for (typ, m, _) in master_list[keep_cols] if typ !== :bs), init = 0)
-      nd_max = maximum((nd for (_, _, nd) in master_list[keep_cols]), init = 0)
     end
   end
 
   # ---- Expand the fitted coefficients into the dictionaries -------------
   params_list = master_list[keep_cols]
   a, b, bs = _expand_coefs(params_list, theta)
+
+  # Report the orders actually retained. Excluding or pruning the functions at the
+  # top of the range leaves these below the cutoff the scan nominally selected.
+  m_max  = maximum((m for (typ, m, _) in params_list if typ !== :bs), init = 0)
+  nd_max = maximum((nd for (_, _, nd) in params_list), init = 0)
 
   return GGCoefs(; z_base, params = params_list, a, b, bs,
                     rms_weighted_plane = rmsw_pl, rms_unweighted_plane = rmsu_pl,
@@ -492,6 +564,52 @@ _gg_group(param::Tuple{Symbol,Int,Int}) =
 Printable name of a GG function group: `"a_3"`, `"b_5"`, `"b_s"`.
 """
 _gg_label(typ::Symbol, m::Integer) = typ === :bs ? "b_s" : string(typ, "_", m)
+
+"""
+    _gg_exclude_set(exclude) -> Set{Tuple{Symbol,Int}}
+
+Validate and normalize a user `exclude_functions` list into the group form used
+throughout. `b_s` carries no multipole order, so any `(:bs, m)` normalizes to
+`(:bs, 0)`. Naming a function the model does not contain is a harmless no-op; a
+type other than `:a`, `:b` or `:bs` is a typo and raises.
+"""
+function _gg_exclude_set(exclude)
+  s = Set{Tuple{Symbol,Int}}()
+  for e in exclude
+    typ, m = e
+    if typ === :bs
+      push!(s, (:bs, 0))
+    elseif typ === :a || typ === :b
+      m >= 0 || error("Negative multipole order $m for $(repr(typ)) in exclude_functions.")
+      push!(s, (typ, m))
+    else
+      error("Unknown GG function type $(repr(typ)) in exclude_functions. " *
+            "Expecting :a, :b or :bs, as in exclude_functions = [(:a, 2), (:b, 4), (:bs, 0)].")
+    end
+  end
+  return s
+end
+
+"""
+    _gg_nd_caps(nd_max_for_m) -> Dict{Int,Int}
+
+Validate a user `nd_max_for_m` setting, the per-multipole override of `nd_max`.
+Keys are multipole orders (`0` being `b_s`, which carries no order) and values
+the highest derivative order kept for that multipole. Naming an `m` the
+coefficient table does not contain is a harmless no-op; a negative order or a
+negative limit is a mistake and raises.
+"""
+function _gg_nd_caps(nd_max_for_m)
+  caps = Dict{Int,Int}()
+  for (m, nd) in nd_max_for_m
+    m >= 0 || error("Negative multipole order $m in nd_max_for_m. " *
+                    "Use 0 for b_s, which carries no multipole order.")
+    nd >= 0 || error("Negative derivative-order limit $nd for m = $m in nd_max_for_m. " *
+                     "Use exclude_functions to remove a GG function entirely.")
+    caps[m] = nd
+  end
+  return caps
+end
 
 """
     _expand_coefs(params_list, theta) -> (a, b, bs)
@@ -783,8 +901,20 @@ function gg_fit_show_results(results::GGCoefs, field::FieldGridTable, params::GG
   println("  n_planes_add      : ", params.n_planes_add)
   println("  m_max, nd_max     : ", results.m_max, ", ", results.nd_max,
           isempty(results.scan) ? "" : "   (selected by the scan below)")
+  if !isempty(params.nd_max_for_m)
+    println("  nd_max per m      : ",
+            join((m == 0 ? "b_s = $nd" : "a_$m/b_$m = $nd"
+                  for (m, nd) in sort!(collect(params.nd_max_for_m))), ", "),
+            "   (overrides nd_max)")
+  end
   println("  core_weight       : ", params.core_weight)
   println("  outer_plane_weight: ", params.outer_plane_weight)
+  if !isempty(params.exclude_functions)
+    println("  excluded functions: ",
+            join((_gg_label(typ, m) for (typ, m) in
+                  sort!(collect(_gg_exclude_set(params.exclude_functions)))), ", "),
+            "   (never fitted)")
+  end
   println("  prune ave, max    : ", params.prune_ave_limit, ", ", params.prune_max_limit,
           "   (fraction of <|B|>; 0 = off)")
   if !isempty(results.pruned)

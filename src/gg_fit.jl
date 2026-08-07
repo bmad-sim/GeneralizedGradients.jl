@@ -151,7 +151,7 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
   outer_plane_weight = params.outer_plane_weight
 
   mag   = field.magnetic            # OffsetArray: mag[ix, iy, iz] == [Bx, By, Bz]
-  r0    = field.r0                   # grid origin (gridOriginOffset)
+  r0    = field.r0                  # grid origin (gridOriginOffset)
   dr    = field.dr
   g_ref = field.g_ref
 
@@ -214,7 +214,9 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
     typ == :b  && (b[(n, m)] = fill(NaN, nplanes))
     typ == :bs && (bs[m]     = fill(NaN, nplanes))
   end
-  rms_plane = fill(NaN, nplanes)
+  rms_plane            = fill(NaN, nplanes)
+  rms_unweighted_plane = fill(NaN, nplanes)
+  field_ave_plane      = fill(NaN, nplanes)
 
   # ---- Loop over base planes -------------------------------------------
   for (pidx, iz0) in enumerate(izs_grid)
@@ -267,10 +269,20 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
       typ == :b  && (b[(n, m)][pidx] = theta[col])
       typ == :bs && (bs[m][pidx]     = theta[col])
     end
-    rms_plane[pidx] = norm(Aw * theta - bw) / sqrt(nrows)
+    # Residual of the same fit, scored with and without the point weights. The
+    # unweighted value says how well the field itself is reproduced; the weighted
+    # one is the quantity the fit actually minimized.
+    rms_plane[pidx]            = norm(Aw * theta - bw) / sqrt(nrows)
+    rms_unweighted_plane[pidx] = norm(A * theta - bvec) / sqrt(nrows)
+
+    # Average |B| over the base plane alone (unweighted): the field scale against
+    # which the residuals above are to be judged.
+    field_ave_plane[pidx] = sum(norm(mag[ix, iy, iz0]) for ix in ixs, iy in iys) /
+                            (length(ixs) * length(iys))
   end
 
-  return GGCoefs(; z_base, params = params_list, a, b, bs, rms_plane, m_max,
+  return GGCoefs(; z_base, params = params_list, a, b, bs, rms_plane,
+                    rms_unweighted_plane, field_ave_plane, m_max,
                     g_ref = field.g_ref, origin, dz_grid)
 end
 
@@ -279,8 +291,9 @@ end
 """
     gg_fit_show_results(results::GGCoefs, field::FieldGridTable, params::GGFitInputParams)
 
-Print a human-readable summary of a `gg_fit` `results`: the fit settings, the
-per-plane weighted RMS residuals, and the leading multipoles at the central
+Print a human-readable summary of a `gg_fit` `results`: the fit settings, a
+per-plane table of the weighted and unweighted RMS residuals alongside the
+average field magnitude of the plane, and the leading multipoles at the central
 plane as a quick sanity check.
 """
 function gg_fit_show_results(results::GGCoefs, field::FieldGridTable, params::GGFitInputParams)
@@ -295,9 +308,15 @@ function gg_fit_show_results(results::GGCoefs, field::FieldGridTable, params::GG
   println("  # GG coefficients : ", length(results.params), " per plane")
   println("  # base planes     : ", length(results.z_base))
   println("-"^72)
-  @printf("%-6s  %-12s  %-12s\n", "plane", "z [m]", "wRMS resid")
+  @printf("%-6s  %-12s  %-12s  %-12s  %-12s\n",
+          "plane", "z [m]", "wRMS resid", "RMS resid", "<|B|> [T]")
+  # rms_unweighted_plane and field_ave_plane are absent from fits read back from
+  # older HDF5 files, in which case the column is left blank.
+  cell(v, i) = length(v) == length(results.z_base) ? @sprintf("%-12.4e", v[i]) :
+                                                     @sprintf("%-12s", "-")
   for i in eachindex(results.z_base)
-    @printf("%-6d  %-12.6g  %-12.4e\n", i, results.z_base[i], results.rms_plane[i])
+    @printf("%-6d  %-12.6g  %-12.4e  %s  %s\n", i, results.z_base[i], results.rms_plane[i],
+            cell(results.rms_unweighted_plane, i), cell(results.field_ave_plane, i))
   end
   println("-"^72)
 
@@ -331,7 +350,8 @@ is written to `params.output_file` and its path is returned.
 
 ## HDF5 schema
 
-    root datasets   : z_base, rms_plane, origin            (Float64[])
+    root datasets   : z_base, rms_plane, rms_unweighted_plane,
+                      field_ave_plane, origin                     (Float64[])
     root attributes : g_ref, dz_grid (Float64); m_max, n_planes_add (Int);
                       core_weight, outer_plane_weight (Float64)
     groups a, b     : n (Int[]), m (Int[]), values (Float64[nkeys, nplanes])
@@ -344,6 +364,8 @@ function write_gg_fit(results::GGCoefs, field::FieldGridTable, params::GGFitInpu
   h5open(outfile, "w") do f
     f["z_base"]    = collect(Float64, results.z_base)
     f["rms_plane"] = collect(Float64, results.rms_plane)
+    f["rms_unweighted_plane"] = collect(Float64, results.rms_unweighted_plane)
+    f["field_ave_plane"]      = collect(Float64, results.field_ave_plane)
     f["origin"]    = collect(Float64, params.origin)
     attributes(f)["m_max"]              = Int(results.m_max)
     attributes(f)["g_ref"]              = Float64(results.g_ref)

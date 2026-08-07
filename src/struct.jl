@@ -98,8 +98,8 @@ Name of the output file.
 @kwdef mutable struct GGFitInputParams
   origin::Vector{Float64} = [0.0, 0.0]   # (x, y) origin about which the generalized gradients coefs are computed
   n_planes_add::Int = 1                  # Number of z-planes added.
-  core_weight::Int = 1                   # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
-  outer_plane_weight::Int = 1            # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).
+  core_weight::Float64 = 1.0             # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
+  outer_plane_weight::Float64 = 1.0      # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).
   output_file::String = "gg_fit_results.h5"
 end
 
@@ -200,6 +200,13 @@ Fields:
 - `b` — fitted `b(n,m)` functions, `Dict (n,m) => values_over_planes`.
 - `bs` — fitted `bs(m)` functions, `Dict m => values_over_planes`.
 - `rms_plane` — weighted RMS fit residual at each base plane.
+- `rms_unweighted_plane` — RMS fit residual at each base plane over the same
+  points as `rms_plane` but with all point weights set to 1. Equal to
+  `rms_plane` when `core_weight = outer_plane_weight = 1`.
+- `field_ave_plane` — average field magnitude `|B|` over the grid points of each
+  base plane [T]. Unweighted, and taken from the base plane alone (not the added
+  planes), so it gives the field profile along `z` and a scale against which
+  `rms_plane` can be judged.
 - `m_max` — highest derivative order resolved (`2 * n_planes_add`).
 - `g_ref` — reference-frame bending strength = `1/bending_radius` [1/m] (`0` for a
   straight reference frame).
@@ -217,6 +224,8 @@ Fields:
   b::Dict{Tuple{Int,Int},Vector{Float64}} = Dict{Tuple{Int,Int},Vector{Float64}}()
   bs::Dict{Int,Vector{Float64}} = Dict{Int,Vector{Float64}}()
   rms_plane::Vector{Float64} = Float64[]
+  rms_unweighted_plane::Vector{Float64} = Float64[]
+  field_ave_plane::Vector{Float64} = Float64[]
   m_max::Int = 0
   g_ref::Float64 = 0.0
   origin::Vector{Float64} = [0.0, 0.0]   # (x, y) origin about which the generalized gradients coefs are computed

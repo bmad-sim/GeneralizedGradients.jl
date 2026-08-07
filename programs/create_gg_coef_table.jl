@@ -1,8 +1,15 @@
 using Symbolics
 
 # ---------------------------------------------------------------------------
-# Create a file gg_coef_table.jl 
-# Similar to monomial_functions.jl:
+# Create a gg_coef_table.jl data file.
+#
+# The data arrays from this file are incorporated in the GeneralizedGradients package and are
+#   used by the gg_fit function.
+# Nominally this file lives in the GeneralizedGradients/tables dir.
+# This file is similar to the monomial_functions.jl data file but structured to be
+#   easier to use by the gg_fit code.
+# The data arrays never have to be recomputed unless higher a_n and b_n order is wanted.
+#
 # For each field component (Bx, By, Bs), and for each function a, b, bs and derivatives,
 # output a vector of coefficients that contribute.
 #

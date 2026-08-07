@@ -248,7 +248,7 @@
           <section class="tex2jax_ignore mathjax_ignore" id="fitting-a-field-grid-to-generalized-gradients">
 <h1>Fitting a field grid to generalized gradients<a class="headerlink" href="#fitting-a-field-grid-to-generalized-gradients" title="Link to this heading">¶</a></h1>
 <p>The central operation is <code class="docutils literal notranslate"><span class="pre">gg_fit</span></code>, which fits a 3D magnetic field grid to
-generalized-gradient functions <code class="docutils literal notranslate"><span class="pre">a_n(s)</span></code>, <code class="docutils literal notranslate"><span class="pre">b_n(s)</span></code>, <code class="docutils literal notranslate"><span class="pre">b_s(s)</span></code> and their
+generalized-gradient functions <code class="docutils literal notranslate"><span class="pre">a_m(s)</span></code>, <code class="docutils literal notranslate"><span class="pre">b_m(s)</span></code>, <code class="docutils literal notranslate"><span class="pre">b_s(s)</span></code> and their
 <code class="docutils literal notranslate"><span class="pre">s</span></code>-derivatives, <strong>plane by plane</strong>.</p>
 <section id="read-a-field-grid">
 <h2>1. Read a field grid<a class="headerlink" href="#read-a-field-grid" title="Link to this heading">¶</a></h2>
@@ -278,7 +278,7 @@ reference frame.</p>
 </pre></div>
 </div>
 <p>If <code class="docutils literal notranslate"><span class="pre">field.g_ref</span></code> is non-zero, <code class="docutils literal notranslate"><span class="pre">origin</span></code> must be <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">0]</span></code>. The maximum derivative
-order resolved is <code class="docutils literal notranslate"><span class="pre">m_max</span> <span class="pre">=</span> <span class="pre">2</span> <span class="pre">*</span> <span class="pre">n_planes_add</span></code>. See <a class="reference internal" href="theory.html"><span class="std std-doc">Theory</span></a> for what
+order resolved is <code class="docutils literal notranslate"><span class="pre">nd_max</span> <span class="pre">=</span> <span class="pre">2</span> <span class="pre">*</span> <span class="pre">n_planes_add</span></code>. See <a class="reference internal" href="theory.html"><span class="std std-doc">Theory</span></a> for what
 the weights do.</p>
 </section>
 <section id="run-the-fit">
@@ -288,7 +288,7 @@ the weights do.</p>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">results</span></code> is a <code class="docutils literal notranslate"><span class="pre">GGCoefs</span></code> holding the fitted coefficient functions
 (<code class="docutils literal notranslate"><span class="pre">a</span></code>, <code class="docutils literal notranslate"><span class="pre">b</span></code>, <code class="docutils literal notranslate"><span class="pre">bs</span></code>) sampled at every base plane (<code class="docutils literal notranslate"><span class="pre">z_base</span></code>), along with
-the per-plane weighted-RMS residuals (<code class="docutils literal notranslate"><span class="pre">rms_plane</span></code>), <code class="docutils literal notranslate"><span class="pre">m_max</span></code>, and the
+the per-plane weighted-RMS residuals (<code class="docutils literal notranslate"><span class="pre">rms_plane</span></code>), <code class="docutils literal notranslate"><span class="pre">m_max</span></code>, <code class="docutils literal notranslate"><span class="pre">nd_max</span></code>, and the
 reference-frame bending strength <code class="docutils literal notranslate"><span class="pre">g_ref</span></code>.</p>
 </section>
 <section id="inspect-and-save">

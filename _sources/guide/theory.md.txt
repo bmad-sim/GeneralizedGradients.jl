@@ -9,37 +9,37 @@ is linear in the GG functions and their `s`-derivatives, which makes the fit a
 For each field component $c \in \{B_x, B_y, B_s\}$,
 
 ```{math}
-B_c(x,y,z) = \sum_{(n,m)} CS_{c,b}(n,m; x,y)\, b_{(n,m)}(z)
-           + \sum_{(n,m)} CS_{c,a}(n,m; x,y)\, a_{(n,m)}(z)
-           + \sum_{m}     CS_{c,bs}(m; x,y)\, bs_{(m)}(z),
+B_c(x,y,z) = \sum_{(m,nd)} CS_{c,b}(m,nd; x,y)\, b_{(m,nd)}(z)
+           + \sum_{(m,nd)} CS_{c,a}(m,nd; x,y)\, a_{(m,nd)}(z)
+           + \sum_{nd}     CS_{c,bs}(nd; x,y)\, bs_{(nd)}(z),
 ```
 
 where each coefficient is a polynomial in the transverse coordinates,
 
 ```{math}
-CS_{c,f}(n,m; x,y) = \sum (\text{coeff}\cdot g_{\text{ref}}^{\,k}\, x^p\, y^q),
+CS_{c,f}(m,nd; x,y) = \sum (\text{coeff}\cdot g_{\text{ref}}^{\,k}\, x^p\, y^q),
 ```
 
 and the derivative towers are
-$b_{(n,m)} = \mathrm{d}^m b_n/\mathrm{d}z^m$,
-$a_{(n,m)} = \mathrm{d}^m a_n/\mathrm{d}z^m$, and
-$bs_{(m)} = \mathrm{d}^{m+1} a_0/\mathrm{d}z^{m+1}$.
+$b_{(m,nd)} = \mathrm{d}^{nd} b_m/\mathrm{d}z^{nd}$,
+$a_{(m,nd)} = \mathrm{d}^{nd} a_m/\mathrm{d}z^{nd}$, and
+$bs_{(nd)} = \mathrm{d}^{nd+1} a_0/\mathrm{d}z^{nd+1}$.
 
 ## Plane-by-plane least squares
 
 The unknowns at a base plane $z_0$ are the function values and their derivatives
-$f_{(n,m)}(z_0)$ for $m = 0 \ldots m_{\max}$. The field on a neighbouring plane at
+$f_{(m,nd)}(z_0)$ for $nd = 0 \ldots nd_{\max}$. The field on a neighbouring plane at
 offset $\mathrm{d}z = z - z_0$ is obtained by Taylor-extrapolating each
 derivative,
 
 ```{math}
-f_{(n,m)}(z_0 + \mathrm{d}z) = \sum_{j \ge m}
-   \frac{\mathrm{d}z^{\,j-m}}{(j-m)!}\, f_{(n,j)}(z_0),
+f_{(m,nd)}(z_0 + \mathrm{d}z) = \sum_{j \ge nd}
+   \frac{\mathrm{d}z^{\,j-nd}}{(j-nd)!}\, f_{(m,j)}(z_0),
 ```
 
 which makes the model linear in the base-plane unknowns. Each base plane is then
 solved by weighted linear least squares over all field points lying within
-`n_planes_add` planes of it. Adding planes (`m_max = 2·n_planes_add`) lets the
+`n_planes_add` planes of it. Adding planes (`nd_max = 2·n_planes_add`) lets the
 fit resolve higher derivatives and smooths the result; past some point, using
 more planes makes the polynomial approximation *less* accurate, so there is an
 optimum.

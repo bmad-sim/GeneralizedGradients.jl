@@ -38,12 +38,12 @@ end
     _comp_array(Ta, Tb, Tbs, aval, bval, bsval, g_ref) -> K
 
 Combined coefficient array of a component: sum of its `a`, `b` and `bs` parts.
-`Ta`/`Tb` are keyed by `(n,m)` and `Tbs` by `m`.
+`Ta`/`Tb` are keyed by `(m,nd)` and `Tbs` by `nd`.
 """
 function _comp_array(Ta, Tb, Tbs, aval, bval, bsval, g_ref)
   return _accum(Ta, k -> aval(k...), g_ref) .+
          _accum(Tb, k -> bval(k...), g_ref) .+
-         _accum(Tbs, m -> bsval(m), g_ref)
+         _accum(Tbs, nd -> bsval(nd), g_ref)
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -72,18 +72,18 @@ end
     _taylor_derivs(z0, f0, sq) -> Vector
 
 Single-point Taylor tower: from `f` and its derivatives at `z0`, return
-`[P⁽ᵐ⁾(sq) for m=0..N]` with `P` the Taylor series, i.e. `f` extrapolated to `sq`.
+`[P⁽ⁿᵈ⁾(sq) for nd=0..N]` with `P` the Taylor series, i.e. `f` extrapolated to `sq`.
 """
 function _taylor_derivs(z0, f0, sq)
   N = length(f0) - 1
   u = sq - z0
   out = zeros(Float64, N + 1)
-  for m in 0:N
+  for nd in 0:N
     acc = 0.0
-    for j in m:N
-      acc += f0[j+1] * u^(j-m) / factorial(j-m)
+    for j in nd:N
+      acc += f0[j+1] * u^(j-nd) / factorial(j-nd)
     end
-    out[m+1] = acc
+    out[nd+1] = acc
   end
   return out
 end
@@ -94,7 +94,7 @@ end
     _hermite_derivs(zL, zR, fL, fR, sq) -> Vector
 
 Two-point Hermite tower: `fL[j+1] = f⁽ʲ⁾(zL)`, `fR[j+1] = f⁽ʲ⁾(zR)`, `j = 0..N`.
-Returns `[H⁽ᵐ⁾(sq) for m=0..N]` where `H` is the degree-`(2N+1)` Hermite
+Returns `[H⁽ⁿᵈ⁾(sq) for nd=0..N]` where `H` is the degree-`(2N+1)` Hermite
 interpolant. Built via confluent Newton divided differences in the local
 coordinate `u = s - zL` (nodes: `0` with multiplicity `N+1`, `hstep` with
 multiplicity `N+1`).
@@ -139,16 +139,16 @@ function _hermite_derivs(zL, zR, fL, fR, sq)
   # Evaluate H and its derivatives at uq.
   uq = sq - zL
   out = zeros(Float64, N + 1)
-  for m in 0:N
+  for nd in 0:N
     acc = 0.0
-    for d in m:K
-      ff = 1.0                            # falling factorial d·(d-1)···(d-m+1)
-      for r in 0:m-1
+    for d in nd:K
+      ff = 1.0                            # falling factorial d·(d-1)···(d-nd+1)
+      for r in 0:nd-1
         ff *= (d - r)
       end
-      acc += poly[d+1] * ff * uq^(d-m)
+      acc += poly[d+1] * ff * uq^(d-nd)
     end
-    out[m+1] = acc
+    out[nd+1] = acc
   end
   return out
 end
@@ -172,8 +172,8 @@ Largest `N` such that orders `0,1,…,N` are all present in `orders` (sorted).
 """
 function _contiguous_order(orders)
   N = -1
-  for (idx, m) in enumerate(orders)
-    m == idx - 1 ? (N = m) : break
+  for (idx, nd) in enumerate(orders)
+    nd == idx - 1 ? (N = nd) : break
   end
   return N
 end
@@ -181,27 +181,27 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    _interp_nm_dict(d, iL, iR, zL, zR, sq, single) -> Dict
+    _interp_mnd_dict(d, iL, iR, zL, zR, sq, single) -> Dict
 
-Interpolate an `(n,m)`-keyed dict (`a`, `b`): build one Hermite per multipole `n`.
+Interpolate an `(m,nd)`-keyed dict (`a`, `b`): build one Hermite per multipole `m`.
 """
-function _interp_nm_dict(d, iL, iR, zL, zR, sq, single)
+function _interp_mnd_dict(d, iL, iR, zL, zR, sq, single)
   out = Dict{Tuple{Int,Int},Vector{Float64}}()
-  byn = Dict{Int,Vector{Int}}()
-  for (n, m) in keys(d)
-    push!(get!(byn, n, Int[]), m)
+  bym = Dict{Int,Vector{Int}}()
+  for (m, nd) in keys(d)
+    push!(get!(bym, m, Int[]), nd)
   end
-  for (n, ms) in byn
-    sort!(ms)
-    N  = _contiguous_order(ms)
-    fL = [d[(n, j)][iL] for j in 0:N]
-    fR = [d[(n, j)][iR] for j in 0:N]
+  for (m, nds) in bym
+    sort!(nds)
+    N  = _contiguous_order(nds)
+    fL = [d[(m, j)][iL] for j in 0:N]
+    fR = [d[(m, j)][iR] for j in 0:N]
     vals = _interp_tower(fL, fR, zL, zR, sq, single)
     for j in 0:N
-      out[(n, j)] = [vals[j+1]]
+      out[(m, j)] = [vals[j+1]]
     end
-    for m in ms                              # any non-contiguous order: nearest plane
-      m > N && (out[(n, m)] = [d[(n, m)][iL]])
+    for nd in nds                            # any non-contiguous order: nearest plane
+      nd > N && (out[(m, nd)] = [d[(m, nd)][iL]])
     end
   end
   return out
@@ -210,22 +210,22 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    _interp_m_dict(d, iL, iR, zL, zR, sq, single) -> Dict
+    _interp_nd_dict(d, iL, iR, zL, zR, sq, single) -> Dict
 
-Interpolate an `m`-keyed dict (`bs`): a single Hermite tower.
+Interpolate an `nd`-keyed dict (`bs`): a single Hermite tower.
 """
-function _interp_m_dict(d, iL, iR, zL, zR, sq, single)
+function _interp_nd_dict(d, iL, iR, zL, zR, sq, single)
   out = Dict{Int,Vector{Float64}}()
-  ms  = sort(collect(keys(d)))
-  N   = _contiguous_order(ms)
+  nds = sort(collect(keys(d)))
+  N   = _contiguous_order(nds)
   fL  = [d[j][iL] for j in 0:N]
   fR  = [d[j][iR] for j in 0:N]
   vals = _interp_tower(fL, fR, zL, zR, sq, single)
   for j in 0:N
     out[j] = [vals[j+1]]
   end
-  for m in ms
-    m > N && (out[m] = [d[m][iL]])
+  for nd in nds
+    nd > N && (out[nd] = [d[nd][iL]])
   end
   return out
 end
@@ -259,12 +259,13 @@ function _interp_gg_fit(fit, s::Real)
   single = iL == iR
   zL = z[iL]; zR = z[iR]
 
-  a2  = _interp_nm_dict(fit.a,  iL, iR, zL, zR, sq, single)
-  b2  = _interp_nm_dict(fit.b,  iL, iR, zL, zR, sq, single)
-  bs2 = _interp_m_dict(fit.bs, iL, iR, zL, zR, sq, single)
+  a2  = _interp_mnd_dict(fit.a, iL, iR, zL, zR, sq, single)
+  b2  = _interp_mnd_dict(fit.b, iL, iR, zL, zR, sq, single)
+  bs2 = _interp_nd_dict(fit.bs, iL, iR, zL, zR, sq, single)
 
   fit2 = GGCoefs(; z_base = [sq], a = a2, b = b2, bs = bs2,
-                        m_max = fit.m_max, rms_plane = [NaN], g_ref = fit.g_ref,
+                        m_max = fit.m_max, nd_max = fit.nd_max,
+                        rms_plane = [NaN], g_ref = fit.g_ref,
                         origin = fit.origin, dz_grid = fit.dz_grid)
   return fit2
 end
@@ -279,12 +280,12 @@ Returns full `_NMAX×_NMAX` arrays summed over the `a`, `b`, `bs` parts.
 """
 function _field_CB(fit, ip::Integer)
   g_ref = fit.g_ref
-  aval(n, m) = (m >= 0 && haskey(fit.a, (n, m))) ? fit.a[(n, m)][ip] : 0.0
-  bval(n, m) = (m >= 0 && haskey(fit.b, (n, m))) ? fit.b[(n, m)][ip] : 0.0
-  bsval(m)   = (m >= 0 && haskey(fit.bs, m))     ? fit.bs[m][ip]     : 0.0
-  CBx = _accum(Bx_a, k -> aval(k...), g_ref) .+ _accum(Bx_b, k -> bval(k...), g_ref) .+ _accum(Bx_bs, m -> bsval(m), g_ref)
-  CBy = _accum(By_a, k -> aval(k...), g_ref) .+ _accum(By_b, k -> bval(k...), g_ref) .+ _accum(By_bs, m -> bsval(m), g_ref)
-  CBs = _accum(Bs_a, k -> aval(k...), g_ref) .+ _accum(Bs_b, k -> bval(k...), g_ref) .+ _accum(Bs_bs, m -> bsval(m), g_ref)
+  aval(m, nd) = (nd >= 0 && haskey(fit.a, (m, nd))) ? fit.a[(m, nd)][ip] : 0.0
+  bval(m, nd) = (nd >= 0 && haskey(fit.b, (m, nd))) ? fit.b[(m, nd)][ip] : 0.0
+  bsval(nd)   = (nd >= 0 && haskey(fit.bs, nd))     ? fit.bs[nd][ip]     : 0.0
+  CBx = _accum(Bx_a, k -> aval(k...), g_ref) .+ _accum(Bx_b, k -> bval(k...), g_ref) .+ _accum(Bx_bs, nd -> bsval(nd), g_ref)
+  CBy = _accum(By_a, k -> aval(k...), g_ref) .+ _accum(By_b, k -> bval(k...), g_ref) .+ _accum(By_bs, nd -> bsval(nd), g_ref)
+  CBs = _accum(Bs_a, k -> aval(k...), g_ref) .+ _accum(Bs_b, k -> bval(k...), g_ref) .+ _accum(Bs_bs, nd -> bsval(nd), g_ref)
   return CBx, CBy, CBs
 end
 
@@ -530,7 +531,7 @@ _is_hdf5_path(path) = lowercase(splitext(path)[2]) in (".h5", ".hdf5")
 """
     _write_coef_group(parent, name, d; single::Bool = false)
 
-Write a Dict keyed by (n,m) (or by m, if `single`) as index arrays + matrix.
+Write a Dict keyed by (m,nd) (or by nd, if `single`) as index arrays + matrix.
 """
 function _write_coef_group(parent, name, d; single::Bool = false)
   g = create_group(parent, name)
@@ -541,23 +542,23 @@ function _write_coef_group(parent, name, d; single::Bool = false)
     V[i, :] = d[k]
   end
   if single
-    g["m"] = Int[k for k in ks]
+    g["nd"] = Int[k for k in ks]
   else
-    g["n"] = Int[k[1] for k in ks]
-    g["m"] = Int[k[2] for k in ks]
+    g["m"]  = Int[k[1] for k in ks]
+    g["nd"] = Int[k[2] for k in ks]
   end
   g["values"] = V
 end
 
 function _read_coef_group(parent, name; single::Bool = false)
   g = parent[name]
-  m = Int.(read(g["m"]))
-  V = read(g["values"])
+  nd = Int.(read(g["nd"]))
+  V  = read(g["values"])
   if single
-    return Dict{Int,Vector{Float64}}(m[i] => V[i, :] for i in eachindex(m))
+    return Dict{Int,Vector{Float64}}(nd[i] => V[i, :] for i in eachindex(nd))
   else
-    n = Int.(read(g["n"]))
-    return Dict{Tuple{Int,Int},Vector{Float64}}((n[i], m[i]) => V[i, :] for i in eachindex(m))
+    m = Int.(read(g["m"]))
+    return Dict{Tuple{Int,Int},Vector{Float64}}((m[i], nd[i]) => V[i, :] for i in eachindex(nd))
   end
 end
 
@@ -670,16 +671,16 @@ end
     _taylor_poly(f0) -> Vector{Float64}
 
 Monomial coefficients (in `u = s - z0`) of the single-plane Taylor series:
-`poly[d+1] = f0[d+1] / d!`, so that `P⁽ᵐ⁾(u)` matches `_taylor_derivs`.
+`poly[d+1] = f0[d+1] / d!`, so that `P⁽ⁿᵈ⁾(u)` matches `_taylor_derivs`.
 """
 _taylor_poly(f0) = [f0[d+1] / factorial(d) for d in 0:length(f0)-1]
 
 #---------------------------------------------------------------------------------------------------
 
 """
-    _make_tower(z, Fn, slots, extra_slots, extra_planevals) -> _Tower
+    _make_tower(z, Fm, slots, extra_slots, extra_planevals) -> _Tower
 
-Build one tower from a per-`n` value matrix `Fn[j+1, plane] = f⁽ʲ⁾` at that
+Build one tower from a per-`m` value matrix `Fm[j+1, plane] = f⁽ʲ⁾` at that
 plane, its `slots`, and any extras. `z` are the base planes. Precomputes the
 interpolant's monomial coefficients on every straddling plane-pair (or the
 single-plane Taylor series when there is one plane).
@@ -688,12 +689,12 @@ single-plane Taylor series when there is one plane).
 flattened into the `n_extra x P` matrix `_Tower.extra_vals` so the tower holds
 only plain arrays (adaptable to the GPU; a vector-of-vectors is not).
 """
-function _make_tower(z, Fn, slots, extra_slots, extra_planevals)
+function _make_tower(z, Fm, slots, extra_slots, extra_planevals)
   P = length(z)
   N = length(slots) - 1
   if P == 1
     deg = N
-    poly = reshape(_taylor_poly(Fn[:, 1]), deg + 1, 1)
+    poly = reshape(_taylor_poly(Fm[:, 1]), deg + 1, 1)
     zref = [z[1]]
   else
     deg = 2N + 1
@@ -701,8 +702,8 @@ function _make_tower(z, Fn, slots, extra_slots, extra_planevals)
     poly = Matrix{Float64}(undef, deg + 1, npair)
     zref = Vector{Float64}(undef, npair)
     for ip in 1:npair
-      fL = @view Fn[:, ip]
-      fR = @view Fn[:, ip+1]
+      fL = @view Fm[:, ip]
+      fR = @view Fm[:, ip+1]
       poly[:, ip] = _hermite_poly(z[ip], z[ip+1], fL, fR)
       zref[ip] = z[ip]
     end
@@ -716,59 +717,59 @@ function _make_tower(z, Fn, slots, extra_slots, extra_planevals)
 end
 
 """
-    _build_towers_nm!(towers, z, d, slotmap, next) -> next
+    _build_towers_mnd!(towers, z, d, slotmap, next) -> next
 
-Assign `gvals` slots for the keys of an `(n,m)`-keyed dict `d` (`a` or `b`),
-build one `_Tower` per multipole `n`, and append them to `towers`. Returns the
+Assign `gvals` slots for the keys of an `(m,nd)`-keyed dict `d` (`a` or `b`),
+build one `_Tower` per multipole `m`, and append them to `towers`. Returns the
 next free slot index.
 """
-function _build_towers_nm!(towers, z, d::Dict{Tuple{Int,Int},Vector{Float64}}, slotmap, next)
+function _build_towers_mnd!(towers, z, d::Dict{Tuple{Int,Int},Vector{Float64}}, slotmap, next)
   for k in keys(d)
     slotmap[k] = next
     next += 1
   end
-  byn = Dict{Int,Vector{Int}}()
-  for (n, m) in keys(d)
-    push!(get!(byn, n, Int[]), m)
+  bym = Dict{Int,Vector{Int}}()
+  for (m, nd) in keys(d)
+    push!(get!(bym, m, Int[]), nd)
   end
   P = length(z)
-  for (n, ms) in byn
-    sort!(ms)
-    N = _contiguous_order(ms)
-    slots = [slotmap[(n, j)] for j in 0:N]
-    Fn = Matrix{Float64}(undef, N + 1, P)
+  for (m, nds) in bym
+    sort!(nds)
+    N = _contiguous_order(nds)
+    slots = [slotmap[(m, j)] for j in 0:N]
+    Fm = Matrix{Float64}(undef, N + 1, P)
     for j in 0:N, ip in 1:P
-      Fn[j+1, ip] = d[(n, j)][ip]
+      Fm[j+1, ip] = d[(m, j)][ip]
     end
-    extra = [m for m in ms if m > N]
-    extra_slots = [slotmap[(n, m)] for m in extra]
-    push!(towers, _make_tower(z, Fn, slots, extra_slots, [d[(n, m)] for m in extra]))
+    extra = [nd for nd in nds if nd > N]
+    extra_slots = [slotmap[(m, nd)] for nd in extra]
+    push!(towers, _make_tower(z, Fm, slots, extra_slots, [d[(m, nd)] for nd in extra]))
   end
   return next
 end
 
 """
-    _build_towers_m!(towers, z, d, slotmap, next) -> next
+    _build_towers_nd!(towers, z, d, slotmap, next) -> next
 
-Like `_build_towers_nm!` but for the `m`-keyed `bs` dict: a single `_Tower`.
+Like `_build_towers_mnd!` but for the `nd`-keyed `bs` dict: a single `_Tower`.
 """
-function _build_towers_m!(towers, z, d::Dict{Int,Vector{Float64}}, slotmap, next)
+function _build_towers_nd!(towers, z, d::Dict{Int,Vector{Float64}}, slotmap, next)
   for k in keys(d)
     slotmap[k] = next
     next += 1
   end
   isempty(d) && return next
-  ms = sort(collect(keys(d)))
-  N = _contiguous_order(ms)
+  nds = sort(collect(keys(d)))
+  N = _contiguous_order(nds)
   P = length(z)
   slots = [slotmap[j] for j in 0:N]
-  Fn = Matrix{Float64}(undef, N + 1, P)
+  Fm = Matrix{Float64}(undef, N + 1, P)
   for j in 0:N, ip in 1:P
-    Fn[j+1, ip] = d[j][ip]
+    Fm[j+1, ip] = d[j][ip]
   end
-  extra = [m for m in ms if m > N]
-  extra_slots = [slotmap[m] for m in extra]
-  push!(towers, _make_tower(z, Fn, slots, extra_slots, [d[m] for m in extra]))
+  extra = [nd for nd in nds if nd > N]
+  extra_slots = [slotmap[nd] for nd in extra]
+  push!(towers, _make_tower(z, Fm, slots, extra_slots, [d[nd] for nd in extra]))
   return next
 end
 
@@ -778,8 +779,8 @@ end
     _build_comp(Ta, Tb, Tbs, bump, g_ref, slot_a, slot_b, slot_bs) -> _CompTerms
 
 Flatten one output component's `(a, b, bs)` monomial tables into a flat term
-list, folding `g_ref^k` into each weight and resolving every `(n,m)`/`m` key to a
-`gvals` slot. `bump` shifts the GG derivative order by one (used for `∂A/∂s`).
+list, folding `g_ref^k` into each weight and resolving every `(m,nd)`/`nd` key to
+a `gvals` slot. `bump` shifts the GG derivative order by one (used for `∂A/∂s`).
 Terms whose GG value is structurally zero (missing key) are dropped.
 """
 function _build_comp(Ta, Tb, Tbs, bump::Bool, g_ref,
@@ -789,16 +790,16 @@ function _build_comp(Ta, Tb, Tbs, bump::Bool, g_ref,
   slot = Int[]; w = Float64[]; ps = Int[]; qs = Int[]
   wk(c, k) = float(c) * (k == 0 ? 1.0 : float(g_ref)^k)
   for (T, smap) in ((Ta, slot_a), (Tb, slot_b))
-    for ((n, m), terms) in T
-      s = get(smap, (n, bump ? m + 1 : m), 0)
+    for ((m, nd), terms) in T
+      s = get(smap, (m, bump ? nd + 1 : nd), 0)
       s == 0 && continue
       for (c, p, q, k) in terms
         push!(slot, s); push!(w, wk(c, k)); push!(ps, p); push!(qs, q)
       end
     end
   end
-  for (m, terms) in Tbs
-    s = get(slot_bs, bump ? m + 1 : m, 0)
+  for (nd, terms) in Tbs
+    s = get(slot_bs, bump ? nd + 1 : nd, 0)
     s == 0 && continue
     for (c, p, q, k) in terms
       push!(slot, s); push!(w, wk(c, k)); push!(ps, p); push!(qs, q)
@@ -824,9 +825,9 @@ function _build_eval_plan(fit::GGCoefs)
   slot_bs = Dict{Int,Int}()
   towers = _Tower[]
   next = 2                                   # slot 1 is the always-zero sentinel
-  next = _build_towers_nm!(towers, z, fit.a,  slot_a,  next)
-  next = _build_towers_nm!(towers, z, fit.b,  slot_b,  next)
-  next = _build_towers_m!( towers, z, fit.bs, slot_bs, next)
+  next = _build_towers_mnd!(towers, z, fit.a,  slot_a,  next)
+  next = _build_towers_mnd!(towers, z, fit.b,  slot_b,  next)
+  next = _build_towers_nd!( towers, z, fit.bs, slot_bs, next)
   ngvals = next - 1
 
   comps = (
@@ -896,7 +897,7 @@ size the stack-resident `SVector` scratch).
 Interpolate every tower onto `s`, returning the dense GG value vector as a
 stack-resident `SVector{ngvals, T}` (`T = typeof(s)`). Allocation-free and
 GPU-safe: the accumulator is an immutable `SVector` updated with `Base.setindex`
-(no `MArray`, no heap), and the power `u^(d-m)` is carried incrementally so no
+(no `MArray`, no heap), and the power `u^(d-nd)` is carried incrementally so no
 scratch buffer is needed. Iterating the `NTuple` of towers is unrolled by the
 compiler.
 """
@@ -910,18 +911,18 @@ compiler.
   @inbounds for tw in plan.towers
     u = s - T(tw.zref[pair])
     deg = tw.deg
-    for m in 0:tw.N
+    for nd in 0:tw.N
       acc = zero(T)
-      ud  = one(T)                     # u^(d-m), carried up from d = m
-      for d in m:deg
-        ff = one(T)                    # falling factorial d·(d-1)···(d-m+1)
-        for r in 0:m-1
+      ud  = one(T)                     # u^(d-nd), carried up from d = nd
+      for d in nd:deg
+        ff = one(T)                    # falling factorial d·(d-1)···(d-nd+1)
+        for r in 0:nd-1
           ff *= (d - r)
         end
         acc += T(tw.poly[d+1, pair]) * ff * ud
         ud  *= u
       end
-      gvals = Base.setindex(gvals, acc, tw.slots[m+1])
+      gvals = Base.setindex(gvals, acc, tw.slots[nd+1])
     end
     for e in eachindex(tw.extra_slots)
       gvals = Base.setindex(gvals, T(tw.extra_vals[e, pair]), tw.extra_slots[e])

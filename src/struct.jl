@@ -89,18 +89,101 @@ Merit function weight for z-planes away from the base z-plane when n_planes_add
 is non-zero. See the "How the GG Calculation Works" section below for documentation on the optimizer
 merit function.
 
+  m_max = Int or vector of Int
+
+Maximum multipole order `m` of the `a_m`/`b_m` functions retained in the fit. A
+single `Int` fixes it. A vector or range (for example `m_max = 1:8`) makes
+`gg_fit` try each value in turn and keep the one that fits best (see
+`fit_criterion`). The default `-1` means "use every `m` present in the
+coefficient table", which is the historical behavior. The `bs(nd)` (that is,
+`a_0` derivative) unknowns carry no `m` and are never removed by `m_max`.
+
+  nd_max = Int or vector of Int
+
+Maximum derivative order `nd` retained in the fit, with the same `Int`-or-vector
+meaning as `m_max`. The default `-1` means `2 * n_planes_add`, the number of
+derivative orders a stencil of `2 * n_planes_add + 1` planes resolves by
+longitudinal differencing alone. Higher values are legitimate — the transverse
+structure of the field also carries derivative information — but become
+progressively worse conditioned, which is what the scan is for.
+
+`m_max` and `nd_max` apply to every base plane; they never vary plane to plane.
+If either is given as a vector, `gg_fit` scans the full grid of combinations and
+records the outcome of each in the `scan` field of the returned `GGCoefs`.
+
+  fit_criterion = Symbol
+
+How a scan picks its winner. Each candidate model is given a score and the lowest
+score wins. Enlarging the model can only lower the residual (the smaller model's
+unknowns are a subset of the larger one's), so a usable criterion has to charge
+for coefficients. Writing `RSS` for the weighted sum of squared residuals pooled
+over all base planes, `N` for the number of fitted field-component values, and
+`k` for the total number of fitted coefficients (per-plane count times the number
+of base planes):
+
+```
+:rms    score = sqrt(RSS / N)          # goodness of fit only, no charge for k
+:aic    score = N * ln(RSS/N) + 2 * k         # Akaike information criterion
+:bic    score = N * ln(RSS/N) + k * ln(N)     # Bayesian, and the default
+```
+
+`:aic` and `:bic` share the same first term — minus twice the maximized Gaussian
+log-likelihood, up to a constant common to all candidates — and differ only in
+what one coefficient costs: `2` versus `ln(N)`. `ln(N) > 2` for any `N > 7`, so
+`:bic` always penalizes size at least as hard as `:aic` and never selects a
+larger model. `:rms` charges nothing and so will pick the largest model offered;
+it is useful for inspecting the raw residual ranking, not for choosing a model.
+
+See the "Choosing between models" section of the `gg_fit` docstring for how to
+read the trade-off quantitatively and for why, on a field grid, these criteria
+are better treated as a ranking heuristic than as a probability statement.
+
   output_file
 
 Name of the output file.
-
 """
-
 @kwdef mutable struct GGFitInputParams
   origin::Vector{Float64} = [0.0, 0.0]   # (x, y) origin about which the generalized gradients coefs are computed
   n_planes_add::Int = 1                  # Number of z-planes added.
-  core_weight::Int = 1                   # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
-  outer_plane_weight::Int = 1            # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).
+  m_max::Union{Int,AbstractVector{Int}} = -1   # Max multipole order m. -1 = all in table. Vector => scan.
+  nd_max::Union{Int,AbstractVector{Int}} = -1  # Max derivative order nd. -1 = 2*n_planes_add. Vector => scan.
+  fit_criterion::Symbol = :bic           # Scan selection criterion: :bic, :aic, or :rms.
+  core_weight::Float64 = 1.0             # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
+  outer_plane_weight::Float64 = 1.0      # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).
   output_file::String = "gg_fit_results.h5"
+end
+
+#---------------------------------------------------------------------------------------------------
+"""
+    struct GGFitScanPoint
+
+One row of a `gg_fit` `(m_max, nd_max)` scan: the model tried and how it scored.
+Collected in the `scan` field of the returned `GGCoefs` and printed by
+`gg_fit_show_results`.
+
+Fields:
+- `m_max`, `nd_max` — the model this row is for.
+- `n_coef` — number of fitted coefficients per base plane.
+- `rms` — weighted RMS residual pooled over all base planes.
+- `rms_unweighted` — the same residual with all point weights set to 1.
+- `score` — value of the selection criterion; the scanned model with the lowest
+  score is the one `gg_fit` returns. For `:rms` this is just `rms`. For `:aic`
+  and `:bic` it is `N*ln(RSS/N)` plus a penalty of `2` or `ln(N)` per fitted
+  coefficient, where `RSS` is the pooled weighted sum of squared residuals and
+  `N` the number of fitted field-component values. Only differences between
+  candidates are meaningful — the absolute value is not. See the `fit_criterion`
+  entry of `GGFitInputParams`.
+- `criterion` — which criterion `score` was computed with: `:bic`, `:aic`, or
+  `:rms`. Scores from different criteria are not comparable.
+"""
+@kwdef struct GGFitScanPoint
+  m_max::Int = 0
+  nd_max::Int = 0
+  n_coef::Int = 0
+  rms::Float64 = NaN
+  rms_unweighted::Float64 = NaN
+  score::Float64 = NaN
+  criterion::Symbol = :bic
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -131,11 +214,11 @@ Adapt.@adapt_structure _CompTerms
 """
     _Tower{VI,VF,MF}
 
-One GG derivative tower (a fixed multipole `n`, or the single `bs` tower).
+One GG derivative tower (a fixed multipole `m`, or the single `bs` tower).
 `poly[d+1, pair]` is the coefficient of `u^d` (with `u = s - zref[pair]`) of the
-interpolant on plane-pair `pair`; interpolating gives `H⁽ᵐ⁾(s)` for the tower's
-orders `m = 0..N`, scattered into `gvals` at `slots[m+1]`. Non-contiguous orders
-(`m > N`) are taken from the nearest (left) plane via `extra_vals[e, pair]`.
+interpolant on plane-pair `pair`; interpolating gives `H⁽ⁿᵈ⁾(s)` for the tower's
+orders `nd = 0..N`, scattered into `gvals` at `slots[nd+1]`. Non-contiguous
+orders (`nd > N`) are taken from the nearest (left) plane via `extra_vals[e, pair]`.
 
 Generic over its backing-array types (`VI`/`VF`/`MF` for the integer vectors,
 float vectors and float matrices) so it survives `Adapt.adapt` to the GPU.
@@ -146,7 +229,7 @@ struct _Tower{VI,VF,MF}
   slots::VI                         # gvals slot for order 0..N
   poly::MF                          # (deg+1) x npairs
   zref::VF                          # left-plane position per pair (length npairs)
-  extra_slots::VI                   # non-contiguous orders m > N (rare)
+  extra_slots::VI                   # non-contiguous orders nd > N (rare)
   extra_vals::MF                    # (n_extra x P) value of each extra order per plane
 end
 
@@ -194,13 +277,23 @@ Returned by `gg_fit` and consumed by `gg_fit_show_results` and
 
 Fields:
 - `z_base` — `z` position of each base plane [m].
-- `params` — list of fitted unknowns as `(type, n, m)` tuples, where `type` is
-  one of `:a`, `:b`, `:bs` (`bs` uses `n = 0`).
-- `a` — fitted `a(n,m)` functions, `Dict (n,m) => values_over_planes`.
-- `b` — fitted `b(n,m)` functions, `Dict (n,m) => values_over_planes`.
-- `bs` — fitted `bs(m)` functions, `Dict m => values_over_planes`.
+- `params` — list of fitted unknowns as `(type, m, nd)` tuples, where `type` is
+  one of `:a`, `:b`, `:bs` (`bs` uses `m = 0`).
+- `a` — fitted `a(m,nd)` functions, `Dict (m,nd) => values_over_planes`.
+- `b` — fitted `b(m,nd)` functions, `Dict (m,nd) => values_over_planes`.
+- `bs` — fitted `bs(nd)` functions, `Dict nd => values_over_planes`.
 - `rms_plane` — weighted RMS fit residual at each base plane.
-- `m_max` — highest derivative order resolved (`2 * n_planes_add`).
+- `rms_unweighted_plane` — RMS fit residual at each base plane over the same
+  points as `rms_plane` but with all point weights set to 1. Equal to
+  `rms_plane` when `core_weight = outer_plane_weight = 1`.
+- `field_ave_plane` — average field magnitude `|B|` over the grid points of each
+  base plane [T]. Unweighted, and taken from the base plane alone (not the added
+  planes), so it gives the field profile along `z` and a scale against which
+  `rms_plane` can be judged.
+- `m_max` — highest multipole order `m` retained by the fit.
+- `nd_max` — highest derivative order `nd` retained by the fit.
+- `scan` — one `GGFitScanPoint` per `(m_max, nd_max)` combination tried, in the
+  order tried. Empty when no scan was requested.
 - `g_ref` — reference-frame bending strength = `1/bending_radius` [1/m] (`0` for a
   straight reference frame).
 - `origin` — `(x, y)` line about which the GG coefficients are computed.
@@ -217,7 +310,11 @@ Fields:
   b::Dict{Tuple{Int,Int},Vector{Float64}} = Dict{Tuple{Int,Int},Vector{Float64}}()
   bs::Dict{Int,Vector{Float64}} = Dict{Int,Vector{Float64}}()
   rms_plane::Vector{Float64} = Float64[]
+  rms_unweighted_plane::Vector{Float64} = Float64[]
+  field_ave_plane::Vector{Float64} = Float64[]
   m_max::Int = 0
+  nd_max::Int = 0
+  scan::Vector{GGFitScanPoint} = GGFitScanPoint[]
   g_ref::Float64 = 0.0
   origin::Vector{Float64} = [0.0, 0.0]   # (x, y) origin about which the generalized gradients coefs are computed
   dz_grid::Float64 = 0.0                 # spacing between base planes [m]

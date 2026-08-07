@@ -3,7 +3,7 @@ using Symbolics
 # ---------------------------------------------------------------------------
 # Reproduces and extends Table 1 of Van der Schueren et al., IPAC'24):
 # Taylor expansion coefficients of B_x, B_y, B_s in x and y, up to total
-# monomial degree MAXTOT, expressed in terms of a_n(s), b_n(s), b_s(s), g_ref
+# monomial degree MAXTOT, expressed in terms of a_m(s), b_m(s), b_s(s), g_ref
 # and their s-derivatives.
 # ---------------------------------------------------------------------------
 
@@ -13,37 +13,37 @@ const N = MAXTOT + 2  # truncation order in x (degrees 0..N-1)
 @variables s
 Ds = Differential(s)
 
-# Symbolic functions a_n(s), b_n(s), a_0(s)
-for n in 0:13
-  @eval @variables $(Symbol("a$n"))(s)
-  if n >= 1
-    @eval @variables $(Symbol("b$n"))(s)
+# Symbolic functions a_m(s), b_m(s), a_0(s)
+for m in 0:13
+  @eval @variables $(Symbol("a$m"))(s)
+  if m >= 1
+    @eval @variables $(Symbol("b$m"))(s)
   end
 end
 
 @variables g_ref  # g_ref is taken to be constant (independent of s)
 
-avars = [eval(Symbol("a$n")) for n in 0:13]
-bvars = [eval(Symbol("b$n")) for n in 1:13]
+avars = [eval(Symbol("a$m")) for m in 0:13]
+bvars = [eval(Symbol("b$m")) for m in 1:13]
 
-# phi_0(x,s) = -a_0(s) - sum_{n=1}^{13} a_n(s) x^n / n!
+# phi_0(x,s) = -a_0(s) - sum_{m=1}^{13} a_m(s) x^m / m!
 
 phi0 = Vector{Num}(undef, N)
 fill!(phi0, Num(0))
 phi0[1] = -avars[1]            # x^0 coefficient: -a_0(s)
-for n in 1:13
-  if n <= N - 1
-    phi0[n+1] = -avars[n+1] / factorial(n)
+for m in 1:13
+  if m <= N - 1
+    phi0[m+1] = -avars[m+1] / factorial(m)
   end
 end
 
-# phi_1(x,s) = - sum_{n=1}^{13} b_n(s) x^{n-1} / (n-1)!
+# phi_1(x,s) = - sum_{m=1}^{13} b_m(s) x^{m-1} / (m-1)!
 
 phi1 = Vector{Num}(undef, N)
 fill!(phi1, Num(0))
-for n in 1:13
-  if n - 1 <= N - 1
-    phi1[n] = -bvars[n] / factorial(n - 1)
+for m in 1:13
+  if m - 1 <= N - 1
+    phi1[m] = -bvars[m] / factorial(m - 1)
   end
 end
 
@@ -157,8 +157,8 @@ println("coefficients computed")
 #
 # Following papers/vector-potential, A is split into three pieces according to
 # which GG family the field coefficient C depends on:
-#   alpha : part depending on a_n (n >= 1)
-#   beta  : part depending on b_n
+#   alpha : part depending on a_m (m >= 1)
+#   beta  : part depending on b_m
 #   gamma : part depending on b_s  (= the derivatives of a_0)
 # Using the gauge A_y = 0 for the alpha/beta pieces and A_s = 0 for gamma:
 #
@@ -170,16 +170,16 @@ println("coefficients computed")
 #
 # (alpha+beta)_{c} is the part of C_c not involving b_s; gamma_c is the b_s
 # part.  int ds lowers the b_s derivative order by one, which is always well
-# defined because the b_s parts of B_x and B_y start at order m = 1.
+# defined because the b_s parts of B_x and B_y start at order nd = 1.
 # ---------------------------------------------------------------------------
 
 println("computing vector potential coefficients ...")
 
 const MDER = MAXTOT + 4
 
-function nth_ds(v, m)
+function nth_ds(v, nd)
   r = v
-  for _ in 1:m
+  for _ in 1:nd
     r = expand_derivatives(Ds(r))
   end
   return r
@@ -191,15 +191,15 @@ zero_a0    = Dict{Num,Num}()   # zero a_0 and its s-derivatives
 zero_apos  = Dict{Num,Num}()   # zero a_1 .. a_13 and derivatives
 zero_b     = Dict{Num,Num}()   # zero b_1 .. b_13 and derivatives
 zero_a_all = Dict{Num,Num}()   # zero a_0 .. a_13 and derivatives
-for m in 0:MDER
-  zero_a0[nth_ds(avars[1], m)] = Num(0)
+for nd in 0:MDER
+  zero_a0[nth_ds(avars[1], nd)] = Num(0)
 end
-for n in 1:13, m in 0:MDER
-  zero_apos[nth_ds(avars[n+1], m)] = Num(0)
-  zero_b[nth_ds(bvars[n], m)]      = Num(0)
+for m in 1:13, nd in 0:MDER
+  zero_apos[nth_ds(avars[m+1], nd)] = Num(0)
+  zero_b[nth_ds(bvars[m], nd)]      = Num(0)
 end
-for n in 0:13, m in 0:MDER
-  zero_a_all[nth_ds(avars[n+1], m)] = Num(0)
+for m in 0:13, nd in 0:MDER
+  zero_a_all[nth_ds(avars[m+1], nd)] = Num(0)
 end
 zero_not_a0 = merge(zero_apos, zero_b)        # keep only a_0  (the b_s family)
 
@@ -209,8 +209,8 @@ for k in 1:MDER
   intds_a0[nth_ds(avars[1], k)] = nth_ds(avars[1], k - 1)
 end
 
-ab_part(e) = substitute(e, zero_a0)       # a_n (n>=1) + b_n  part of C
-b_part(e)  = substitute(e, zero_a_all)    # b_n               part of C
+ab_part(e) = substitute(e, zero_a0)       # a_m (m>=1) + b_m  part of C
+b_part(e)  = substitute(e, zero_a_all)    # b_m               part of C
 bs_part(e) = substitute(e, zero_not_a0)   # b_s               part of C
 intds(e)   = substitute(e, intds_a0)
 
@@ -255,20 +255,20 @@ end
 println("vector potential coefficients computed")
 
 # ---------------------------------------------------------------------------
-# Convert to a(n,m), b(n,m), bs(m) notation
+# Convert to a(m,nd), b(m,nd), bs(nd) notation
 # ---------------------------------------------------------------------------
 
 function rewrite_notation(expr)
   str = string(expr)
 
-  # a_0(s) derivatives: D^m(a0(s)) -> bs(m-1)
-  str = replace(str, r"Differential\(s, (\d+)\)\(a0\(s\)\)" => function(m)
-    mm = match(r"Differential\(s, (\d+)\)\(a0\(s\)\)", m)
+  # a_0(s) derivatives: D^nd(a0(s)) -> bs(nd-1)
+  str = replace(str, r"Differential\(s, (\d+)\)\(a0\(s\)\)" => function(mt)
+    mm = match(r"Differential\(s, (\d+)\)\(a0\(s\)\)", mt)
     k = parse(Int, mm.captures[1]) - 1
     "bs($k)"
   end)
 
-  # general D^m(a_n(s)) -> a(n,m), D^m(b_n(s)) -> b(n,m)
+  # general D^nd(a_m(s)) -> a(m,nd), D^nd(b_m(s)) -> b(m,nd)
   str = replace(str, r"Differential\(s, (\d+)\)\(a(\d+)\(s\)\)" => SubstitutionString("a(\\2,\\1)"))
   str = replace(str, r"Differential\(s, (\d+)\)\(b(\d+)\(s\)\)" => SubstitutionString("b(\\2,\\1)"))
 
@@ -295,8 +295,8 @@ open(joinpath(@__DIR__, "..", "tables", "monomial_functions.jl"), "w") do io
   println(io, "# Coefficients of the monomials x^p y^q in B_x, B_y, B_s and in the")
   println(io, "# vector potential A_x, A_y, A_s (B = curl A), for total degree")
   println(io, "# p+q <= $MAXTOT, assuming the curvature g_ref is constant (g_ref' = 0).")
-  println(io, "# Notation: a(n,m) = d^m a_n/ds^m, b(n,m) = d^m b_n/ds^m,")
-  println(io, "# bs(m) = d^m b_s/ds^m.")
+  println(io, "# Notation: a(m,nd) = d^nd a_m/ds^nd, b(m,nd) = d^nd b_m/ds^nd,")
+  println(io, "# bs(nd) = d^nd b_s/ds^nd.")
   println(io, "")
   for q in 0:MAXTOT
     for p in 0:(MAXTOT-q)

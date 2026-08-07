@@ -10,7 +10,7 @@ fit, meta = read_gg_fit("gg_fit_result.h5")
 ```
 
 `read_gg_fit` returns a two-tuple. `fit` is a `GGCoefs` struct with the GG
-coefficient dictionaries `a`, `b`, `bs` (plus `z_base`, `m_max`, `rms_plane`,
+coefficient dictionaries `a`, `b`, `bs` (plus `z_base`, `m_max`, `nd_max`, `rms_plane`,
 `g_ref`, `origin`, `dz_grid`), and `meta` is a NamedTuple of the associated
 fit-control metadata `n_planes_add`, `core_weight`, `outer_plane_weight`. Both
 are passed together to the evaluation functions below.
@@ -58,7 +58,7 @@ a, b, bs = gg_coefficients_at_plane(fit, ip)   # at grid plane ip
 a, b, bs = gg_coefficients_at_s(fit, s)        # at arbitrary s
 ```
 
-`a` and `b` are keyed by `(n, m)` with `a(n,m) = dᵐaₙ/dsᵐ`; `bs` is keyed by `m`
-with `bs(m) = dᵐb_s/dsᵐ`.
+`a` and `b` are keyed by `(m, nd)` with `a(m,nd) = dⁿᵈaₘ/dsⁿᵈ`; `bs` is keyed by `nd`
+with `bs(nd) = dⁿᵈb_s/dsⁿᵈ`.
 
 See the **API Reference** (sidebar) for the full signatures and return types.

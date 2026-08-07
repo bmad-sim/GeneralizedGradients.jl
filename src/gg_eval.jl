@@ -9,24 +9,24 @@
 # Both the field and the vector potential are evaluated the same way: as the
 # monomial expansions whose coefficients are tabulated in tables/gg_coef_table.jl.
 #
-#   B_c(x,y,s) = Σ_{n,m} CS(Bc_a, n,m; x,y)·a(n,m)
-#              + Σ_{n,m} CS(Bc_b, n,m; x,y)·b(n,m)
-#              + Σ_{m}   CS(Bc_bs, m; x,y)·bs(m)
-#   A_c(x,y,s) = Σ_{n,m} CS(Ac_a, n,m; x,y)·a(n,m)
-#              + Σ_{n,m} CS(Ac_b, n,m; x,y)·b(n,m)
-#              + Σ_{m}   CS(Ac_bs, m; x,y)·bs(m)
+#   B_c(x,y,s) = Σ_{m,nd} CS(Bc_a, m,nd; x,y)·a(m,nd)
+#              + Σ_{m,nd} CS(Bc_b, m,nd; x,y)·b(m,nd)
+#              + Σ_{nd}   CS(Bc_bs, nd; x,y)·bs(nd)
+#   A_c(x,y,s) = Σ_{m,nd} CS(Ac_a, m,nd; x,y)·a(m,nd)
+#              + Σ_{m,nd} CS(Ac_b, m,nd; x,y)·b(m,nd)
+#              + Σ_{nd}   CS(Ac_bs, nd; x,y)·bs(nd)
 #
-# with a(n,m)=dᵐa_n/dsᵐ, b(n,m)=dᵐb_n/dsᵐ, bs(m)=dᵐ⁺¹a_0/dsᵐ⁺¹ = dᵐb_s/dsᵐ.
+# with a(m,nd)=dⁿᵈa_m/dsⁿᵈ, b(m,nd)=dⁿᵈb_m/dsⁿᵈ, bs(nd)=dⁿᵈ⁺¹a_0/dsⁿᵈ⁺¹ = dⁿᵈb_s/dsⁿᵈ.
 # Here c ∈ {x,y,s} is the component; Bc_a denotes the table Bx_a/By_a/Bs_a (and
 # likewise Bc_b, Bc_bs and the potential tables Ac_a, Ac_b, Ac_bs); and the
-# coefficient sum CS(T, n,m; x,y) = Σ coeff·g_refᵏ·xᵖ·yᵠ runs over the entries
-# (coeff,p,q,k) stored under key (n,m) of table T.  The A tables (Ax_a, …,
+# coefficient sum CS(T, m,nd; x,y) = Σ coeff·g_refᵏ·xᵖ·yᵠ runs over the entries
+# (coeff,p,q,k) stored under key (m,nd) of table T.  The A tables (Ax_a, …,
 # As_bs) are precomputed in tables/gg_coef_table.jl from the α/β/γ construction
 # of papers/vector-potential and satisfy B = ∇×A exactly.
 #
 # Because A is linear in the GG functions, its (x,y) derivatives are the
 # monomial partials and its s-derivative is obtained by bumping the GG
-# derivative order ( ∂_s a(n,m) = a(n,m+1), etc. ) — exactly as for the field.
+# derivative order ( ∂_s a(m,nd) = a(m,nd+1), etc. ) — exactly as for the field.
 #
 # The underscore-prefixed evaluation/interpolation helpers used below live in
 # src/low_level.jl.
@@ -65,14 +65,14 @@ function field_and_potential_evaluate(fit, ip::Integer, x::Real, y::Real)
   y = float(y) - fit.origin[2]
 
   # GG value getters at this plane (0 when an order is unavailable).
-  aval(n, m)  = (m >= 0 && haskey(fit.a, (n, m)))  ? fit.a[(n, m)][ip]  : 0.0
-  bval(n, m)  = (m >= 0 && haskey(fit.b, (n, m)))  ? fit.b[(n, m)][ip]  : 0.0
-  bsval(m)    = (m >= 0 && haskey(fit.bs, m))      ? fit.bs[m][ip]      : 0.0
+  aval(m, nd)  = (nd >= 0 && haskey(fit.a, (m, nd))) ? fit.a[(m, nd)][ip] : 0.0
+  bval(m, nd)  = (nd >= 0 && haskey(fit.b, (m, nd))) ? fit.b[(m, nd)][ip] : 0.0
+  bsval(nd)    = (nd >= 0 && haskey(fit.bs, nd))     ? fit.bs[nd][ip]     : 0.0
 
-  # Bumped (s-derivative) getters:  ∂_s a(n,m) = a(n,m+1), etc.
-  avalp(n, m) = aval(n, m + 1)
-  bvalp(n, m) = bval(n, m + 1)
-  bsvalp(m)   = bsval(m + 1)
+  # Bumped (s-derivative) getters:  ∂_s a(m,nd) = a(m,nd+1), etc.
+  avalp(m, nd) = aval(m, nd + 1)
+  bvalp(m, nd) = bval(m, nd + 1)
+  bsvalp(nd)   = bsval(nd + 1)
 
   # --- field ---
   Bx = _polyval(_comp_array(Bx_a, Bx_b, Bx_bs, aval, bval, bsval, g_ref), x, y)[1]
@@ -119,19 +119,19 @@ generic over the coordinate type, so it can be called inside a GPU kernel on an
 
 The GG coefficients are stored only at the grid planes `fit.z_base`, but the fit
 gives, at each plane, the whole derivative tower of every GG function:
-`a(n,0..N)`, `b(n,0..N)`, `bs(0..N)` with `a(n,m) = dᵐaₙ/dsᵐ` and `N` the
+`a(m,0..N)`, `b(m,0..N)`, `bs(0..N)` with `a(m,nd) = dⁿᵈaₘ/dsⁿᵈ` and `N` the
 maximum order. So for an `s` between two planes `z_L`, `z_R` we have, for each
 function `f`, the value and its first `N` `s`-derivatives at both ends —
 `2(N+1)` data — which fix a unique two-point Hermite polynomial `H(s)` of degree
 `2N+1`. Each interpolated derivative is taken from the SAME polynomial,
-`a(n,m)(s) = H_aₙ⁽ᵐ⁾(s)`, so the tower stays self-consistent: the interpolated
-`a(n,1)` is exactly `d/ds` of the interpolated `a(n,0)`, etc. The plan compiles
+`a(m,nd)(s) = H_aₘ⁽ⁿᵈ⁾(s)`, so the tower stays self-consistent: the interpolated
+`a(m,1)` is exactly `d/ds` of the interpolated `a(m,0)`, etc. The plan compiles
 these Hermite polynomials once (see low_level.jl).
 
 This is more accurate than independent per-order interpolation (error
 `O(h^{2N+2})` for the base coefficient, using only the two straddling planes)
 and, because the orders are mutually consistent, the `∂A/∂s` that
-`field_and_potential_evaluate` forms by bumping `a(n,m) → a(n,m+1)` equals the
+`field_and_potential_evaluate` forms by bumping `a(m,nd) → a(m,nd+1)` equals the
 true `s`-derivative of the interpolated field. The curl identity `B = ∇×A`
 holds at `s` as before.
 
@@ -262,13 +262,13 @@ Generalized-gradient coefficients at a grid plane.
 - `ip` — 1-based plane index into `fit.z_base`.
 
 Returns the three GG-function dicts of scalar values at the plane: `a` and `b`
-keyed by `(n,m)` with `a(n,m) = dᵐaₙ/dsᵐ`, `b(n,m) = dᵐbₙ/dsᵐ`; and `bs` keyed
-by `m` with `bs(m) = dᵐ⁺¹a_0/dsᵐ⁺¹ = dᵐb_s/dsᵐ`.
+keyed by `(m,nd)` with `a(m,nd) = dⁿᵈaₘ/dsⁿᵈ`, `b(m,nd) = dⁿᵈbₘ/dsⁿᵈ`; and `bs`
+keyed by `nd` with `bs(nd) = dⁿᵈ⁺¹a_0/dsⁿᵈ⁺¹ = dⁿᵈb_s/dsⁿᵈ`.
 """
 function gg_coefficients_at_plane(fit, ip::Integer)
-  a  = Dict{Tuple{Int,Int},Float64}((nm => v[ip]) for (nm, v) in fit.a)
-  b  = Dict{Tuple{Int,Int},Float64}((nm => v[ip]) for (nm, v) in fit.b)
-  bs = Dict{Int,Float64}((m => v[ip]) for (m, v) in fit.bs)
+  a  = Dict{Tuple{Int,Int},Float64}((mnd => v[ip]) for (mnd, v) in fit.a)
+  b  = Dict{Tuple{Int,Int},Float64}((mnd => v[ip]) for (mnd, v) in fit.b)
+  bs = Dict{Int,Float64}((nd => v[ip]) for (nd, v) in fit.bs)
   return a, b, bs
 end
 

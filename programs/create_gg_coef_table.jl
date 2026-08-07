@@ -1,22 +1,29 @@
 using Symbolics
 
 # ---------------------------------------------------------------------------
-# Create a file gg_coef_table.jl 
-# Similar to monomial_functions.jl:
+# Create a gg_coef_table.jl data file.
+#
+# The data arrays from this file are incorporated in the GeneralizedGradients package and are
+#   used by the gg_fit function.
+# Nominally this file lives in the GeneralizedGradients/tables dir.
+# This file is similar to the monomial_functions.jl data file but structured to be
+#   easier to use by the gg_fit code.
+# The data arrays never have to be recomputed unless higher a_m and b_m order is wanted.
+#
 # For each field component (Bx, By, Bs), and for each function a, b, bs and derivatives,
 # output a vector of coefficients that contribute.
 #
 # Notation:
-#  b(n,m) = (d/ds)^m (b_n), a(n,m) = (d/ds)^m a_n, and bs(m) = (d/ds)^m bs
+#  b(m,nd) = (d/ds)^nd (b_m), a(m,nd) = (d/ds)^nd a_m, and bs(nd) = (d/ds)^nd bs
 #
 # Output: There are 9 Dicts labeled:
-#   Bx_a[(n,m)], Bx_b[(n,m)], Bx_bs[(n,m)], 
-#   By_a[(n,m)], By_b[(n,m)], By_bs[(n,m)],
-#   Bs_a[(n,m)], Bs_b[(n,m)], Bs_bs[(n,m)]
+#   Bx_a[(m,nd)], Bx_b[(m,nd)], Bx_bs[(m,nd)], 
+#   By_a[(m,nd)], By_b[(m,nd)], By_bs[(m,nd)],
+#   Bs_a[(m,nd)], Bs_b[(m,nd)], Bs_bs[(m,nd)]
 #
-# Example: By_b[(n,m)] = [(coef, p, q, r), ...]
-# means contribution by b(n,m) is:
-#   By += coef * g_ref^r * x^p * y^q * b(n,m)
+# Example: By_b[(m,nd)] = [(coef, p, q, r), ...]
+# means contribution by b(m,nd) is:
+#   By += coef * g_ref^r * x^p * y^q * b(m,nd)
 # ---------------------------------------------------------------------------
 
 const MAXTOT = parse(Int, get(ENV, "MAXTOT", "12"))
@@ -25,17 +32,17 @@ const N = MAXTOT + 2
 @variables s
 Ds = Differential(s)
 
-for n in 0:13
-  @eval @variables $(Symbol("a$n"))(s)
-  if n >= 1
-    @eval @variables $(Symbol("b$n"))(s)
+for m in 0:13
+  @eval @variables $(Symbol("a$m"))(s)
+  if m >= 1
+    @eval @variables $(Symbol("b$m"))(s)
   end
 end
 
 @variables g_ref
 
-avars = [eval(Symbol("a$n")) for n in 0:13]   # avars[k+1] = a_k(s)
-bvars = [eval(Symbol("b$n")) for n in 1:13]   # bvars[n]   = b_n(s)
+avars = [eval(Symbol("a$m")) for m in 0:13]   # avars[k+1] = a_k(s)
+bvars = [eval(Symbol("b$m")) for m in 1:13]   # bvars[m]   = b_m(s)
 
 # ---------------------------------------------------------------------------
 # phi_0, phi_1 seed functions
@@ -44,14 +51,14 @@ bvars = [eval(Symbol("b$n")) for n in 1:13]   # bvars[n]   = b_n(s)
 phi0 = Vector{Num}(undef, N)
 fill!(phi0, Num(0))
 phi0[1] = -avars[1]
-for n in 1:13
-  n <= N - 1 && (phi0[n+1] = -avars[n+1] / factorial(n))
+for m in 1:13
+  m <= N - 1 && (phi0[m+1] = -avars[m+1] / factorial(m))
 end
 
 phi1 = Vector{Num}(undef, N)
 fill!(phi1, Num(0))
-for n in 1:13
-  n - 1 <= N - 1 && (phi1[n] = -bvars[n] / factorial(n - 1))
+for m in 1:13
+  m - 1 <= N - 1 && (phi1[m] = -bvars[m] / factorial(m - 1))
 end
 
 # ---------------------------------------------------------------------------
@@ -142,11 +149,11 @@ println("field coefficients computed")
 # Build inverse coefficient table (full g_ref dependence)
 # ---------------------------------------------------------------------------
 
-# Compute the m-th s-derivative of v by iterative application of Ds,
+# Compute the nd-th s-derivative of v by iterative application of Ds,
 # matching exactly the form produced by dsarr in the phi recurrence.
-function nth_ds_deriv(v, m)
+function nth_ds_deriv(v, nd)
   result = v
-  for _ in 1:m
+  for _ in 1:nd
     result = expand_derivatives(Ds(result))
   end
   return result
@@ -156,7 +163,7 @@ end
 # Vector potential coefficients T_{p,q} of x^p y^q in A_x, A_y, A_s
 # (B = curl A in Frenet coordinates).  See papers/vector-potential.
 #
-# C is split by GG family: alpha (a_n, n>=1), beta (b_n), gamma (b_s = a_0
+# C is split by GG family: alpha (a_m, m>=1), beta (b_m), gamma (b_s = a_0
 # derivatives).  Gauge A_y = 0 for alpha/beta, A_s = 0 for gamma:
 #
 #   A_x = - sum 1/(j+1) (alpha+beta)_{s,i,j} x^i y^{j+1}
@@ -176,15 +183,15 @@ zero_a0    = Dict{Num,Num}()   # zero a_0 and its s-derivatives
 zero_apos  = Dict{Num,Num}()   # zero a_1 .. a_13 and derivatives
 zero_b     = Dict{Num,Num}()   # zero b_1 .. b_13 and derivatives
 zero_a_all = Dict{Num,Num}()   # zero a_0 .. a_13 and derivatives
-for m in 0:MDER
-  zero_a0[nth_ds_deriv(avars[1], m)] = Num(0)
+for nd in 0:MDER
+  zero_a0[nth_ds_deriv(avars[1], nd)] = Num(0)
 end
-for n in 1:13, m in 0:MDER
-  zero_apos[nth_ds_deriv(avars[n+1], m)] = Num(0)
-  zero_b[nth_ds_deriv(bvars[n], m)]      = Num(0)
+for m in 1:13, nd in 0:MDER
+  zero_apos[nth_ds_deriv(avars[m+1], nd)] = Num(0)
+  zero_b[nth_ds_deriv(bvars[m], nd)]      = Num(0)
 end
-for n in 0:13, m in 0:MDER
-  zero_a_all[nth_ds_deriv(avars[n+1], m)] = Num(0)
+for m in 0:13, nd in 0:MDER
+  zero_a_all[nth_ds_deriv(avars[m+1], nd)] = Num(0)
 end
 zero_not_a0 = merge(zero_apos, zero_b)        # keep only a_0  (the b_s family)
 
@@ -193,8 +200,8 @@ for k in 1:MDER
   intds_a0[nth_ds_deriv(avars[1], k)] = nth_ds_deriv(avars[1], k - 1)
 end
 
-ab_part(e) = substitute(e, zero_a0)       # a_n (n>=1) + b_n  part of C
-b_part(e)  = substitute(e, zero_a_all)    # b_n               part of C
+ab_part(e) = substitute(e, zero_a0)       # a_m (m>=1) + b_m  part of C
+b_part(e)  = substitute(e, zero_a_all)    # b_m               part of C
 bs_part(e) = substitute(e, zero_not_a0)   # b_s               part of C
 intds(e)   = substitute(e, intds_a0)
 
@@ -243,18 +250,18 @@ Dh = Differential(g_ref)
 println("building zero substitution dict ...")
 all_zero = Dict{Num,Num}()
 
-for n in 0:13
-  v = avars[n+1]
+for m in 0:13
+  v = avars[m+1]
   all_zero[v] = Num(0)
-  for m in 1:(MAXTOT+4)
-    all_zero[nth_ds_deriv(v, m)] = Num(0)
+  for nd in 1:(MAXTOT+4)
+    all_zero[nth_ds_deriv(v, nd)] = Num(0)
   end
 end
-for n in 1:13
-  v = bvars[n]
+for m in 1:13
+  v = bvars[m]
   all_zero[v] = Num(0)
-  for m in 1:(MAXTOT+4)
-    all_zero[nth_ds_deriv(v, m)] = Num(0)
+  for nd in 1:(MAXTOT+4)
+    all_zero[nth_ds_deriv(v, nd)] = Num(0)
   end
 end
 
@@ -314,12 +321,12 @@ outfile = joinpath(@__DIR__, "..", "tables", "gg_coef_table.jl")
 open(outfile, "w") do io
   println(io, "# Inverse field and vector-potential coefficient table (full g_ref dependence)")
   println(io, "#")
-  println(io, "# By_b[(n,m)] = [(c, p, q, k), ...]  means  By += c * g_ref^k * x^p * y^q * b(n,m)")
+  println(io, "# By_b[(m,nd)] = [(c, p, q, k), ...]  means  By += c * g_ref^k * x^p * y^q * b(m,nd)")
   println(io, "# Similarly for Bx_b, Bs_b, By_a, Bx_a, Bs_a, By_bs, Bx_bs, Bs_bs and for")
   println(io, "# the vector potential A (B = curl A):  Ax_a, Ax_b, Ax_bs, Ay_a, Ay_b,")
-  println(io, "# Ay_bs, As_a, As_b, As_bs (same meaning, e.g. Ax_b[(n,m)] -> Ax += ...).")
-  println(io, "# Notation: b(n,m) = d^m b_n/ds^m,  a(n,m) = d^m a_n/ds^m,")
-  println(io, "#           bs(m)  = d^{m+1} a_0/ds^{m+1}")
+  println(io, "# Ay_bs, As_a, As_b, As_bs (same meaning, e.g. Ax_b[(m,nd)] -> Ax += ...).")
+  println(io, "# Notation: b(m,nd) = d^nd b_m/ds^nd,  a(m,nd) = d^nd a_m/ds^nd,")
+  println(io, "#           bs(nd)  = d^{nd+1} a_0/ds^{nd+1}")
   println(io)
 
   for comp in ("Bx", "By", "Bs", "Ax", "Ay", "As")
@@ -329,14 +336,14 @@ open(outfile, "w") do io
   end
   println(io)
 
-  # --- b_n(s) functions, n = 1..13, m = 0..MAXTOT ---
-  println(io, "# --- b(n,m) contributions ---")
+  # --- b_m(s) functions, m = 1..13, nd = 0..MAXTOT ---
+  println(io, "# --- b(m,nd) contributions ---")
   println(io)
   for (T, prefix) in [(TBy, "By_b"), (TBx, "Bx_b"), (TBs, "Bs_b"),
             (TAy, "Ay_b"), (TAx, "Ax_b"), (TAs, "As_b")]
     print("Processing $(prefix) ...")
-    for n in 1:13, m in 0:MAXTOT
-      sym   = nth_ds_deriv(bvars[n], m)
+    for m in 1:13, nd in 0:MAXTOT
+      sym   = nth_ds_deriv(bvars[m], nd)
       terms = Tuple{Rational{Int},Int,Int,Int}[]
       for q in 0:MAXTOT, p in 0:(MAXTOT-q)
         hc = coeff_poly_h(T[(p,q)], sym, MAX_H)
@@ -344,20 +351,20 @@ open(outfile, "w") do io
           push!(terms, (hc[k], p, q, k))
         end
       end
-      isempty(terms) || println(io, "$(prefix)[($n,$m)] = $(fmt_terms(terms))")
+      isempty(terms) || println(io, "$(prefix)[($m,$nd)] = $(fmt_terms(terms))")
     end
     println(io)
     println("done")
   end
 
-  # --- a_n(s) functions, n = 1..13, m = 0..MAXTOT ---
-  println(io, "# --- a(n,m) contributions ---")
+  # --- a_m(s) functions, m = 1..13, nd = 0..MAXTOT ---
+  println(io, "# --- a(m,nd) contributions ---")
   println(io)
   for (T, prefix) in [(TBy, "By_a"), (TBx, "Bx_a"), (TBs, "Bs_a"),
             (TAy, "Ay_a"), (TAx, "Ax_a"), (TAs, "As_a")]
     print("Processing $(prefix) ...")
-    for n in 1:13, m in 0:MAXTOT
-      sym   = nth_ds_deriv(avars[n+1], m)   # avars[n+1] = a_n(s)
+    for m in 1:13, nd in 0:MAXTOT
+      sym   = nth_ds_deriv(avars[m+1], nd)   # avars[m+1] = a_m(s)
       terms = Tuple{Rational{Int},Int,Int,Int}[]
       for q in 0:MAXTOT, p in 0:(MAXTOT-q)
         hc = coeff_poly_h(T[(p,q)], sym, MAX_H)
@@ -365,20 +372,20 @@ open(outfile, "w") do io
           push!(terms, (hc[k], p, q, k))
         end
       end
-      isempty(terms) || println(io, "$(prefix)[($n,$m)] = $(fmt_terms(terms))")
+      isempty(terms) || println(io, "$(prefix)[($m,$nd)] = $(fmt_terms(terms))")
     end
     println(io)
     println("done")
   end
 
-  # --- bs(m) = d^{m+1} a_0/ds^{m+1}, m = 0..MAXTOT ---
-  println(io, "# --- bs(m) contributions ---")
+  # --- bs(nd) = d^{nd+1} a_0/ds^{nd+1}, nd = 0..MAXTOT ---
+  println(io, "# --- bs(nd) contributions ---")
   println(io)
   for (T, prefix) in [(TBy, "By_bs"), (TBx, "Bx_bs"), (TBs, "Bs_bs"),
             (TAy, "Ay_bs"), (TAx, "Ax_bs"), (TAs, "As_bs")]
     print("Processing $(prefix) ...")
-    for m in 0:MAXTOT
-      sym   = nth_ds_deriv(avars[1], m + 1)  # (m+1)-th deriv of a_0 = bs(m)
+    for nd in 0:MAXTOT
+      sym   = nth_ds_deriv(avars[1], nd + 1)  # (nd+1)-th deriv of a_0 = bs(nd)
       terms = Tuple{Rational{Int},Int,Int,Int}[]
       for q in 0:MAXTOT, p in 0:(MAXTOT-q)
         hc = coeff_poly_h(T[(p,q)], sym, MAX_H)
@@ -386,7 +393,7 @@ open(outfile, "w") do io
           push!(terms, (hc[k], p, q, k))
         end
       end
-      isempty(terms) || println(io, "$(prefix)[$m] = $(fmt_terms(terms))")
+      isempty(terms) || println(io, "$(prefix)[$nd] = $(fmt_terms(terms))")
     end
     println(io)
     println("done")

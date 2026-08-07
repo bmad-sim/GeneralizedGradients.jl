@@ -62,7 +62,7 @@ julia programs/run_write_bmad_gg_fit.jl <gg_fit_result.h5> [output_base] [cutoff
 ```{note}
 Bmad's `gen_grad_map` uses azimuthal-harmonic gradients `C_{m,sin/cos}`, a
 different convention from this project's midplane-derivative GGs
-(`a_n`, `b_n`, `b_s`). `write_bmad_gg_fit` performs the exact conversion between
+(`a_m`, `b_m`, `b_s`). `write_bmad_gg_fit` performs the exact conversion between
 the two; the derivation is given in the `write_bmad_gg_fit` docstring (see the
 **API Reference**) and summarized under [Theory](theory.md).
 ```

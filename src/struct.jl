@@ -111,6 +111,32 @@ progressively worse conditioned, which is what the scan is for.
 If either is given as a vector, `gg_fit` scans the full grid of combinations and
 records the outcome of each in the `scan` field of the returned `GGCoefs`.
 
+  nd_max_for_m = Dict{Int,Int}
+
+Per-multipole override of `nd_max`, mapping a multipole order `m` to the highest
+derivative order kept for `a_m` and `b_m`. Key `0` sets the limit for `b_s`,
+which carries no multipole order.
+
+```
+nd_max = 4
+nd_max_for_m = Dict(4 => 2, 5 => 1, 0 => 0)   # a_4/b_4 to nd = 2, a_5/b_5 to 1, b_s to 0
+```
+
+An `m` absent from the dictionary is limited by `nd_max` alone, and a limit above
+`nd_max` does not raise the order above it: the effective cut for order `m` is
+always `min(nd_max, nd_max_for_m[m])`. Naming an `m` the coefficient table does
+not contain is a harmless no-op. The limits apply to every value of `nd_max` a
+scan tries, so a scan's `nd_max` column is the cut for the *unlisted* orders; the
+`# coefs` column shows what the overrides actually removed. Candidate models that
+the limits make identical to one another are scanned once.
+
+The transverse falloff of a multipole goes as `r^m`, so the high-`m` functions
+are only sampled meaningfully near the aperture, over a small part of the grid
+and with a small dynamic range. Their high derivative orders are the worst
+conditioned unknowns in the fit and are often fitting little more than
+interpolation error. Cutting them here removes those columns while leaving the
+low-`m` functions at full derivative order, where the data supports them.
+
   fit_criterion = Symbol
 
 How a scan picks its winner. Each candidate model is given a score and the lowest
@@ -138,6 +164,27 @@ it is useful for inspecting the raw residual ranking, not for choosing a model.
 See the "Choosing between models" section of the `gg_fit` docstring for how to
 read the trade-off quantitatively and for why, on a field grid, these criteria
 are better treated as a ranking heuristic than as a probability statement.
+
+  exclude_functions = Vector{Tuple{Symbol,Int}}
+
+GG functions to leave out of the fit entirely, named as `(:a, m)`, `(:b, m)` or
+`(:bs, 0)` tuples — the same form the `pruned` field of the result uses.
+
+```
+exclude_functions = [(:a, 2), (:a, 4), (:b, 2), (:b, 4), (:bs, 0)]
+```
+
+An excluded function is dropped when the list of unknowns is assembled, so it
+never gets a design-matrix column: it is not fitted, cannot influence the
+coefficients that are kept, and is absent from the result. `b_s` carries no
+multipole order, so the `m` of a `:bs` entry is ignored. Naming a function the
+model does not contain anyway is a harmless no-op.
+
+Use this where the answer is known in advance — a magnet whose symmetry forbids
+the even multipoles, say — since `m_max` can only cut at the top of the range
+while this removes orders from anywhere in it. Where the answer is not known in
+advance, `prune_ave_limit`/`prune_max_limit` below decide the same question from
+the fit itself.
 
   prune_ave_limit = Float64
   prune_max_limit = Float64
@@ -179,9 +226,11 @@ Name of the output file.
   n_planes_add::Int = 1                  # Number of z-planes added.
   m_max::Union{Int,AbstractVector{Int}} = -1   # Max multipole order m. -1 = all in table. Vector => scan.
   nd_max::Union{Int,AbstractVector{Int}} = -1  # Max derivative order nd. -1 = 2*n_planes_add. Vector => scan.
+  nd_max_for_m::Dict{Int,Int} = Dict{Int,Int}()  # Per-order override of nd_max: m => nd_max for a_m and b_m (m = 0 => b_s).
   fit_criterion::Symbol = :bic           # Scan selection criterion: :bic, :aic, or :rms.
   core_weight::Float64 = 1.0             # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
   outer_plane_weight::Float64 = 1.0      # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).
+  exclude_functions::Vector{Tuple{Symbol,Int}} = Tuple{Symbol,Int}[]  # GG functions to leave out of the fit: (:a,m), (:b,m), (:bs,0).
   prune_ave_limit::Float64 = 0.0         # Drop a GG function whose ave contribution is below this fraction of <|B|>. 0 = test off.
   prune_max_limit::Float64 = 0.0         # Drop a GG function whose max contribution is below this fraction of <|B|>. 0 = test off.
   output_file::String = "gg_fit_results.h5"

@@ -34,12 +34,23 @@ params.origin             = [0.0, 0.0]   # (x, y) axis the GGs are expanded abou
 params.n_planes_add       = 1            # z-planes added either side of the base plane
 params.core_weight        = 1            # up-weight near-axis points (1 = uniform)
 params.outer_plane_weight = 1            # weight of the outer z-planes (1 = uniform)
+params.prune_ave_limit    = 0            # drop GG functions with negligible field (0 = off)
+params.prune_max_limit    = 0            # ... judged on ave and/or max contribution
 params.output_file        = "gg_fit_result.h5"
 ```
 
 If `field.g_ref` is non-zero, `origin` must be `[0, 0]`. The maximum derivative
 order resolved is `nd_max = 2 * n_planes_add`. See [Theory](theory.md) for what
 the weights do.
+
+The two prune limits drop any `a_m`, `b_m` or `b_s` whose field contribution
+falls below **every** limit that is in force, and refit what is left; both are
+fractions of the field table's mean `|B|`, and `0` switches a test off. Use them
+when a magnet's symmetry makes whole multipole orders useless — `m_max` can only
+cut at the top, while pruning removes orders from anywhere in the range. The
+surviving coefficients are stored sparsely in `m`, and every consumer treats a
+missing key as an identically zero function. See the `gg_fit` docstring for the
+full rules.
 
 ## 3. Run the fit
 

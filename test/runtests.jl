@@ -46,7 +46,7 @@ end
 # can exercise finite curvature g_ref, which the example file (g_ref = 0) does not.
 synth(z_base, a, b, bs, g_ref; nd_max, dz_grid) = (
   GGCoefs(; z_base = collect(float.(z_base)), a, b, bs,
-                 nd_max, rms_plane = fill(NaN, length(z_base)), g_ref,
+                 nd_max, rms_weighted_plane = fill(NaN, length(z_base)), g_ref,
                  origin = [0.0, 0.0], dz_grid),
   (;))
 
@@ -82,10 +82,10 @@ end
   @testset "read_gg_fit" begin
     fit, meta = read_gg_fit(EXAMPLE)
     @test fit isa GGCoefs
-    for k in (:z_base, :a, :b, :bs, :m_max, :nd_max, :rms_plane, :g_ref, :origin, :dz_grid)
+    for k in (:z_base, :a, :b, :bs, :m_max, :nd_max, :rms_weighted_plane, :g_ref, :origin, :dz_grid)
       @test hasproperty(fit, k)
     end
-    @test length(fit.z_base) == length(fit.rms_plane)
+    @test length(fit.z_base) == length(fit.rms_weighted_plane)
     @test fit.a isa Dict && fit.b isa Dict && fit.bs isa Dict
   end
 
@@ -267,8 +267,8 @@ end
     @test res isa GGCoefs
     @test length(res.z_base) == size(field.magnetic, 3)
     @test res.nd_max == 2
-    @test length(res.rms_plane) == length(res.z_base)
-    @test all(isfinite, res.rms_plane)
+    @test length(res.rms_weighted_plane) == length(res.z_base)
+    @test all(isfinite, res.rms_weighted_plane)
     @test !isempty(res.params)
     quiet(() -> gg_fit_show_results(res, field, p))
 
@@ -297,13 +297,13 @@ end
     p.core_weight = 2
     p.outer_plane_weight = 2
     res = gg_fit(field, p)
-    @test all(isfinite, res.rms_plane)
+    @test all(isfinite, res.rms_weighted_plane)
     # n_planes_add = 0 (single-plane, nd_max = 0) exercises the dzmax == 0 branch.
     p0 = GGFitInputParams()
     p0.n_planes_add = 0
     res0 = gg_fit(field, p0)
     @test res0.nd_max == 0
-    @test all(isfinite, res0.rms_plane)
+    @test all(isfinite, res0.rms_weighted_plane)
   end
 
   @testset "public docstrings are attached" begin
@@ -318,7 +318,7 @@ end
     @test !undocumented(@doc read_gg_fit)
     @test !undocumented(@doc write_gg_fit)
     # The three fit criteria must be spelled out where a user will look for them.
-    for probe in ("fit_criterion", ":rms", ":aic", ":bic", "sqrt(RSS / N)")
+    for probe in ("fit_criterion", ":rms", ":aic", ":bic", "sqrt(RSS / W)")
       @test occursin(probe, string(@doc GGFitInputParams))
     end
   end
@@ -346,14 +346,29 @@ end
     @test length(res.scan) == 6
     @test Set((s.m_max, s.nd_max) for s in res.scan) ==
           Set([(m, nd) for m in 2:4 for nd in 1:2])
-    @test all(s -> s.n_coef > 0 && isfinite(s.rms) && isfinite(s.score), res.scan)
+    @test all(s -> s.n_coef > 0 && isfinite(s.rms_weighted) && isfinite(s.score), res.scan)
+    # Every point weight applies to all three components alike, so each component
+    # carries exactly a third of the total weight and the pooled weighted RMS is
+    # the plain quadrature mean of the three per-component values.
+    @test all(s -> all(isfinite, s.rms_weighted_comp) &&
+                   s.rms_weighted ≈ sqrt(sum(abs2, s.rms_weighted_comp) / 3), res.scan)
     # The winner is the reported model, and its coefficient count matches its row.
     best = res.scan[argmin([s.score for s in res.scan])]
     @test (res.m_max, res.nd_max) == (best.m_max, best.nd_max)
     @test length(res.params) == best.n_coef
-    @test length(res.rms_plane) == length(res.z_base)
-    @test all(isfinite, res.rms_plane)
+    @test length(res.rms_weighted_plane) == length(res.z_base)
+    @test all(isfinite, res.rms_weighted_plane)
     quiet(() -> gg_fit_show_results(res, field, p))
+
+    # Field contribution of each GG function: one row per a_m / b_m actually
+    # fitted, plus b_s, each a magnitude with ave no larger than max.
+    rows, b_ave = GeneralizedGradients._gg_field_contributions(res, field)
+    @test [r[1] for r in rows] ==
+          vcat(["a_$m" for m in sort!(unique(k[1] for k in keys(res.a)))],
+               ["b_$m" for m in sort!(unique(k[1] for k in keys(res.b)))],
+               isempty(res.bs) ? String[] : ["b_s"])
+    @test all(r -> 0 <= r[2] <= r[3], rows)
+    @test isfinite(b_ave) && b_ave > 0
 
     # More coefficients can only reduce the residual, so :rms takes the top model.
     p.fit_criterion = :rms

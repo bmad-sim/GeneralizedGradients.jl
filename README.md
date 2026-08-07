@@ -68,7 +68,7 @@ Two files are written: `<output_base>.bmad` (the lattice element) and
 `<output_base>_gg.bmad` (the attached `gen_grad_map`). `cutoff` is a relative
 magnitude threshold for pruning negligible multipole curves (default 0, keep every
 non-zero curve). The exact conversion from the project's midplane-derivative gg
-functions (a_n, b_n, b_s) to Bmad's azimuthal-harmonic gradients C_{m,sin/cos} is
+functions (a_m, b_m, b_s) to Bmad's azimuthal-harmonic gradients C_{m,sin/cos} is
 documented in the `write_bmad_gg_fit` docstring.
 
 ## field_and_potential_evaluate_at(fit, x::Real, y::Real, s::Real) ->
@@ -88,8 +88,8 @@ s-position.
 
 Function in `src/gg_eval.jl`
 Returns the generalized-gradient coefficients at grid plane index `ip` as three dicts
-`(a, b, bs)` of scalar values: `a` and `b` keyed by (n,m) with a(n,m)=dᵐaₙ/dsᵐ and
-b(n,m)=dᵐbₙ/dsᵐ; `bs` keyed by m with bs(m)=dᵐ⁺¹a₀/dsᵐ⁺¹ = dᵐb_s/dsᵐ.
+`(a, b, bs)` of scalar values: `a` and `b` keyed by (m,nd) with a(m,nd)=dⁿᵈaₘ/dsⁿᵈ and
+b(m,nd)=dⁿᵈbₘ/dsⁿᵈ; `bs` keyed by nd with bs(nd)=dⁿᵈ⁺¹a₀/dsⁿᵈ⁺¹ = dⁿᵈb_s/dsⁿᵈ.
 
 ## gg_coefficients_at_s(fit, s::Real)
 

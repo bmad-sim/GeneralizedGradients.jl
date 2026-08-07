@@ -4,8 +4,8 @@
 # Coefficients of the monomials x^p y^q in B_x, B_y, B_s and in the
 # vector potential A_x, A_y, A_s (B = curl A), for total degree
 # p+q <= 12, assuming the curvature h is constant (h' = 0).
-# Notation: a(n,m) = d^m a_n/ds^m, b(n,m) = d^m b_n/ds^m,
-# bs(m) = d^m b_s/ds^m.
+# Notation: a(m,nd) = d^nd a_m/ds^nd, b(m,nd) = d^nd b_m/ds^nd,
+# bs(nd) = d^nd b_s/ds^nd.
 
 ## x^0 y^0
 

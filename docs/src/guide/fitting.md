@@ -1,7 +1,7 @@
 # Fitting a field grid to generalized gradients
 
 The central operation is `gg_fit`, which fits a 3D magnetic field grid to
-generalized-gradient functions `a_n(s)`, `b_n(s)`, `b_s(s)` and their
+generalized-gradient functions `a_m(s)`, `b_m(s)`, `b_s(s)` and their
 `s`-derivatives, **plane by plane**.
 
 ## 1. Read a field grid
@@ -38,7 +38,7 @@ params.output_file        = "gg_fit_result.h5"
 ```
 
 If `field.g_ref` is non-zero, `origin` must be `[0, 0]`. The maximum derivative
-order resolved is `m_max = 2 * n_planes_add`. See [Theory](theory.md) for what
+order resolved is `nd_max = 2 * n_planes_add`. See [Theory](theory.md) for what
 the weights do.
 
 ## 3. Run the fit
@@ -49,7 +49,7 @@ results = gg_fit(field, params)
 
 `results` is a `GGCoefs` holding the fitted coefficient functions
 (`a`, `b`, `bs`) sampled at every base plane (`z_base`), along with
-the per-plane weighted-RMS residuals (`rms_plane`), `m_max`, and the
+the per-plane weighted-RMS residuals (`rms_plane`), `m_max`, `nd_max`, and the
 reference-frame bending strength `g_ref`.
 
 ## 4. Inspect and save

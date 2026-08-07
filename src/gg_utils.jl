@@ -6,7 +6,7 @@
 
 Load a `gg_fit` result HDF5 file (written by `write_gg_fit`). Returns a
 two-tuple whose first component is a `GGCoefs` struct holding the GG
-coefficient dictionaries `a`, `b`, `bs` (and `z_base`, `m_max`, `n_max`,
+coefficient dictionaries `a`, `b`, `bs` (and `z_base`, `m_max`, `nd_max`,
 `rms_plane`, `rms_unweighted_plane`, `field_ave_plane`, `g_ref`, `origin`,
 `dz_grid`), and whose second component is a NamedTuple of the
 associated fit-control metadata (`n_planes_add`, `core_weight`,
@@ -15,31 +15,21 @@ unknown list is not stored in the file).
 
 ```julia
 fit, meta = read_gg_fit(path)
-fit.a            # Dict{(n,m) => values_over_planes}
+fit.a            # Dict{(m,nd) => values_over_planes}
 fit.g_ref        # reference curvature
 ```
 """
 function read_gg_fit(path::AbstractString)
   h5open(path, "r") do f
-    z_base = read(f["z_base"])
-    # Written only by newer versions of write_gg_fit.
-    optional(name) = haskey(f, name) ? read(f[name]) : fill(NaN, length(z_base))
-    acoefs = _read_coef_group(f, "a")
-    bcoefs = _read_coef_group(f, "b")
-    # n_max is absent from files written before the model scan existed; recover it
-    # from the coefficients that are actually present.
-    nkeys  = [k[1] for k in Iterators.flatten((keys(acoefs), keys(bcoefs)))]
-    n_max  = haskey(attributes(f), "n_max") ? Int(read_attribute(f, "n_max")) :
-             (isempty(nkeys) ? 0 : maximum(nkeys))
-    fit = GGCoefs(; z_base,
-                         a         = acoefs,
-                         b         = bcoefs,
+    fit = GGCoefs(; z_base    = read(f["z_base"]),
+                         a         = _read_coef_group(f, "a"),
+                         b         = _read_coef_group(f, "b"),
                          bs        = _read_coef_group(f, "bs"; single = true),
                          m_max     = Int(read_attribute(f, "m_max")),
-                         n_max,
+                         nd_max    = Int(read_attribute(f, "nd_max")),
                          rms_plane = read(f["rms_plane"]),
-                         rms_unweighted_plane = optional("rms_unweighted_plane"),
-                         field_ave_plane      = optional("field_ave_plane"),
+                         rms_unweighted_plane = read(f["rms_unweighted_plane"]),
+                         field_ave_plane      = read(f["field_ave_plane"]),
                          g_ref     = read_attribute(f, "g_ref"),
                          origin    = read(f["origin"]),
                          dz_grid   = read_attribute(f, "dz_grid"))
@@ -94,11 +84,11 @@ otherwise an `em_field`.
 ## Background: the two GG conventions
 
 This project (Van der Schueren / Sagan) characterizes the field by midplane-
-derivative generalized gradients `a_n(s)`, `b_n(s)`, `b_s(s)`:
+derivative generalized gradients `a_m(s)`, `b_m(s)`, `b_s(s)`:
 
 ```
-B_x(x,0,s) = Σ_{n≥1} a_n(s) x^{n-1}/(n-1)!     (skew / "cos" family)
-B_y(x,0,s) = Σ_{n≥1} b_n(s) x^{n-1}/(n-1)!     (normal / "sin" family)
+B_x(x,0,s) = Σ_{m≥1} a_m(s) x^{m-1}/(m-1)!     (skew / "cos" family)
+B_y(x,0,s) = Σ_{m≥1} b_m(s) x^{m-1}/(m-1)!     (normal / "sin" family)
 B_s(0,0,s) = b_s(s)                            (solenoidal, m = 0)
 ```
 
@@ -128,10 +118,10 @@ Wc(m,n) = (-1)^n (m-2n)! m   /(4^n n!(m-n)!)       (skew radial mixing)
 Us(m)   = (-1)^{m/2} m /(4^{m/2} ((m/2)!)^2)        (skew↔solenoid coupling)
 ```
 
-where `x^{[j]} ≡ dʲx/dsʲ` is supplied directly by the fit (`a[(n,j)]`,
-`b[(n,j)]`, `bs[j]`). These recursions are solved in order of increasing `m`,
+where `x^{[j]} ≡ dʲx/dsʲ` is supplied directly by the fit (`a[(m,j)]`,
+`b[(m,j)]`, `bs[j]`). These recursions are solved in order of increasing `m`,
 reusing the lower-`m` towers. Truncation at the fit's maximum derivative order
-`m_max` bounds the radial-correction sums exactly as the fit itself is bounded,
+`nd_max` bounds the radial-correction sums exactly as the fit itself is bounded,
 so the resulting `gen_grad_map` reproduces the project field to machine precision.
 
 ## Output
@@ -157,7 +147,7 @@ function write_bmad_gg_fit(fit::GGCoefs;
                 cutoff::Real = 0.0)
 
   g_ref = fit.g_ref
-  cs, cc, c0c, npl, mmax, kmax = gg_to_bmad_curves(fit)
+  cs, cc, c0c, npl, ndmax, kmax = gg_to_bmad_curves(fit)
   dz = fit.dz_grid
   L  = (npl - 1) * dz
   is_bend = g_ref != 0
@@ -166,7 +156,7 @@ function write_bmad_gg_fit(fit::GGCoefs;
   gpeak = maximum(vcat(0.0, [_peak(cs, m) for m in 1:kmax], [_peak(cc, m) for m in 1:kmax]))
   thresh = cutoff * gpeak
   has_sol = haskey(c0c, 0) && maximum(abs, c0c[0]) > 0 ||
-            any(haskey(c0c, j) && maximum(abs, c0c[j]) > 0 for j in 1:mmax+1)
+            any(haskey(c0c, j) && maximum(abs, c0c[j]) > 0 for j in 1:ndmax+1)
   keep(d, m) = (v = get(d, (m, 0), nothing); v !== nothing && maximum(abs, v) > thresh)
 
   map_file = output_base * "_gg.bmad"
@@ -175,7 +165,7 @@ function write_bmad_gg_fit(fit::GGCoefs;
 
   # Emit one derivs table.  tower(j) returns the per-plane vector for order j,
   # listed for derivative orders 0 … nder.  The solenoid (m = 0) carries one
-  # extra order because C^{[j]}_{0,c} = b_s^{[j-1]} reaches index m_max + 1.
+  # extra order because C^{[j]}_{0,c} = b_s^{[j-1]} reaches index nd_max + 1.
   function write_curve(io, m, kind, nder, tower)
     println(io, "  curve = {")
     println(io, "    m = ", m, ",")
@@ -200,11 +190,11 @@ function write_bmad_gg_fit(fit::GGCoefs;
     # Solenoid first (m = 0, cos), then normal+skew for each m.
     if has_sol
       sol(j) = get(c0c, j, zeros(Float64, npl))
-      write_curve(io, 0, "cos", mmax + 1, sol)
+      write_curve(io, 0, "cos", ndmax + 1, sol)
     end
     for m in 1:kmax
-      keep(cs, m) && write_curve(io, m, "sin", mmax, j -> get(cs, (m, j), zeros(Float64, npl)))
-      keep(cc, m) && write_curve(io, m, "cos", mmax, j -> get(cc, (m, j), zeros(Float64, npl)))
+      keep(cs, m) && write_curve(io, m, "sin", ndmax, j -> get(cs, (m, j), zeros(Float64, npl)))
+      keep(cc, m) && write_curve(io, m, "cos", ndmax, j -> get(cc, (m, j), zeros(Float64, npl)))
     end
     println(io, "}")
   end
@@ -234,7 +224,7 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    gg_to_bmad_curves(fit) -> (cs, cc, c0c, nplanes, m_max, kmax)
+    gg_to_bmad_curves(fit) -> (cs, cc, c0c, nplanes, nd_max, kmax)
 
 Compute the Bmad azimuthal-harmonic GG derivative towers from a loaded
 `gg_fit` result (`fit`, the `GGCoefs` struct returned by `read_gg_fit`). Returns
@@ -245,18 +235,18 @@ cc[(m,j)]  :: Vector  -- C^{[j]}_{m,cos}(plane)  (skew multipole m)
 c0c[j]     :: Vector  -- C^{[j]}_{0,cos}(plane)  (solenoid, j ≥ 1)
 ```
 
-each a per-plane vector, for `j = 0 … m_max`.
+each a per-plane vector, for `j = 0 … nd_max`.
 """
 function gg_to_bmad_curves(fit)
-  mmax = fit.m_max
-  npl  = length(fit.z_base)
-  kmax = maximum(first.(keys(fit.b)))
-  Z()  = zeros(Float64, npl)
+  ndmax = fit.nd_max
+  npl   = length(fit.z_base)
+  kmax  = maximum(first.(keys(fit.b)))
+  Z()   = zeros(Float64, npl)
 
   # Fit getters (missing entries are treated as identically zero).
-  bget(k, j)  = (0 <= j <= mmax && haskey(fit.b, (k, j)))  ? fit.b[(k, j)]  : nothing
-  aget(k, j)  = (0 <= j <= mmax && haskey(fit.a, (k, j)))  ? fit.a[(k, j)]  : nothing
-  bsget(j)    = (0 <= j <= mmax && haskey(fit.bs, j))      ? fit.bs[j]      : nothing
+  bget(k, j)  = (0 <= j <= ndmax && haskey(fit.b, (k, j))) ? fit.b[(k, j)]  : nothing
+  aget(k, j)  = (0 <= j <= ndmax && haskey(fit.a, (k, j))) ? fit.a[(k, j)]  : nothing
+  bsget(j)    = (0 <= j <= ndmax && haskey(fit.bs, j))     ? fit.bs[j]      : nothing
 
   Wn(k, n) = (-1.0)^n * factorial(k - 2n) * (k - 2n) / (4.0^n * factorial(n) * factorial(k - n))
   Wc(k, n) = (-1.0)^n * factorial(k - 2n) * k         / (4.0^n * factorial(n) * factorial(k - n))
@@ -265,7 +255,7 @@ function gg_to_bmad_curves(fit)
   cs = Dict{Tuple{Int,Int},Vector{Float64}}()   # normal (sin)
   cc = Dict{Tuple{Int,Int},Vector{Float64}}()   # skew (cos)
 
-  for k in 1:kmax, j in 0:mmax
+  for k in 1:kmax, j in 0:ndmax
     # Normal family.
     bj = bget(k, j)
     if bj !== nothing
@@ -301,7 +291,7 @@ function gg_to_bmad_curves(fit)
   # field but is used by Bmad's interpolating spline, so it must be consistent).
   c0c = Dict{Int,Vector{Float64}}()
   if bsget(0) !== nothing
-    for j in 1:mmax+1
+    for j in 1:ndmax+1
       d = bsget(j - 1)
       d !== nothing && (c0c[j] = copy(d))
     end
@@ -318,7 +308,7 @@ function gg_to_bmad_curves(fit)
     c0c[0] = val
   end
 
-  return cs, cc, c0c, npl, mmax, kmax
+  return cs, cc, c0c, npl, ndmax, kmax
 end
 
 

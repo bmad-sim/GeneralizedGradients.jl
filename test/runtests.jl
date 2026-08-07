@@ -44,9 +44,9 @@ end
 
 # Build a synthetic (fit, meta) pair (same shape as read_gg_fit returns) so we
 # can exercise finite curvature g_ref, which the example file (g_ref = 0) does not.
-synth(z_base, a, b, bs, g_ref; m_max, dz_grid) = (
+synth(z_base, a, b, bs, g_ref; nd_max, dz_grid) = (
   GGCoefs(; z_base = collect(float.(z_base)), a, b, bs,
-                 m_max, rms_plane = fill(NaN, length(z_base)), g_ref,
+                 nd_max, rms_plane = fill(NaN, length(z_base)), g_ref,
                  origin = [0.0, 0.0], dz_grid),
   (;))
 
@@ -82,7 +82,7 @@ end
   @testset "read_gg_fit" begin
     fit, meta = read_gg_fit(EXAMPLE)
     @test fit isa GGCoefs
-    for k in (:z_base, :a, :b, :bs, :m_max, :rms_plane, :g_ref, :origin, :dz_grid)
+    for k in (:z_base, :a, :b, :bs, :m_max, :nd_max, :rms_plane, :g_ref, :origin, :dz_grid)
       @test hasproperty(fit, k)
     end
     @test length(fit.z_base) == length(fit.rms_plane)
@@ -105,7 +105,7 @@ end
     va = Dict(k => [v] for (k, v) in a)
     vb = Dict(k => [v] for (k, v) in b)
     vbs = Dict(k => [v] for (k, v) in bs)
-    fit, meta = synth([0.0], va, vb, vbs, 0.6; m_max = 2, dz_grid = 0.1)
+    fit, meta = synth([0.0], va, vb, vbs, 0.6; nd_max = 2, dz_grid = 0.1)
     for (x, y) in PTS
       B, A, dA = field_and_potential_evaluate(fit, 1, x, y)
       Bc = curl_from(A, dA, x, fit.g_ref)
@@ -130,7 +130,7 @@ end
   bmap = Dict((1,m) => [mvec(fb1, s)[m+1] for s in zg] for m in 0:2)
   merge!(bmap, Dict((2,m) => [mvec(fb2, s)[m+1] for s in zg] for m in 0:2))
   bsmap = Dict(m => [mvec(fbs, s)[m+1] for s in zg] for m in 0:3)
-  fitM, metaM = synth(zg, amap, bmap, bsmap, 0.5; m_max = 3, dz_grid = 0.05)
+  fitM, metaM = synth(zg, amap, bmap, bsmap, 0.5; nd_max = 3, dz_grid = 0.05)
 
   @testset "curl(A) == B, multi-plane (g_ref=0.5)" begin
     for ip in 1:length(zg), (x, y) in PTS
@@ -266,7 +266,7 @@ end
     res = gg_fit(field, p)
     @test res isa GGCoefs
     @test length(res.z_base) == size(field.magnetic, 3)
-    @test res.m_max == 2
+    @test res.nd_max == 2
     @test length(res.rms_plane) == length(res.z_base)
     @test all(isfinite, res.rms_plane)
     @test !isempty(res.params)
@@ -278,6 +278,7 @@ end
       @test out == p.output_file && isfile(out)
       fit, meta = read_gg_fit(out)
       @test fit.m_max == res.m_max
+      @test fit.nd_max == res.nd_max
       @test fit.dz_grid ≈ field.dr[3]
       @test length(fit.z_base) == length(res.z_base)
       @test Set(keys(fit.a)) == Set(keys(res.a))
@@ -297,11 +298,11 @@ end
     p.outer_plane_weight = 2
     res = gg_fit(field, p)
     @test all(isfinite, res.rms_plane)
-    # n_planes_add = 0 (single-plane, m_max = 0) exercises the dzmax == 0 branch.
+    # n_planes_add = 0 (single-plane, nd_max = 0) exercises the dzmax == 0 branch.
     p0 = GGFitInputParams()
     p0.n_planes_add = 0
     res0 = gg_fit(field, p0)
-    @test res0.m_max == 0
+    @test res0.nd_max == 0
     @test all(isfinite, res0.rms_plane)
   end
 
@@ -322,33 +323,33 @@ end
     end
   end
 
-  @testset "gg_fit n_max/m_max scan" begin
+  @testset "gg_fit m_max/nd_max scan" begin
     field = make_field()
 
-    # Scalar n_max/m_max pin the model exactly and run no scan.
+    # Scalar m_max/nd_max pin the model exactly and run no scan.
     p = GGFitInputParams()
     p.n_planes_add = 1
-    p.n_max = 4
-    p.m_max = 3
+    p.m_max  = 4
+    p.nd_max = 3
     res = gg_fit(field, p)
     @test isempty(res.scan)
-    @test res.n_max == 4 && res.m_max == 3
+    @test res.m_max == 4 && res.nd_max == 3
     @test maximum(k[1] for k in keys(res.b)) <= 4
     @test maximum(k[2] for k in keys(res.b)) <= 3
-    # bs unknowns describe a_0 and are bounded by m_max only, never by n_max.
+    # bs unknowns describe a_0 and are bounded by nd_max only, never by m_max.
     @test maximum(keys(res.bs)) <= 3
 
     # A vector on either cutoff scans the full grid of combinations.
-    p.n_max = 2:4
-    p.m_max = [1, 2]
+    p.m_max  = 2:4
+    p.nd_max = [1, 2]
     res = gg_fit(field, p)
     @test length(res.scan) == 6
-    @test Set((s.n_max, s.m_max) for s in res.scan) ==
-          Set([(n, m) for n in 2:4 for m in 1:2])
+    @test Set((s.m_max, s.nd_max) for s in res.scan) ==
+          Set([(m, nd) for m in 2:4 for nd in 1:2])
     @test all(s -> s.n_coef > 0 && isfinite(s.rms) && isfinite(s.score), res.scan)
     # The winner is the reported model, and its coefficient count matches its row.
     best = res.scan[argmin([s.score for s in res.scan])]
-    @test (res.n_max, res.m_max) == (best.n_max, best.m_max)
+    @test (res.m_max, res.nd_max) == (best.m_max, best.nd_max)
     @test length(res.params) == best.n_coef
     @test length(res.rms_plane) == length(res.z_base)
     @test all(isfinite, res.rms_plane)
@@ -357,20 +358,20 @@ end
     # More coefficients can only reduce the residual, so :rms takes the top model.
     p.fit_criterion = :rms
     res_rms = gg_fit(field, p)
-    @test (res_rms.n_max, res_rms.m_max) == (4, 2)
+    @test (res_rms.m_max, res_rms.nd_max) == (4, 2)
     p.fit_criterion = :aic
     @test gg_fit(field, p) isa GGCoefs
 
     # Candidates beyond what the table holds are clamped and deduplicated.
     p.fit_criterion = :bic
-    p.n_max = 11:40
-    p.m_max = 0:1
+    p.m_max  = 11:40
+    p.nd_max = 0:1
     res = gg_fit(field, p)
-    @test length(res.scan) == 6            # n_max 11,12,13 x m_max 0,1
-    @test maximum(s.n_max for s in res.scan) == 13
+    @test length(res.scan) == 6            # m_max 11,12,13 x nd_max 0,1
+    @test maximum(s.m_max for s in res.scan) == 13
 
-    @test_throws ErrorException (p.m_max = Int[]; gg_fit(field, p))
-    p.m_max = 0:1
+    @test_throws ErrorException (p.nd_max = Int[]; gg_fit(field, p))
+    p.nd_max = 0:1
     @test_throws ErrorException (p.fit_criterion = :bogus; gg_fit(field, p))
   end
 
@@ -457,9 +458,9 @@ end
       @test occursin("em_field", read(ele, String))
 
       fit, meta = read_gg_fit(EXAMPLE)
-      cs, cc, c0c, npl, mmax, kmax = GeneralizedGradients.gg_to_bmad_curves(fit)
+      cs, cc, c0c, npl, ndmax, kmax = GeneralizedGradients.gg_to_bmad_curves(fit)
       @test npl == length(fit.z_base)
-      @test mmax == fit.m_max
+      @test ndmax == fit.nd_max
       @test kmax >= 1
 
       # In-memory GGCoefs method writes the same element.

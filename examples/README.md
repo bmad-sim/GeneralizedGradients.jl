@@ -50,7 +50,8 @@ which returns a two-tuple. `fit` is a `GGCoefs` struct with the fields:
   a                    Dict((1, 2) => [-0.0046122, -0.00615161, …    # a function fit values
   b                    Dict((1, 2) => [-0.00317784, -0.00341029, …   # b function fit values
   bs                   Dict(0)     => [-2.23633e-7, -2.31509e-7, …   # bs function fit values
-  m_max                2                                             # max order
+  m_max                13                                            # max multipole order
+  nd_max               2                                             # max derivative order
   g_ref                0                                             # Curvilinear curvature
   z_base               [0.0, 0.005, ...]                             # Fit plane values.
 ```

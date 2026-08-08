@@ -34,6 +34,8 @@ params.origin             = [0.0, 0.0]   # (x, y) axis the GGs are expanded abou
 params.n_planes_add       = 1            # z-planes added either side of the base plane
 params.core_weight        = 1            # up-weight near-axis points (1 = uniform)
 params.outer_plane_weight = 1            # weight of the outer z-planes (1 = uniform)
+params.nd_max_for_m       = Dict()       # per-m derivative limit, e.g. Dict(4 => 2, 5 => 1)
+params.exclude_functions  = []           # GG functions to leave out, e.g. [(:a, 2), (:bs, 0)]
 params.prune_ave_limit    = 0            # drop GG functions with negligible field (0 = off)
 params.prune_max_limit    = 0            # ... judged on ave and/or max contribution
 params.output_file        = "gg_fit_result.h5"
@@ -43,14 +45,35 @@ If `field.g_ref` is non-zero, `origin` must be `[0, 0]`. The maximum derivative
 order resolved is `nd_max = 2 * n_planes_add`. See [Theory](theory.md) for what
 the weights do.
 
-The two prune limits drop any `a_m`, `b_m` or `b_s` whose field contribution
-falls below **every** limit that is in force, and refit what is left; both are
-fractions of the field table's mean `|B|`, and `0` switches a test off. Use them
-when a magnet's symmetry makes whole multipole orders useless — `m_max` can only
-cut at the top, while pruning removes orders from anywhere in the range. The
-surviving coefficients are stored sparsely in `m`, and every consumer treats a
-missing key as an identically zero function. See the `gg_fit` docstring for the
-full rules.
+`nd_max` is one cut across every multipole order. Since `a_m`/`b_m` fall off as
+`r^m`, the high-`m` functions are sampled meaningfully only near the aperture,
+and their high derivative orders are the worst-conditioned unknowns in the fit.
+`nd_max_for_m` holds them to a lower order without touching the low-`m`
+functions, keyed by multipole order with `0` standing for `b_s`:
+
+```julia
+params.nd_max       = 4
+params.nd_max_for_m = Dict(4 => 2, 5 => 1, 0 => 0)
+```
+
+An `m` not listed is cut by `nd_max` alone, and a listed limit can only tighten —
+the effective cut is `min(nd_max, nd_max_for_m[m])`.
+
+`m_max` can only cut multipole orders off the top of the range. Two settings
+remove them from anywhere in it, for when a magnet's symmetry makes whole orders
+useless:
+
+- `exclude_functions` names them outright, as `(:a, m)`, `(:b, m)` or `(:bs, 0)`
+  tuples. They are dropped as the unknowns are assembled, so they are never
+  fitted at all.
+- `prune_ave_limit` and `prune_max_limit` let the fit decide, dropping any
+  function whose field contribution falls below **every** limit in force and
+  refitting what is left. Both are fractions of the field table's mean `|B|`, and
+  `0` switches a test off.
+
+Either way the surviving coefficients are stored sparsely in `m`, and every
+consumer treats a missing key as an identically zero function. See the `gg_fit`
+docstring for the full rules.
 
 ## 3. Run the fit
 

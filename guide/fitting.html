@@ -274,6 +274,8 @@ reference frame.</p>
 <span class="n">params</span><span class="o">.</span><span class="n">n_planes_add</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="w">            </span><span class="c"># z-planes added either side of the base plane</span>
 <span class="n">params</span><span class="o">.</span><span class="n">core_weight</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="w">            </span><span class="c"># up-weight near-axis points (1 = uniform)</span>
 <span class="n">params</span><span class="o">.</span><span class="n">outer_plane_weight</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="w">            </span><span class="c"># weight of the outer z-planes (1 = uniform)</span>
+<span class="n">params</span><span class="o">.</span><span class="n">nd_max_for_m</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="kt">Dict</span><span class="p">()</span><span class="w">       </span><span class="c"># per-m derivative limit, e.g. Dict(4 =&gt; 2, 5 =&gt; 1)</span>
+<span class="n">params</span><span class="o">.</span><span class="n">exclude_functions</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="p">[]</span><span class="w">           </span><span class="c"># GG functions to leave out, e.g. [(:a, 2), (:bs, 0)]</span>
 <span class="n">params</span><span class="o">.</span><span class="n">prune_ave_limit</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="w">            </span><span class="c"># drop GG functions with negligible field (0 = off)</span>
 <span class="n">params</span><span class="o">.</span><span class="n">prune_max_limit</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="w">            </span><span class="c"># ... judged on ave and/or max contribution</span>
 <span class="n">params</span><span class="o">.</span><span class="n">output_file</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;gg_fit_result.h5&quot;</span>
@@ -282,14 +284,32 @@ reference frame.</p>
 <p>If <code class="docutils literal notranslate"><span class="pre">field.g_ref</span></code> is non-zero, <code class="docutils literal notranslate"><span class="pre">origin</span></code> must be <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">0]</span></code>. The maximum derivative
 order resolved is <code class="docutils literal notranslate"><span class="pre">nd_max</span> <span class="pre">=</span> <span class="pre">2</span> <span class="pre">*</span> <span class="pre">n_planes_add</span></code>. See <a class="reference internal" href="theory.html"><span class="std std-doc">Theory</span></a> for what
 the weights do.</p>
-<p>The two prune limits drop any <code class="docutils literal notranslate"><span class="pre">a_m</span></code>, <code class="docutils literal notranslate"><span class="pre">b_m</span></code> or <code class="docutils literal notranslate"><span class="pre">b_s</span></code> whose field contribution
-falls below <strong>every</strong> limit that is in force, and refit what is left; both are
-fractions of the field table’s mean <code class="docutils literal notranslate"><span class="pre">|B|</span></code>, and <code class="docutils literal notranslate"><span class="pre">0</span></code> switches a test off. Use them
-when a magnet’s symmetry makes whole multipole orders useless — <code class="docutils literal notranslate"><span class="pre">m_max</span></code> can only
-cut at the top, while pruning removes orders from anywhere in the range. The
-surviving coefficients are stored sparsely in <code class="docutils literal notranslate"><span class="pre">m</span></code>, and every consumer treats a
-missing key as an identically zero function. See the <code class="docutils literal notranslate"><span class="pre">gg_fit</span></code> docstring for the
-full rules.</p>
+<p><code class="docutils literal notranslate"><span class="pre">nd_max</span></code> is one cut across every multipole order. Since <code class="docutils literal notranslate"><span class="pre">a_m</span></code>/<code class="docutils literal notranslate"><span class="pre">b_m</span></code> fall off as
+<code class="docutils literal notranslate"><span class="pre">r^m</span></code>, the high-<code class="docutils literal notranslate"><span class="pre">m</span></code> functions are sampled meaningfully only near the aperture,
+and their high derivative orders are the worst-conditioned unknowns in the fit.
+<code class="docutils literal notranslate"><span class="pre">nd_max_for_m</span></code> holds them to a lower order without touching the low-<code class="docutils literal notranslate"><span class="pre">m</span></code>
+functions, keyed by multipole order with <code class="docutils literal notranslate"><span class="pre">0</span></code> standing for <code class="docutils literal notranslate"><span class="pre">b_s</span></code>:</p>
+<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">params</span><span class="o">.</span><span class="n">nd_max</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="mi">4</span>
+<span class="n">params</span><span class="o">.</span><span class="n">nd_max_for_m</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kt">Dict</span><span class="p">(</span><span class="mi">4</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>An <code class="docutils literal notranslate"><span class="pre">m</span></code> not listed is cut by <code class="docutils literal notranslate"><span class="pre">nd_max</span></code> alone, and a listed limit can only tighten —
+the effective cut is <code class="docutils literal notranslate"><span class="pre">min(nd_max,</span> <span class="pre">nd_max_for_m[m])</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">m_max</span></code> can only cut multipole orders off the top of the range. Two settings
+remove them from anywhere in it, for when a magnet’s symmetry makes whole orders
+useless:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">exclude_functions</span></code> names them outright, as <code class="docutils literal notranslate"><span class="pre">(:a,</span> <span class="pre">m)</span></code>, <code class="docutils literal notranslate"><span class="pre">(:b,</span> <span class="pre">m)</span></code> or <code class="docutils literal notranslate"><span class="pre">(:bs,</span> <span class="pre">0)</span></code>
+tuples. They are dropped as the unknowns are assembled, so they are never
+fitted at all.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">prune_ave_limit</span></code> and <code class="docutils literal notranslate"><span class="pre">prune_max_limit</span></code> let the fit decide, dropping any
+function whose field contribution falls below <strong>every</strong> limit in force and
+refitting what is left. Both are fractions of the field table’s mean <code class="docutils literal notranslate"><span class="pre">|B|</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">0</span></code> switches a test off.</p></li>
+</ul>
+<p>Either way the surviving coefficients are stored sparsely in <code class="docutils literal notranslate"><span class="pre">m</span></code>, and every
+consumer treats a missing key as an identically zero function. See the <code class="docutils literal notranslate"><span class="pre">gg_fit</span></code>
+docstring for the full rules.</p>
 </section>
 <section id="run-the-fit">
 <h2>3. Run the fit<a class="headerlink" href="#run-the-fit" title="Link to this heading">¶</a></h2>

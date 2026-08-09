@@ -1,6 +1,6 @@
 # Fitting a field grid to generalized gradients
 
-The central operation is `gg_fit`, which fits a 3D magnetic field grid to
+The central operation is `gg_calc_fit`, which fits a 3D magnetic field grid to
 generalized-gradient functions `a_m(s)`, `b_m(s)`, `b_s(s)` and their
 `s`-derivatives, **plane by plane**.
 
@@ -72,16 +72,16 @@ useless:
   `0` switches a test off.
 
 Either way the surviving coefficients are stored sparsely in `m`, and every
-consumer treats a missing key as an identically zero function. See the `gg_fit`
+consumer treats a missing key as an identically zero function. See the `gg_calc_fit`
 docstring for the full rules.
 
 ## 3. Run the fit
 
 ```julia
-results = gg_fit(field, params)
+gg_fit = gg_calc_fit(field, params)
 ```
 
-`results` is a `GGCoefs` holding the fitted coefficient functions
+`gg_fit` is a `GGCoefs` holding the fitted coefficient functions
 (`a`, `b`, `bs`) sampled at every base plane (`z_base`), along with
 the per-plane weighted-RMS residuals (`rms_weighted_plane`), `m_max`, `nd_max`, and the
 reference-frame bending strength `g_ref`.
@@ -92,24 +92,24 @@ Print a human-readable summary (fit settings, per-plane residuals, leading
 multipoles at the central plane):
 
 ```julia
-gg_fit_show_results(results, field, params)
+gg_show_fit_results(gg_fit, field, params)
 ```
 
 Write the result to an HDF5 file (readable later by `read_gg_fit`, and the input
 to the Bmad exporters):
 
 ```julia
-write_gg_fit(results, field, params)   # writes params.output_file
+write_gg_fit(gg_fit, field, params)   # writes params.output_file
 ```
 
 ## 5. Diagnose a bad fit
 
 A large RMS residual on some plane does not say what to do about it. Adding GG
 terms helps only if the residual is something the expansion can represent, and
-that is what `gg_fit_show_residuals` measures:
+that is what `gg_show_fit_residuals` measures:
 
 ```julia
-gg_fit_show_residuals(results, field; detail = [12])
+gg_show_fit_residuals(gg_fit, field; detail = [12])
 ```
 
 Per base plane it reports
@@ -138,11 +138,11 @@ The check none of this replaces is the direct one: refit with a larger `m_max`
 and see whether the plane's residual actually falls. A residual made of missing
 GG terms drops; one that is not saturates.
 
-To see the residual rather than summarize it, `gg_fit_residual_map` returns it
+To see the residual rather than summarize it, `gg_make_fit_residual_table` returns it
 over one plane's grid:
 
 ```julia
-r = gg_fit_residual_map(results, field, 12)
+r = gg_make_fit_residual_table(gg_fit, field, 12)
 r.dB[:, :, 1]        # Bx residual, indexed [ix, iy]; 2 and 3 are By and Bs
 ```
 
@@ -163,14 +163,14 @@ params = GGFitInputParams()
 params.n_planes_add = 1
 params.output_file  = "gg_fit_result.h5"
 
-results = gg_fit(field, params)
-gg_fit_show_results(results, field, params)
-write_gg_fit(results, field, params)
+gg_fit = gg_calc_fit(field, params)
+gg_show_fit_results(gg_fit, field, params)
+write_gg_fit(gg_fit, field, params)
 ```
 
 ```{tip}
 The fit does not strictly require a rectangular, evenly spaced grid — the merit
-function is a sum over field points — but the current `gg_fit` assumes the GG
+function is a sum over field points — but the current `gg_calc_fit` assumes the GG
 functions are sampled on the grid's own `z`-planes.
 ```
 

@@ -314,7 +314,7 @@ end
     _coefsum(terms, x::Float64, y::Float64, g_ref)
 
 CB coefficient sum: `Σ coeff·g_ref^k·x^p·y^q` over the table entries for one
-`(component, function)` — one entry of the CB grids built in `gg_fit`.
+`(component, function)` — one entry of the CB grids built in `gg_calc_fit`.
 """
 function _coefsum(terms, x::Float64, y::Float64, g_ref)
   s = 0.0

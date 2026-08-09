@@ -4,7 +4,7 @@
 """
     read_gg_fit(path::AbstractString) -> (fit::GGCoefs, meta::NamedTuple)
 
-Load a `gg_fit` result HDF5 file (written by `write_gg_fit`). Returns a
+Load a `gg_calc_fit` result HDF5 file (written by `write_gg_fit`). Returns a
 two-tuple whose first component is a `GGCoefs` struct holding the GG
 coefficient dictionaries `a`, `b`, `bs` (and `z_base`, `m_max`, `nd_max`,
 `rms_weighted_plane`, `rms_unweighted_plane`, `field_ave_plane`, `fit_radius_max`,
@@ -48,12 +48,12 @@ end
     write_bmad_gg_fit(fit::GGCoefs; ele_name, output_base, cutoff) -> lattice_file_path
     write_bmad_gg_fit(input::AbstractString; output_base, cutoff) -> lattice_file_path
 
-Convert generalized-gradient (GG) coefficients produced by `gg_fit` into Bmad
+Convert generalized-gradient (GG) coefficients produced by `gg_calc_fit` into Bmad
 `gen_grad_map` format, producing a Bmad lattice element with the GG map attached.
 Returns the path of the lattice-element file.
 
 The GG fit is supplied either as a loaded `GGCoefs` struct (`fit`, as returned by
-`read_gg_fit`) or as the path to a gg_fit HDF5 file (output of `write_gg_fit`),
+`read_gg_fit`) or as the path to a gg_calc_fit HDF5 file (output of `write_gg_fit`),
 which is read with `read_gg_fit`.
 
 ## Usage
@@ -202,7 +202,7 @@ function write_bmad_gg_fit(fit::GGCoefs;
 
   open(ele_file, "w") do io
     println(io, "! Bmad lattice element with attached generalized-gradient map.")
-    println(io, "! Generated from gg_fit GG coefficients by write_bmad_gg_fit.")
+    println(io, "! Generated from gg_calc_fit GG coefficients by write_bmad_gg_fit.")
     println(io)
 
     if is_bend
@@ -228,7 +228,7 @@ end
     gg_to_bmad_curves(fit) -> (cs, cc, c0c, nplanes, nd_max, kmax)
 
 Compute the Bmad azimuthal-harmonic GG derivative towers from a loaded
-`gg_fit` result (`fit`, the `GGCoefs` struct returned by `read_gg_fit`). Returns
+`gg_calc_fit` result (`fit`, the `GGCoefs` struct returned by `read_gg_fit`). Returns
 
 ```
 cs[(m,j)]  :: Vector  -- C^{[j]}_{m,sin}(plane)  (normal multipole m)

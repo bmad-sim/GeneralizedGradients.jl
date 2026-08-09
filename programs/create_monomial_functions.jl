@@ -10,76 +10,34 @@ using Symbolics
 # --- Input parameters (override from the environment) ------------------------
 # These two, and nothing else, determine the contents of the output file; they
 # are echoed into its header so a table on disk says what produced it.
+#
+# MAXTOT and MMAX mean here exactly what they mean in create_gg_coef_table.jl,
+# which takes the same two parameters under the same MMAX <= MAXTOT + 1
+# restriction: the two programs compute the same expansion and differ only in
+# the form of the output.  This one writes readable symbolic expressions in
+# a(m,nd), b(m,nd) and bs(nd), for reading and for checking against the paper;
+# the other writes the numeric (coef, p, q, k) tuples the fitting code consumes.
+#
+# They are documented once, in the docstrings that create_gg_coef_table.jl
+# emits into tables/gg_coef_table.jl.  That file is included by the package, so
+# `?MAXTOT` and `?MMAX` in the REPL answer for both programs.  Only the default
+# below is local: it is the value tables/monomial_functions.jl was built with.
 
-"""
-    MAXTOT
-
-Maximum total degree `p + q` of the monomials `x^p y^q` tabulated: the output
-file gets one section per `(p,q)` pair with `p + q <= MAXTOT`.
-
-Read from the environment variable of the same name; `12` if unset. The default
-is what `tables/monomial_functions.jl` was built with.
-
-    MAXTOT=16 julia programs/create_monomial_functions.jl
-
-Raising it enlarges the table in every direction at once: it sets how far the
-`phi` recurrence is carried, the number of monomial sections
-(`(MAXTOT+1)(MAXTOT+2)/2` of them), the derivative orders appearing in the
-coefficient expressions, and the two derived sizes [`N`](@ref) and
-[`MDER`](@ref). Run time grows steeply as a result, and each further step costs
-considerably more than the last.
-
-This program and `create_gg_coef_table.jl` compute the same expansion and take
-the same two parameters; they differ only in the form of the output. This one
-writes readable symbolic expressions in `a(m,nd)`, `b(m,nd)` and `bs(nd)`, for
-reading and for checking against the paper; the other writes the numeric
-`(coef, p, q, k)` tuples the fitting code consumes.
-"""
 const MAXTOT = parse(Int, get(ENV, "MAXTOT", "12"))
-
-"""
-    MMAX
-
-Maximum multipole order `m` of the `a_m` and `b_m` functions carried through the
-calculation, hence the largest `m` that can appear in an `a(m,nd)` or `b(m,nd)`
-term of a printed coefficient.
-
-Read from the environment variable of the same name; `13` if unset, which is the
-order `tables/monomial_functions.jl` was built with.
-
-    MAXTOT=16 MMAX=17 julia programs/create_monomial_functions.jl
-
-`bs(nd)` carries no multipole order — it is the derivative tower of `a_0` — so
-it is unaffected by this limit.
-
-`MMAX` may not exceed `N - 1 = MAXTOT + 1`. The seed series `phi_0` and `phi_1`
-are truncated at `x^(N-1)`, so an order above that is dropped as it is built and
-the resulting table would be quietly incomplete rather than wrong-looking. The
-check below rejects that combination instead, so raising `MMAX` usually means
-raising [`MAXTOT`](@ref) with it.
-"""
-const MMAX = parse(Int, get(ENV, "MMAX", "13"))
+const MMAX   = parse(Int, get(ENV, "MMAX", "13"))
 
 # --- Derived sizes -----------------------------------------------------------
 
-"""
-    N = MAXTOT + 2
-
-Truncation order in `x`: the power series are carried as length-`N` coefficient
-vectors holding the degrees `x^0 .. x^(N-1)` (index `i` in `1..N` corresponds to
-`x^(i-1)`). Also the ceiling on [`MMAX`](@ref), which may not exceed `N - 1`.
-"""
+# Truncation order in x: the power series are carried as length-N coefficient
+# vectors holding the degrees x^0 .. x^(N-1) (index i in 1..N corresponds to
+# x^(i-1)).  Also the ceiling on MMAX, which may not exceed N - 1.
 const N = MAXTOT + 2
 
-"""
-    MDER = MAXTOT + 4
-
-Highest `s`-derivative order that the family-projection and integration
-substitution dictionaries are built for. It exceeds [`MAXTOT`](@ref) by a margin
-because the `phi` recurrence differentiates twice per step, so orders somewhat
-above the tabulated range appear in intermediate expressions and must still be
-matched by the substitutions.
-"""
+# Highest s-derivative order that the family-projection and integration
+# substitution dictionaries are built for.  It exceeds MAXTOT by a margin
+# because the phi recurrence differentiates twice per step, so orders somewhat
+# above the tabulated range appear in intermediate expressions and must still be
+# matched by the substitutions.
 const MDER = MAXTOT + 4
 
 # The x-truncation has to reach x^MMAX or the top multipoles are silently
@@ -382,7 +340,8 @@ open(joinpath(@__DIR__, "..", "tables", "monomial_functions.jl"), "w") do io
   println(io, "#")
   println(io, "#   MAXTOT=$MAXTOT MMAX=$MMAX julia programs/create_monomial_functions.jl")
   println(io, "#")
-  println(io, "# Input parameters")
+  println(io, "# Input parameters (documented in tables/gg_coef_table.jl, whose docstrings")
+  println(io, "# the package includes: `?MAXTOT` and `?MMAX` in the REPL)")
   println(io, "#   MAXTOT = $MAXTOT   max total degree p+q of the x^p y^q monomials kept")
   println(io, "#   MMAX   = $MMAX   max multipole order m of the a_m and b_m functions")
   println(io, "#")

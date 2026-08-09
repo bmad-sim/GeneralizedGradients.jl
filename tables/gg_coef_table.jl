@@ -16,7 +16,7 @@
 #
 #   MAXTOT=12 MMAX=13 julia programs/create_gg_coef_table.jl
 #
-# Input parameters
+# Input parameters (documented in the docstrings just below)
 #   MAXTOT = 12   max total degree p+q of the x^p y^q monomials kept
 #   MMAX   = 13   max multipole order m of the a_m and b_m functions
 #
@@ -33,6 +33,58 @@
 #
 # An (m,nd) or nd key is absent when every one of its coefficients is zero.
 # ---------------------------------------------------------------------------
+
+"""
+    MAXTOT
+
+Maximum total degree `p + q` of the monomials `x^p y^q` tabulated in
+`tables/gg_coef_table.jl`, and the highest derivative order `nd` the table
+carries for `a(m,nd)`, `b(m,nd)` and `bs(nd)`. This table was built with
+`MAXTOT = 12`.
+
+It is a property of the table rather than a fit setting: it is the ceiling on
+`GGFitInputParams.nd_max`, which selects from what is tabulated here.
+
+Covering a higher order means rebuilding the table, which is what
+`programs/create_gg_coef_table.jl` is for:
+
+    MAXTOT=16 MMAX=17 julia programs/create_gg_coef_table.jl
+
+`MAXTOT` and `MMAX` are that program's only inputs. It reads each from the
+environment variable of the same name, falling back to the default built into
+the program, and writes both back into the table it generates -- as this
+docstring and as the header comment.
+
+Raising `MAXTOT` enlarges the table in every direction at once: how far the
+`phi` recurrence is carried, the `(MAXTOT+1)(MAXTOT+2)/2` monomials per GG
+function, the `nd` range, and the internal sizes derived from it. Generation
+time grows steeply as a result, each step costing considerably more than the
+last. There is little reason to raise it for its own sake -- a fit is limited by
+what the field grid supports long before it is limited by the table.
+"""
+const MAXTOT = 12
+
+"""
+    MMAX
+
+Maximum multipole order `m` of the `a_m` and `b_m` functions in
+`tables/gg_coef_table.jl`: the largest `m` appearing in a tabulated `a(m,nd)` or
+`b(m,nd)` key. This table was built with `MMAX = 13`.
+
+It is the ceiling on `GGFitInputParams.m_max`, whose default of `-1` keeps every
+multipole order the table has, that is `1:MMAX`.
+
+`bs(nd)` carries no multipole order -- it is the derivative tower of `a_0` -- so
+it is unaffected by this limit.
+
+Changing it means rebuilding the table; see `MAXTOT` for the command and for
+what the rebuild costs. `MMAX` may not exceed `MAXTOT + 1`: the seed series
+`phi_0` and `phi_1` are truncated at `x^(MAXTOT+1)`, so a higher order would be
+dropped as the table was built, leaving it quietly incomplete rather than
+visibly wrong. `create_gg_coef_table.jl` rejects that combination instead of
+writing such a table, so raising `MMAX` usually means raising `MAXTOT` with it.
+"""
+const MMAX   = 13
 
 Bx_a  = Dict{Tuple{Int64, Int64}, Vector{Tuple{Real, Int64, Int64, Int64}}}()
 Bx_b  = Dict{Tuple{Int64, Int64}, Vector{Tuple{Real, Int64, Int64, Int64}}}()

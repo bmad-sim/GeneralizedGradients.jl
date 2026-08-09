@@ -27,88 +27,38 @@ using Symbolics
 # ---------------------------------------------------------------------------
 
 # --- Input parameters (override from the environment) ------------------------
-# These two, and nothing else, determine the contents of the output file; they
-# are echoed into its header so a table on disk says what produced it.
+# These two, and nothing else, determine the contents of the output file.
+#
+# This program is not part of the package, so a docstring written here would
+# never reach a REPL.  MAXTOT and MMAX are therefore documented where they are
+# visible: _MAXTOT_DOC and _MMAX_DOC, at the writer below, are emitted into
+# tables/gg_coef_table.jl as docstrings on the constants it defines, and that
+# file is included by the package -- so `?MAXTOT` and `?MMAX` answer with the
+# parameters of the table actually in use.
 
-"""
-    MAXTOT
-
-Maximum total degree `p + q` of the monomials `x^p y^q` tabulated, and the
-maximum derivative order `nd` of the GG functions the table covers.
-
-Read from the environment variable of the same name; `12` if unset. The default
-is what `tables/gg_coef_table.jl` was built with and what the package ships.
-
-    MAXTOT=16 julia programs/create_gg_coef_table.jl
-
-Raising it enlarges the table in every direction at once: it sets how far the
-`phi` recurrence is carried, the number of `(p,q)` monomials per GG function
-(`(MAXTOT+1)(MAXTOT+2)/2` of them), the `nd` range of the tabulated `a(m,nd)`,
-`b(m,nd)` and `bs(nd)`, and the three derived sizes [`N`](@ref), [`MDER`](@ref)
-and [`MAX_H`](@ref). Run time grows steeply as a result — rebuilding the default
-table is not quick, and each further step costs considerably more than the last.
-
-There is no reason to raise it for its own sake. A fit is limited by what the
-field grid supports long before it is limited by the table, so enlarge this only
-to make room for a genuinely higher `nd_max` or, via [`MMAX`](@ref), a higher
-multipole order. See also `GGFitInputParams` in the package proper, whose
-`m_max` and `nd_max` select from what is tabulated here.
-"""
 const MAXTOT = parse(Int, get(ENV, "MAXTOT", "12"))
-
-"""
-    MMAX
-
-Maximum multipole order `m` of the `a_m` and `b_m` functions carried through the
-calculation, hence the largest `m` appearing in a tabulated `a(m,nd)` or
-`b(m,nd)` key.
-
-Read from the environment variable of the same name; `13` if unset, which is the
-order `tables/gg_coef_table.jl` was built with.
-
-    MAXTOT=16 MMAX=17 julia programs/create_gg_coef_table.jl
-
-`bs(nd)` carries no multipole order — it is the derivative tower of `a_0` — so
-it is unaffected by this limit.
-
-`MMAX` may not exceed `N - 1 = MAXTOT + 1`. The seed series `phi_0` and `phi_1`
-are truncated at `x^(N-1)`, so an order above that is dropped as it is built and
-the resulting table would be quietly incomplete rather than wrong-looking. The
-check below rejects that combination instead, so raising `MMAX` usually means
-raising [`MAXTOT`](@ref) with it.
-"""
-const MMAX = parse(Int, get(ENV, "MMAX", "13"))
+const MMAX   = parse(Int, get(ENV, "MMAX", "13"))
 
 # --- Derived sizes -----------------------------------------------------------
+# Internal to this program (they are recorded in the output header, but the
+# table defines no constants for them), so they are documented here.
 
-"""
-    N = MAXTOT + 2
-
-Truncation order in `x`: the power series are carried as length-`N` coefficient
-vectors holding the degrees `x^0 .. x^(N-1)`. Also the ceiling on
-[`MMAX`](@ref), which may not exceed `N - 1`.
-"""
+# Truncation order in x: the power series are carried as length-N coefficient
+# vectors holding the degrees x^0 .. x^(N-1).  Also the ceiling on MMAX, which
+# may not exceed N - 1.
 const N = MAXTOT + 2
 
-"""
-    MDER = MAXTOT + 4
-
-Highest `s`-derivative order that the family-projection and integration
-substitution dictionaries are built for. It exceeds [`MAXTOT`](@ref) by a margin
-because the `phi` recurrence differentiates twice per step, so orders somewhat
-above the tabulated `nd` range appear in intermediate expressions and must still
-be matched by the substitutions.
-"""
+# Highest s-derivative order that the family-projection and integration
+# substitution dictionaries are built for.  It exceeds MAXTOT by a margin
+# because the phi recurrence differentiates twice per step, so orders somewhat
+# above the tabulated nd range appear in intermediate expressions and must still
+# be matched by the substitutions.
 const MDER = MAXTOT + 4
 
-"""
-    MAX_H = MAXTOT + 2
-
-Highest power `k` of `g_ref` any tabulated coefficient can carry, and so the
-number of `g_ref`-derivatives `coeff_poly_h` takes when it splits a coefficient
-into its `(c, p, q, k)` terms. The bound comes from `1/(1 + g_ref x)`, expanded
-to `x^(N-1)`, being the only source of `g_ref` powers.
-"""
+# Highest power k of g_ref any tabulated coefficient can carry, and so the
+# number of g_ref-derivatives coeff_poly_h takes when it splits a coefficient
+# into its (c, p, q, k) terms.  The bound comes from 1/(1 + g_ref x), expanded
+# to x^(N-1), being the only source of g_ref powers.
 const MAX_H = MAXTOT + 2
 
 # The x-truncation has to reach x^MMAX or the top multipoles are silently
@@ -399,6 +349,73 @@ end
 # Collect contributions and write output
 # ---------------------------------------------------------------------------
 
+# Docstrings for the two input parameters, emitted into the table on the
+# constants that record them.  They describe the table as built, so the values
+# are interpolated in; keep them free of the triple-quote delimiter.
+
+const _MAXTOT_DOC = """
+    MAXTOT
+
+Maximum total degree `p + q` of the monomials `x^p y^q` tabulated in
+`tables/gg_coef_table.jl`, and the highest derivative order `nd` the table
+carries for `a(m,nd)`, `b(m,nd)` and `bs(nd)`. This table was built with
+`MAXTOT = $MAXTOT`.
+
+It is a property of the table rather than a fit setting: it is the ceiling on
+`GGFitInputParams.nd_max`, which selects from what is tabulated here.
+
+Covering a higher order means rebuilding the table, which is what
+`programs/create_gg_coef_table.jl` is for:
+
+    MAXTOT=16 MMAX=17 julia programs/create_gg_coef_table.jl
+
+`MAXTOT` and `MMAX` are that program's only inputs. It reads each from the
+environment variable of the same name, falling back to the default built into
+the program, and writes both back into the table it generates -- as this
+docstring and as the header comment.
+
+Raising `MAXTOT` enlarges the table in every direction at once: how far the
+`phi` recurrence is carried, the `(MAXTOT+1)(MAXTOT+2)/2` monomials per GG
+function, the `nd` range, and the internal sizes derived from it. Generation
+time grows steeply as a result, each step costing considerably more than the
+last. There is little reason to raise it for its own sake -- a fit is limited by
+what the field grid supports long before it is limited by the table.
+"""
+
+const _MMAX_DOC = """
+    MMAX
+
+Maximum multipole order `m` of the `a_m` and `b_m` functions in
+`tables/gg_coef_table.jl`: the largest `m` appearing in a tabulated `a(m,nd)` or
+`b(m,nd)` key. This table was built with `MMAX = $MMAX`.
+
+It is the ceiling on `GGFitInputParams.m_max`, whose default of `-1` keeps every
+multipole order the table has, that is `1:MMAX`.
+
+`bs(nd)` carries no multipole order -- it is the derivative tower of `a_0` -- so
+it is unaffected by this limit.
+
+Changing it means rebuilding the table; see `MAXTOT` for the command and for
+what the rebuild costs. `MMAX` may not exceed `MAXTOT + 1`: the seed series
+`phi_0` and `phi_1` are truncated at `x^(MAXTOT+1)`, so a higher order would be
+dropped as the table was built, leaving it quietly incomplete rather than
+visibly wrong. `create_gg_coef_table.jl` rejects that combination instead of
+writing such a table, so raising `MMAX` usually means raising `MAXTOT` with it.
+"""
+
+"""
+    write_docstring(io, doc::AbstractString, definition::AbstractString)
+
+Write `definition` to `io` with `doc` attached to it as a Julia docstring.
+"""
+function write_docstring(io, doc::AbstractString, definition::AbstractString)
+  println(io, "\"\"\"")
+  print(io, doc)
+  println(io, "\"\"\"")
+  println(io, definition)
+  println(io)
+end
+
 outfile = joinpath(@__DIR__, "..", "tables", "gg_coef_table.jl")
 open(outfile, "w") do io
   println(io, "# Inverse field and vector-potential coefficient table (full g_ref dependence)")
@@ -419,7 +436,7 @@ open(outfile, "w") do io
   println(io, "#")
   println(io, "#   MAXTOT=$MAXTOT MMAX=$MMAX julia programs/create_gg_coef_table.jl")
   println(io, "#")
-  println(io, "# Input parameters")
+  println(io, "# Input parameters (documented in the docstrings just below)")
   println(io, "#   MAXTOT = $MAXTOT   max total degree p+q of the x^p y^q monomials kept")
   println(io, "#   MMAX   = $MMAX   max multipole order m of the a_m and b_m functions")
   println(io, "#")
@@ -437,6 +454,11 @@ open(outfile, "w") do io
   println(io, "# An (m,nd) or nd key is absent when every one of its coefficients is zero.")
   println(io, "# ---------------------------------------------------------------------------")
   println(io)
+
+  # The two input parameters, as documented constants: this file is included by
+  # the package, so these are what `?MAXTOT` and `?MMAX` find.
+  write_docstring(io, _MAXTOT_DOC, "const MAXTOT = $MAXTOT")
+  write_docstring(io, _MMAX_DOC,   "const MMAX   = $MMAX")
 
   for comp in ("Bx", "By", "Bs", "Ax", "Ay", "As")
     println(io, "$(comp)_a  = Dict{Tuple{Int64, Int64}, Vector{Tuple{Real, Int64, Int64, Int64}}}()")

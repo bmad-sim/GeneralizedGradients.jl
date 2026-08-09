@@ -16,7 +16,8 @@
 #
 #   MAXTOT=12 MMAX=13 julia programs/create_monomial_functions.jl
 #
-# Input parameters
+# Input parameters (documented in tables/gg_coef_table.jl, whose docstrings
+# the package includes: `?MAXTOT` and `?MMAX` in the REPL)
 #   MAXTOT = 12   max total degree p+q of the x^p y^q monomials kept
 #   MMAX   = 13   max multipole order m of the a_m and b_m functions
 #

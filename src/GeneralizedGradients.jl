@@ -9,7 +9,8 @@ module GeneralizedGradients
   # evaluation / field-grid code).
 
   # Working size for the truncated (x,y) coefficient arrays.  The gg_coef table
-  # is built to total monomial degree MAXTOT (12), so 20 leaves ample headroom.
+  # is built to total monomial degree MAXTOT (see the table's own docstring for
+  # that constant, included below), so 20 leaves ample headroom.
   const _NMAX = 20
 
   # openPMD SI base-unit exponents (L, M, T, I, Theta, N, J) for Tesla and V/m.
@@ -28,7 +29,9 @@ module GeneralizedGradients
   include("gg_utils.jl")
   include("field_grid_utils.jl")
 
-  export FieldGridTable,
+  export MAXTOT,          # defined, with their docstrings, in tables/gg_coef_table.jl
+       MMAX,
+       FieldGridTable,
        GridAnchorPt,
        GridGeometry,
        GGFitInputParams,

@@ -26,13 +26,100 @@ using Symbolics
 #   By += coef * g_ref^r * x^p * y^q * b(m,nd)
 # ---------------------------------------------------------------------------
 
+# --- Input parameters (override from the environment) ------------------------
+# These two, and nothing else, determine the contents of the output file; they
+# are echoed into its header so a table on disk says what produced it.
+
+"""
+    MAXTOT
+
+Maximum total degree `p + q` of the monomials `x^p y^q` tabulated, and the
+maximum derivative order `nd` of the GG functions the table covers.
+
+Read from the environment variable of the same name; `12` if unset. The default
+is what `tables/gg_coef_table.jl` was built with and what the package ships.
+
+    MAXTOT=16 julia programs/create_gg_coef_table.jl
+
+Raising it enlarges the table in every direction at once: it sets how far the
+`phi` recurrence is carried, the number of `(p,q)` monomials per GG function
+(`(MAXTOT+1)(MAXTOT+2)/2` of them), the `nd` range of the tabulated `a(m,nd)`,
+`b(m,nd)` and `bs(nd)`, and the three derived sizes [`N`](@ref), [`MDER`](@ref)
+and [`MAX_H`](@ref). Run time grows steeply as a result — rebuilding the default
+table is not quick, and each further step costs considerably more than the last.
+
+There is no reason to raise it for its own sake. A fit is limited by what the
+field grid supports long before it is limited by the table, so enlarge this only
+to make room for a genuinely higher `nd_max` or, via [`MMAX`](@ref), a higher
+multipole order. See also `GGFitInputParams` in the package proper, whose
+`m_max` and `nd_max` select from what is tabulated here.
+"""
 const MAXTOT = parse(Int, get(ENV, "MAXTOT", "12"))
+
+"""
+    MMAX
+
+Maximum multipole order `m` of the `a_m` and `b_m` functions carried through the
+calculation, hence the largest `m` appearing in a tabulated `a(m,nd)` or
+`b(m,nd)` key.
+
+Read from the environment variable of the same name; `13` if unset, which is the
+order `tables/gg_coef_table.jl` was built with.
+
+    MAXTOT=16 MMAX=17 julia programs/create_gg_coef_table.jl
+
+`bs(nd)` carries no multipole order — it is the derivative tower of `a_0` — so
+it is unaffected by this limit.
+
+`MMAX` may not exceed `N - 1 = MAXTOT + 1`. The seed series `phi_0` and `phi_1`
+are truncated at `x^(N-1)`, so an order above that is dropped as it is built and
+the resulting table would be quietly incomplete rather than wrong-looking. The
+check below rejects that combination instead, so raising `MMAX` usually means
+raising [`MAXTOT`](@ref) with it.
+"""
+const MMAX = parse(Int, get(ENV, "MMAX", "13"))
+
+# --- Derived sizes -----------------------------------------------------------
+
+"""
+    N = MAXTOT + 2
+
+Truncation order in `x`: the power series are carried as length-`N` coefficient
+vectors holding the degrees `x^0 .. x^(N-1)`. Also the ceiling on
+[`MMAX`](@ref), which may not exceed `N - 1`.
+"""
 const N = MAXTOT + 2
+
+"""
+    MDER = MAXTOT + 4
+
+Highest `s`-derivative order that the family-projection and integration
+substitution dictionaries are built for. It exceeds [`MAXTOT`](@ref) by a margin
+because the `phi` recurrence differentiates twice per step, so orders somewhat
+above the tabulated `nd` range appear in intermediate expressions and must still
+be matched by the substitutions.
+"""
+const MDER = MAXTOT + 4
+
+"""
+    MAX_H = MAXTOT + 2
+
+Highest power `k` of `g_ref` any tabulated coefficient can carry, and so the
+number of `g_ref`-derivatives `coeff_poly_h` takes when it splits a coefficient
+into its `(c, p, q, k)` terms. The bound comes from `1/(1 + g_ref x)`, expanded
+to `x^(N-1)`, being the only source of `g_ref` powers.
+"""
+const MAX_H = MAXTOT + 2
+
+# The x-truncation has to reach x^MMAX or the top multipoles are silently
+# dropped from phi_0 / phi_1 (the `m <= N - 1` guards below).
+MMAX <= N - 1 || error("MMAX = $MMAX exceeds the x truncation N - 1 = $(N - 1). " *
+                       "Raise MAXTOT to at least $(MMAX - 1).")
 
 @variables s
 Ds = Differential(s)
 
-for m in 0:13
+for m in 0:MMAX
   @eval @variables $(Symbol("a$m"))(s)
   if m >= 1
     @eval @variables $(Symbol("b$m"))(s)
@@ -41,8 +128,8 @@ end
 
 @variables g_ref
 
-avars = [eval(Symbol("a$m")) for m in 0:13]   # avars[k+1] = a_k(s)
-bvars = [eval(Symbol("b$m")) for m in 1:13]   # bvars[m]   = b_m(s)
+avars = [eval(Symbol("a$m")) for m in 0:MMAX]   # avars[k+1] = a_k(s)
+bvars = [eval(Symbol("b$m")) for m in 1:MMAX]   # bvars[m]   = b_m(s)
 
 # ---------------------------------------------------------------------------
 # phi_0, phi_1 seed functions
@@ -51,13 +138,13 @@ bvars = [eval(Symbol("b$m")) for m in 1:13]   # bvars[m]   = b_m(s)
 phi0 = Vector{Num}(undef, N)
 fill!(phi0, Num(0))
 phi0[1] = -avars[1]
-for m in 1:13
+for m in 1:MMAX
   m <= N - 1 && (phi0[m+1] = -avars[m+1] / factorial(m))
 end
 
 phi1 = Vector{Num}(undef, N)
 fill!(phi1, Num(0))
-for m in 1:13
+for m in 1:MMAX
   m - 1 <= N - 1 && (phi1[m] = -bvars[m] / factorial(m - 1))
 end
 
@@ -175,22 +262,20 @@ end
 
 println("computing vector potential coefficients ...")
 
-const MDER = MAXTOT + 4
-
 # Project an expression onto one GG family by zeroing the others (the field
 # coefficients are linear in the GG functions); int ds lowers a b_s order.
 zero_a0    = Dict{Num,Num}()   # zero a_0 and its s-derivatives
-zero_apos  = Dict{Num,Num}()   # zero a_1 .. a_13 and derivatives
-zero_b     = Dict{Num,Num}()   # zero b_1 .. b_13 and derivatives
-zero_a_all = Dict{Num,Num}()   # zero a_0 .. a_13 and derivatives
+zero_apos  = Dict{Num,Num}()   # zero a_1 .. a_MMAX and derivatives
+zero_b     = Dict{Num,Num}()   # zero b_1 .. b_MMAX and derivatives
+zero_a_all = Dict{Num,Num}()   # zero a_0 .. a_MMAX and derivatives
 for nd in 0:MDER
   zero_a0[nth_ds_deriv(avars[1], nd)] = Num(0)
 end
-for m in 1:13, nd in 0:MDER
+for m in 1:MMAX, nd in 0:MDER
   zero_apos[nth_ds_deriv(avars[m+1], nd)] = Num(0)
   zero_b[nth_ds_deriv(bvars[m], nd)]      = Num(0)
 end
-for m in 0:13, nd in 0:MDER
+for m in 0:MMAX, nd in 0:MDER
   zero_a_all[nth_ds_deriv(avars[m+1], nd)] = Num(0)
 end
 zero_not_a0 = merge(zero_apos, zero_b)        # keep only a_0  (the b_s family)
@@ -246,21 +331,21 @@ println("vector potential coefficients computed")
 Dh = Differential(g_ref)
 
 # Build the zero-substitution dictionary once: every symbolic function and
-# every s-derivative (up to MAXTOT+4) mapped to 0.  g_ref is NOT zeroed here.
+# every s-derivative (up to MDER) mapped to 0.  g_ref is NOT zeroed here.
 println("building zero substitution dict ...")
 all_zero = Dict{Num,Num}()
 
-for m in 0:13
+for m in 0:MMAX
   v = avars[m+1]
   all_zero[v] = Num(0)
-  for nd in 1:(MAXTOT+4)
+  for nd in 1:MDER
     all_zero[nth_ds_deriv(v, nd)] = Num(0)
   end
 end
-for m in 1:13
+for m in 1:MMAX
   v = bvars[m]
   all_zero[v] = Num(0)
-  for nd in 1:(MAXTOT+4)
+  for nd in 1:MDER
     all_zero[nth_ds_deriv(v, nd)] = Num(0)
   end
 end
@@ -310,9 +395,6 @@ function fmt_terms(terms)
   return "[" * join(parts, ", ") * "]"
 end
 
-# Maximum g_ref power that can appear in any T[(p,q)] coefficient.
-const MAX_H = MAXTOT + 2
-
 # ---------------------------------------------------------------------------
 # Collect contributions and write output
 # ---------------------------------------------------------------------------
@@ -327,6 +409,33 @@ open(outfile, "w") do io
   println(io, "# Ay_bs, As_a, As_b, As_bs (same meaning, e.g. Ax_b[(m,nd)] -> Ax += ...).")
   println(io, "# Notation: b(m,nd) = d^nd b_m/ds^nd,  a(m,nd) = d^nd a_m/ds^nd,")
   println(io, "#           bs(nd)  = d^{nd+1} a_0/ds^{nd+1}")
+  println(io, "#")
+  println(io, "# ---------------------------------------------------------------------------")
+  println(io, "# GENERATED FILE -- do not edit by hand.")
+  println(io, "#")
+  println(io, "# Written by programs/create_gg_coef_table.jl with the input parameters")
+  println(io, "# below.  These are the only inputs: the same two values always reproduce")
+  println(io, "# this file exactly.  To regenerate:")
+  println(io, "#")
+  println(io, "#   MAXTOT=$MAXTOT MMAX=$MMAX julia programs/create_gg_coef_table.jl")
+  println(io, "#")
+  println(io, "# Input parameters")
+  println(io, "#   MAXTOT = $MAXTOT   max total degree p+q of the x^p y^q monomials kept")
+  println(io, "#   MMAX   = $MMAX   max multipole order m of the a_m and b_m functions")
+  println(io, "#")
+  println(io, "# Derived sizes")
+  println(io, "#   N      = $N   truncation order in x (degrees 0 .. N-1) = MAXTOT + 2")
+  println(io, "#   MDER   = $MDER   max s-derivative order carried in the symbolic")
+  println(io, "#                projections = MAXTOT + 4")
+  println(io, "#   MAX_H  = $MAX_H   max power k of g_ref a coefficient can carry = MAXTOT + 2")
+  println(io, "#")
+  println(io, "# Ranges actually tabulated")
+  println(io, "#   a(m,nd), b(m,nd):  m = 1 .. $MMAX,  nd = 0 .. $MAXTOT")
+  println(io, "#   bs(nd):            nd = 0 .. $MAXTOT")
+  println(io, "#   monomials x^p y^q: p + q <= $MAXTOT")
+  println(io, "#")
+  println(io, "# An (m,nd) or nd key is absent when every one of its coefficients is zero.")
+  println(io, "# ---------------------------------------------------------------------------")
   println(io)
 
   for comp in ("Bx", "By", "Bs", "Ax", "Ay", "As")
@@ -336,13 +445,13 @@ open(outfile, "w") do io
   end
   println(io)
 
-  # --- b_m(s) functions, m = 1..13, nd = 0..MAXTOT ---
+  # --- b_m(s) functions, m = 1..MMAX, nd = 0..MAXTOT ---
   println(io, "# --- b(m,nd) contributions ---")
   println(io)
   for (T, prefix) in [(TBy, "By_b"), (TBx, "Bx_b"), (TBs, "Bs_b"),
             (TAy, "Ay_b"), (TAx, "Ax_b"), (TAs, "As_b")]
     print("Processing $(prefix) ...")
-    for m in 1:13, nd in 0:MAXTOT
+    for m in 1:MMAX, nd in 0:MAXTOT
       sym   = nth_ds_deriv(bvars[m], nd)
       terms = Tuple{Rational{Int},Int,Int,Int}[]
       for q in 0:MAXTOT, p in 0:(MAXTOT-q)
@@ -357,13 +466,13 @@ open(outfile, "w") do io
     println("done")
   end
 
-  # --- a_m(s) functions, m = 1..13, nd = 0..MAXTOT ---
+  # --- a_m(s) functions, m = 1..MMAX, nd = 0..MAXTOT ---
   println(io, "# --- a(m,nd) contributions ---")
   println(io)
   for (T, prefix) in [(TBy, "By_a"), (TBx, "Bx_a"), (TBs, "Bs_a"),
             (TAy, "Ay_a"), (TAx, "Ax_a"), (TAs, "As_a")]
     print("Processing $(prefix) ...")
-    for m in 1:13, nd in 0:MAXTOT
+    for m in 1:MMAX, nd in 0:MAXTOT
       sym   = nth_ds_deriv(avars[m+1], nd)   # avars[m+1] = a_m(s)
       terms = Tuple{Rational{Int},Int,Int,Int}[]
       for q in 0:MAXTOT, p in 0:(MAXTOT-q)

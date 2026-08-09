@@ -53,36 +53,31 @@ Base.:(==)(a::FieldGridTable, b::FieldGridTable) = all(getfield(a,f) == getfield
     mutable struct GGFitInputParams
 
 Input parameters controlling a `gg_calc_fit` fit.
+See the documentation of `gg_calc_fit` for more documentation.
 
 ## Fields
 
-- `origin::Vector{Float64}` — Defines the line `[x0, y0, z]` about which the
-  generalized gradient coefficients are computed. If h is non-zero, origin must
-  be `[0, 0]`.
+- `origin::Vector{Float64}` — Defines the line `[x0, y0, z]` about which the  generalized gradient 
+  coefficients are computed. If h (1/bending_radius) is non-zero, origin must be `[0, 0]`.
 
 - `n_planes_add::Int` — Number of z-planes added to either side of the base
-  z-plane to be used in the analysis of the derivatives at any given base z-plane
-  (see "How the GG Calculation Works" section). For example, for
-  `n_planes_add = 2`, two planes would be added to either side of the base plane
+  z-plane to be used in the analysis of the derivatives at any given base z-plane.
+  For example, for `n_planes_add = 2`, two planes would be added to either side of the base plane
   making the total number of planes used in the analysis equal to five.
 
 - `core_weight::Float64` — Merit function weight for "core" points (field table
   points whose transverse (x,y) position is near (0,0)). Default is 1.0 which
-  gives an equal weight for all points of a given z-plane. See the "How the GG
-  Calculation Works" section below for documentation on the optimizer merit
-  function.
+  gives an equal weight for all points of a given z-plane.
 
-- `outer_plane_weight::Float64` — Merit function weight for z-planes away from
-  the base z-plane when `n_planes_add` is non-zero. See the "How the GG
-  Calculation Works" section below for documentation on the optimizer merit
-  function.
+- `outer_plane_weight::Float64` — Default is 1.0. Merit function weight for z-planes away from
+  the base z-plane when `n_planes_add` is non-zero.
 
 - `m_max::Union{Int,AbstractVector{Int}}` — Maximum multipole order `m` of the
   `a_m`/`b_m` functions retained in the fit. A single `Int` fixes it. A vector or
   range (for example `m_max = 1:8`) makes `gg_calc_fit` try each value in turn
   and keep the one that fits best (see `fit_criterion`). The default `-1` means
-  "use every `m` present in the coefficient table", which is the historical
-  behavior. The `bs(nd)` (that is, `a_0` derivative) unknowns carry no `m` and
+  `1:N` where `N` is the maximum in `tables/gg_coef_table.jl`. 
+  The `bs(nd)` (that is, `a_0` derivative) unknowns carry no `m` and
   are never removed by `m_max`.
 
 - `nd_max::Union{Int,AbstractVector{Int}}` — Maximum derivative order `nd`

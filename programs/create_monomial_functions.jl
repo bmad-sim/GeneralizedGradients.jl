@@ -7,14 +7,91 @@ using Symbolics
 # and their s-derivatives.
 # ---------------------------------------------------------------------------
 
-const MAXTOT = parse(Int, get(ENV, "MAXTOT", "12"))     # max total degree p+q of x^p y^q monomials
-const N = MAXTOT + 2  # truncation order in x (degrees 0..N-1)
+# --- Input parameters (override from the environment) ------------------------
+# These two, and nothing else, determine the contents of the output file; they
+# are echoed into its header so a table on disk says what produced it.
+
+"""
+    MAXTOT
+
+Maximum total degree `p + q` of the monomials `x^p y^q` tabulated: the output
+file gets one section per `(p,q)` pair with `p + q <= MAXTOT`.
+
+Read from the environment variable of the same name; `12` if unset. The default
+is what `tables/monomial_functions.jl` was built with.
+
+    MAXTOT=16 julia programs/create_monomial_functions.jl
+
+Raising it enlarges the table in every direction at once: it sets how far the
+`phi` recurrence is carried, the number of monomial sections
+(`(MAXTOT+1)(MAXTOT+2)/2` of them), the derivative orders appearing in the
+coefficient expressions, and the two derived sizes [`N`](@ref) and
+[`MDER`](@ref). Run time grows steeply as a result, and each further step costs
+considerably more than the last.
+
+This program and `create_gg_coef_table.jl` compute the same expansion and take
+the same two parameters; they differ only in the form of the output. This one
+writes readable symbolic expressions in `a(m,nd)`, `b(m,nd)` and `bs(nd)`, for
+reading and for checking against the paper; the other writes the numeric
+`(coef, p, q, k)` tuples the fitting code consumes.
+"""
+const MAXTOT = parse(Int, get(ENV, "MAXTOT", "12"))
+
+"""
+    MMAX
+
+Maximum multipole order `m` of the `a_m` and `b_m` functions carried through the
+calculation, hence the largest `m` that can appear in an `a(m,nd)` or `b(m,nd)`
+term of a printed coefficient.
+
+Read from the environment variable of the same name; `13` if unset, which is the
+order `tables/monomial_functions.jl` was built with.
+
+    MAXTOT=16 MMAX=17 julia programs/create_monomial_functions.jl
+
+`bs(nd)` carries no multipole order — it is the derivative tower of `a_0` — so
+it is unaffected by this limit.
+
+`MMAX` may not exceed `N - 1 = MAXTOT + 1`. The seed series `phi_0` and `phi_1`
+are truncated at `x^(N-1)`, so an order above that is dropped as it is built and
+the resulting table would be quietly incomplete rather than wrong-looking. The
+check below rejects that combination instead, so raising `MMAX` usually means
+raising [`MAXTOT`](@ref) with it.
+"""
+const MMAX = parse(Int, get(ENV, "MMAX", "13"))
+
+# --- Derived sizes -----------------------------------------------------------
+
+"""
+    N = MAXTOT + 2
+
+Truncation order in `x`: the power series are carried as length-`N` coefficient
+vectors holding the degrees `x^0 .. x^(N-1)` (index `i` in `1..N` corresponds to
+`x^(i-1)`). Also the ceiling on [`MMAX`](@ref), which may not exceed `N - 1`.
+"""
+const N = MAXTOT + 2
+
+"""
+    MDER = MAXTOT + 4
+
+Highest `s`-derivative order that the family-projection and integration
+substitution dictionaries are built for. It exceeds [`MAXTOT`](@ref) by a margin
+because the `phi` recurrence differentiates twice per step, so orders somewhat
+above the tabulated range appear in intermediate expressions and must still be
+matched by the substitutions.
+"""
+const MDER = MAXTOT + 4
+
+# The x-truncation has to reach x^MMAX or the top multipoles are silently
+# dropped from phi_0 / phi_1 (the `m <= N - 1` guards below).
+MMAX <= N - 1 || error("MMAX = $MMAX exceeds the x truncation N - 1 = $(N - 1). " *
+                       "Raise MAXTOT to at least $(MMAX - 1).")
 
 @variables s
 Ds = Differential(s)
 
 # Symbolic functions a_m(s), b_m(s), a_0(s)
-for m in 0:13
+for m in 0:MMAX
   @eval @variables $(Symbol("a$m"))(s)
   if m >= 1
     @eval @variables $(Symbol("b$m"))(s)
@@ -23,25 +100,25 @@ end
 
 @variables g_ref  # g_ref is taken to be constant (independent of s)
 
-avars = [eval(Symbol("a$m")) for m in 0:13]
-bvars = [eval(Symbol("b$m")) for m in 1:13]
+avars = [eval(Symbol("a$m")) for m in 0:MMAX]
+bvars = [eval(Symbol("b$m")) for m in 1:MMAX]
 
-# phi_0(x,s) = -a_0(s) - sum_{m=1}^{13} a_m(s) x^m / m!
+# phi_0(x,s) = -a_0(s) - sum_{m=1}^{MMAX} a_m(s) x^m / m!
 
 phi0 = Vector{Num}(undef, N)
 fill!(phi0, Num(0))
 phi0[1] = -avars[1]            # x^0 coefficient: -a_0(s)
-for m in 1:13
+for m in 1:MMAX
   if m <= N - 1
     phi0[m+1] = -avars[m+1] / factorial(m)
   end
 end
 
-# phi_1(x,s) = - sum_{m=1}^{13} b_m(s) x^{m-1} / (m-1)!
+# phi_1(x,s) = - sum_{m=1}^{MMAX} b_m(s) x^{m-1} / (m-1)!
 
 phi1 = Vector{Num}(undef, N)
 fill!(phi1, Num(0))
-for m in 1:13
+for m in 1:MMAX
   if m - 1 <= N - 1
     phi1[m] = -bvars[m] / factorial(m - 1)
   end
@@ -175,8 +252,6 @@ println("coefficients computed")
 
 println("computing vector potential coefficients ...")
 
-const MDER = MAXTOT + 4
-
 function nth_ds(v, nd)
   r = v
   for _ in 1:nd
@@ -188,17 +263,17 @@ end
 # Substitution dictionaries that project an expression onto one GG family by
 # zeroing the others (the field coefficients are linear in the GG functions).
 zero_a0    = Dict{Num,Num}()   # zero a_0 and its s-derivatives
-zero_apos  = Dict{Num,Num}()   # zero a_1 .. a_13 and derivatives
-zero_b     = Dict{Num,Num}()   # zero b_1 .. b_13 and derivatives
-zero_a_all = Dict{Num,Num}()   # zero a_0 .. a_13 and derivatives
+zero_apos  = Dict{Num,Num}()   # zero a_1 .. a_MMAX and derivatives
+zero_b     = Dict{Num,Num}()   # zero b_1 .. b_MMAX and derivatives
+zero_a_all = Dict{Num,Num}()   # zero a_0 .. a_MMAX and derivatives
 for nd in 0:MDER
   zero_a0[nth_ds(avars[1], nd)] = Num(0)
 end
-for m in 1:13, nd in 0:MDER
+for m in 1:MMAX, nd in 0:MDER
   zero_apos[nth_ds(avars[m+1], nd)] = Num(0)
   zero_b[nth_ds(bvars[m], nd)]      = Num(0)
 end
-for m in 0:13, nd in 0:MDER
+for m in 0:MMAX, nd in 0:MDER
   zero_a_all[nth_ds(avars[m+1], nd)] = Num(0)
 end
 zero_not_a0 = merge(zero_apos, zero_b)        # keep only a_0  (the b_s family)
@@ -297,6 +372,28 @@ open(joinpath(@__DIR__, "..", "tables", "monomial_functions.jl"), "w") do io
   println(io, "# p+q <= $MAXTOT, assuming the curvature g_ref is constant (g_ref' = 0).")
   println(io, "# Notation: a(m,nd) = d^nd a_m/ds^nd, b(m,nd) = d^nd b_m/ds^nd,")
   println(io, "# bs(nd) = d^nd b_s/ds^nd.")
+  println(io, "")
+  println(io, "# ---------------------------------------------------------------------------")
+  println(io, "# GENERATED FILE -- do not edit by hand.")
+  println(io, "#")
+  println(io, "# Written by programs/create_monomial_functions.jl with the input parameters")
+  println(io, "# below.  These are the only inputs: the same two values always reproduce")
+  println(io, "# this file exactly.  To regenerate:")
+  println(io, "#")
+  println(io, "#   MAXTOT=$MAXTOT MMAX=$MMAX julia programs/create_monomial_functions.jl")
+  println(io, "#")
+  println(io, "# Input parameters")
+  println(io, "#   MAXTOT = $MAXTOT   max total degree p+q of the x^p y^q monomials kept")
+  println(io, "#   MMAX   = $MMAX   max multipole order m of the a_m and b_m functions")
+  println(io, "#")
+  println(io, "# Derived sizes")
+  println(io, "#   N      = $N   truncation order in x (degrees 0 .. N-1) = MAXTOT + 2")
+  println(io, "#   MDER   = $MDER   max s-derivative order carried in the symbolic")
+  println(io, "#                projections = MAXTOT + 4")
+  println(io, "#")
+  println(io, "# Sections below: one per monomial x^p y^q with p + q <= $MAXTOT, each giving")
+  println(io, "# the six coefficients as expressions in a(m,nd), b(m,nd), bs(nd) and g_ref.")
+  println(io, "# ---------------------------------------------------------------------------")
   println(io, "")
   for q in 0:MAXTOT
     for p in 0:(MAXTOT-q)

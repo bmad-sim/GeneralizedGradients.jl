@@ -106,11 +106,21 @@ dicts of scalar values as in gg_coefficients_at_plane.
 Creates the `table/gg_coef_table.jl` table.
 The created table contains the functions needed to calculate the coefficients for the taylor map of the magnetic field and the vector potential from the gg functions.
 
-This table do not have to be recreated unless you want to extend the derivative range. Currently derivatives up to order 12 are tabulated. To run:
+This table do not have to be recreated unless you want to extend the derivative range. Currently
+derivatives up to order 12 are tabulated. To run:
 ```
-julia src/create_gg_coef_table.jl <deriv-cut>
+julia programs/create_gg_coef_table.jl                    # the tabulated defaults
+MAXTOT=16 MMAX=17 julia programs/create_gg_coef_table.jl   # a larger table
 ```
-where `<deriv-cut>` is the derivative cutoff number.
+The two input parameters are read from the environment, and are recorded in the header of the
+table the program writes:
+
+- `MAXTOT` (default 12) — maximum total degree `p+q` of the `x^p y^q` monomials kept.
+- `MMAX` (default 13) — maximum multipole order `m` of the `a_m` and `b_m` functions.
+
+`MMAX` may not exceed `MAXTOT + 1`, since the expansion is truncated at `x^(MAXTOT+1)`; the
+program stops with an error rather than silently dropping the top multipoles. Cost grows steeply
+with `MAXTOT` — the default table takes a while to rebuild.
 
 ## programs/create_monomial_functions.jl
 
@@ -118,9 +128,13 @@ Creates the `table/monomial_functions.jl` table.
 This table contains the coefficients needed to calculate the coefficients for the taylor map of the magnetic field and vector potential from the gg functions. 
 The information in this file is the same as the `gg_coef_table.jl` table except in a form that is useful for optimization and other calculations.
 
-This table do not have to be recreated unless you want to extend the derivative range. Currently derivatives up to order 12 are tabulated. To run:
+This table do not have to be recreated unless you want to extend the derivative range. Currently
+derivatives up to order 12 are tabulated. To run:
 ```
-julia src/create_monomial_functions.jl <deriv-cut>
+julia programs/create_monomial_functions.jl                    # the tabulated defaults
+MAXTOT=16 MMAX=17 julia programs/create_monomial_functions.jl   # a larger table
 ```
-where `<deriv-cut>` is the derivative cutoff number.
+It takes the same `MAXTOT` and `MMAX` environment parameters as
+`create_gg_coef_table.jl` above, under the same `MMAX <= MAXTOT + 1` restriction, and likewise
+records them in the header of the table it writes.
 

@@ -22,7 +22,7 @@ from the package docstrings.
 ```@autodocs
 Modules = [GeneralizedGradients]
 Private = false
-Order   = [:type, :function]
+Order   = [:constant, :type, :function]
 ```
 
 ## Internal
@@ -32,5 +32,5 @@ These functions are not exported but are documented for reference.
 ```@autodocs
 Modules = [GeneralizedGradients]
 Public  = false
-Order   = [:type, :function]
+Order   = [:constant, :type, :function]
 ```

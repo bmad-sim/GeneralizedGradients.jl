@@ -75,8 +75,7 @@ See the documentation of `gg_calc_fit` for more documentation.
 - `m_max::Union{Int,AbstractVector{Int}}` — Maximum multipole order `m` of the
   `a_m`/`b_m` functions retained in the fit. A single `Int` fixes it. A vector or
   range (for example `m_max = 1:8`) makes `gg_calc_fit` try each value in turn
-  and keep the one that fits best (see `fit_criterion`). The default `-1` means
-  `1:N` where `N` is the maximum in `tables/gg_coef_table.jl`. 
+  and keep the one that fits best (see `fit_criterion`). The default `-1` means `1:MMAX`. 
   The `bs(nd)` (that is, `a_0` derivative) unknowns carry no `m` and
   are never removed by `m_max`.
 

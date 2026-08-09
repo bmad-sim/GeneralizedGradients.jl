@@ -112,11 +112,20 @@ derivatives up to order 12 are tabulated. To run:
 julia programs/create_gg_coef_table.jl                    # the tabulated defaults
 MAXTOT=16 MMAX=17 julia programs/create_gg_coef_table.jl   # a larger table
 ```
-The two input parameters are read from the environment, and are recorded in the header of the
-table the program writes:
+The two input parameters are read from the environment:
 
 - `MAXTOT` (default 12) — maximum total degree `p+q` of the `x^p y^q` monomials kept.
 - `MMAX` (default 13) — maximum multipole order `m` of the `a_m` and `b_m` functions.
+
+The program records both in the table it writes — in the header comment, and as documented
+constants `MAXTOT` and `MMAX`. The package includes that table, so the parameters of the table
+actually in use are available from the REPL:
+```julia
+julia> using GeneralizedGradients
+
+julia> MMAX          # and ?MMAX for the full documentation
+13
+```
 
 `MMAX` may not exceed `MAXTOT + 1`, since the expansion is truncated at `x^(MAXTOT+1)`; the
 program stops with an error rather than silently dropping the top multipoles. Cost grows steeply
@@ -135,6 +144,7 @@ julia programs/create_monomial_functions.jl                    # the tabulated d
 MAXTOT=16 MMAX=17 julia programs/create_monomial_functions.jl   # a larger table
 ```
 It takes the same `MAXTOT` and `MMAX` environment parameters as
-`create_gg_coef_table.jl` above, under the same `MMAX <= MAXTOT + 1` restriction, and likewise
-records them in the header of the table it writes.
+`create_gg_coef_table.jl` above, under the same `MMAX <= MAXTOT + 1` restriction, and records
+them in the header of the table it writes. They are documented in one place only, the `MAXTOT`
+and `MMAX` docstrings in `tables/gg_coef_table.jl` (`?MAXTOT` in the REPL).
 

@@ -1,18 +1,18 @@
 #---------------------------------------------------------------------------------------------------
-# Residual diagnostics for a gg_fit result.
+# Residual diagnostics for a gg_calc_fit result.
 #
-# The per-plane wRMS printed by gg_fit_show_results says how large the residual
+# The per-plane wRMS printed by gg_show_fit_results says how large the residual
 # is. It does not say what the residual is made of, which is the question that
 # decides what to do about it: a residual the GG expansion could represent but
 # the fit was not given enough terms for is fixed by enlarging the model, while a
 # residual that is not a Maxwellian field at all is not fixable by any GG model.
 #
 # Three independent measurements separate those cases; see the docstring of
-# `gg_fit_show_residuals` for how to read them together.
+# `gg_show_fit_residuals` for how to read them together.
 #---------------------------------------------------------------------------------------------------
 
 """
-    _gg_taylor_getters(results, ip, dz) -> (aval, bval, bsval)
+    _gg_taylor_getters(gg_fit, ip, dz) -> (aval, bval, bsval)
 
 GG coefficient getters for base plane `ip`, Taylor-shifted to the longitudinal
 offset `dz`: `aval(m, nd)` returns `a_m^[nd]` at `z_base[ip] + dz` as the fit
@@ -24,15 +24,15 @@ models it,
 
 and likewise for `b` and `b_s`. At `dz = 0` this is just the stored coefficient.
 
-This is the same Taylor extrapolation the `gg_fit` design matrix uses to carry a
+This is the same Taylor extrapolation the `gg_calc_fit` design matrix uses to carry a
 base plane's coefficients onto its neighbouring planes, so a residual built from
 these getters is the residual the fit actually minimized.
 """
-function _gg_taylor_getters(results::GGCoefs, ip::Integer, dz::Real)
-  ndtop = max(results.nd_max,
-              maximum((k[2] for k in keys(results.a)), init = 0),
-              maximum((k[2] for k in keys(results.b)), init = 0),
-              maximum(keys(results.bs), init = 0))
+function _gg_taylor_getters(gg_fit::GGCoefs, ip::Integer, dz::Real)
+  ndtop = max(gg_fit.nd_max,
+              maximum((k[2] for k in keys(gg_fit.a)), init = 0),
+              maximum((k[2] for k in keys(gg_fit.b)), init = 0),
+              maximum(keys(gg_fit.bs), init = 0))
 
   function tsum(at, nd)
     nd < 0 && return 0.0
@@ -44,51 +44,51 @@ function _gg_taylor_getters(results::GGCoefs, ip::Integer, dz::Real)
     return s
   end
 
-  aval(m, nd) = tsum(j -> get(results.a, (m, j), nothing) === nothing ? 0.0 :
-                          results.a[(m, j)][ip], nd)
-  bval(m, nd) = tsum(j -> get(results.b, (m, j), nothing) === nothing ? 0.0 :
-                          results.b[(m, j)][ip], nd)
-  bsval(nd)   = tsum(j -> get(results.bs, j, nothing) === nothing ? 0.0 :
-                          results.bs[j][ip], nd)
+  aval(m, nd) = tsum(j -> get(gg_fit.a, (m, j), nothing) === nothing ? 0.0 :
+                          gg_fit.a[(m, j)][ip], nd)
+  bval(m, nd) = tsum(j -> get(gg_fit.b, (m, j), nothing) === nothing ? 0.0 :
+                          gg_fit.b[(m, j)][ip], nd)
+  bsval(nd)   = tsum(j -> get(gg_fit.bs, j, nothing) === nothing ? 0.0 :
+                          gg_fit.bs[j][ip], nd)
   return aval, bval, bsval
 end
 
 #---------------------------------------------------------------------------------------------------
 
 """
-    gg_fit_residual_map(results::GGCoefs, field::FieldGridTable, plane::Integer;
-                        dplane::Integer = 0) -> NamedTuple
+    gg_make_fit_residual_table(gg_fit::GGCoefs, field::FieldGridTable, plane::Integer;
+                               dplane::Integer = 0) -> NamedTuple
 
 Field table minus GG fit over the transverse grid of one plane — the data behind
 one plane's RMS residual, and what to plot to see the shape of a bad fit.
 
-- `plane` — 1-based index into `results.z_base`.
+- `plane` — 1-based index into `gg_fit.z_base`.
 - `dplane` — grid planes away from that base plane, so `dplane = 0` (the default)
   is the base plane itself. A non-zero offset evaluates the fit by the same
-  Taylor extrapolation `gg_fit` used when it fitted that neighbouring plane, so
-  the map is comparable with the stored residual for any `n_planes_add`.
+  Taylor extrapolation `gg_calc_fit` used when it fitted that neighbouring plane, so
+  the table is comparable with the stored residual for any `n_planes_add`.
 
 Returns `(; x, y, z, plane, dplane, origin, r_fit, B_table, B_fit, dB)`. `x` and
 `y` are the absolute grid coordinates (vectors, whatever the grid's own index
 range) and `z` the plane's longitudinal position. The three field arrays are
 indexed `[ix, iy, component]` with component `1, 2, 3` = `Bx, By, Bs`, and
 `dB = B_table - B_fit`. `r_fit` is the radius the diagnostics treat as the edge
-of the fit region: `results.fit_radius_max` if the fit set one, otherwise the
+of the fit region: `gg_fit.fit_radius_max` if the fit set one, otherwise the
 largest circle inside the grid.
 
-The map covers the whole grid either way — a residual outside the fit region is
+The table covers the whole grid either way — a residual outside the fit region is
 worth seeing, it just is not something the fit was asked to make small.
 
 ```julia
-r = gg_fit_residual_map(results, field, 12)
+r = gg_make_fit_residual_table(gg_fit, field, 12)
 surface(r.x, r.y, r.dB[:, :, 1])       # Bx residual over the plane
 ```
 
 Note that with `n_planes_add > 0` a base plane's stored `rms_weighted_plane`
-covers its neighbouring planes too, so it will not equal the RMS of this one map.
+covers its neighbouring planes too, so it will not equal the RMS of this one table.
 """
-function gg_fit_residual_map(results::GGCoefs, field::FieldGridTable, plane::Integer;
-                             dplane::Integer = 0)
+function gg_make_fit_residual_table(gg_fit::GGCoefs, field::FieldGridTable, plane::Integer;
+                                    dplane::Integer = 0)
   mag  = field.magnetic
   izs  = first(axes(mag, 3)):last(axes(mag, 3))
   1 <= plane <= length(izs) ||
@@ -102,12 +102,12 @@ function gg_fit_residual_map(results::GGCoefs, field::FieldGridTable, plane::Int
   x   = [field.r0[1] + field.dr[1] * ix for ix in ixs]
   y   = [field.r0[2] + field.dr[2] * iy for iy in iys]
   dz  = dplane * field.dr[3]
-  z   = results.z_base[plane] + dz
+  z   = gg_fit.z_base[plane] + dz
 
   # The fitted field at this plane is a fixed (x,y) polynomial per component, so
   # build the three coefficient arrays once and evaluate them over the grid.
-  aval, bval, bsval = _gg_taylor_getters(results, plane, dz)
-  g_ref = results.g_ref
+  aval, bval, bsval = _gg_taylor_getters(gg_fit, plane, dz)
+  g_ref = gg_fit.g_ref
   KB = (_comp_array(Bx_a, Bx_b, Bx_bs, aval, bval, bsval, g_ref),
         _comp_array(By_a, By_b, By_bs, aval, bval, bsval, g_ref),
         _comp_array(Bs_a, Bs_b, Bs_bs, aval, bval, bsval, g_ref))
@@ -116,8 +116,8 @@ function gg_fit_residual_map(results::GGCoefs, field::FieldGridTable, plane::Int
   B_fit   = similar(B_table)
   for (i, ix) in enumerate(ixs), (j, iy) in enumerate(iys)
     B3 = mag[ix, iy, iz]
-    xr = x[i] - results.origin[1]           # the expansion is written about the GG axis
-    yr = y[j] - results.origin[2]
+    xr = x[i] - gg_fit.origin[1]           # the expansion is written about the GG axis
+    yr = y[j] - gg_fit.origin[2]
     for k in 1:3
       B_table[i, j, k] = B3[k]
       B_fit[i, j, k]   = _polyval(KB[k], xr, yr)[1]
@@ -127,11 +127,11 @@ function gg_fit_residual_map(results::GGCoefs, field::FieldGridTable, plane::Int
   # r_fit is the boundary the diagnostics split on: the radius the fit was
   # restricted to, or else the largest circle the grid holds, which is as far out
   # as the expansion is well posed even when every point was fitted.
-  ox, oy = results.origin[1], results.origin[2]
-  r_fit  = results.fit_radius_max > 0 ? results.fit_radius_max :
+  ox, oy = gg_fit.origin[1], gg_fit.origin[2]
+  r_fit  = gg_fit.fit_radius_max > 0 ? gg_fit.fit_radius_max :
            min(maximum(x) - ox, ox - minimum(x), maximum(y) - oy, oy - minimum(y))
 
-  return (; x, y, z, plane, dplane, origin = copy(results.origin), r_fit,
+  return (; x, y, z, plane, dplane, origin = copy(gg_fit.origin), r_fit,
             B_table, B_fit, dB = B_table .- B_fit)
 end
 
@@ -324,7 +324,7 @@ nothing on its own**: the same centred differences that measure the violation
 truncate at `O(h²·∂³B)`, so a perfectly Maxwellian field that varies rapidly
 across a cell produces a large ratio too. It has to be read against the same
 statistic computed on a field known to be Maxwellian — which is what
-`gg_fit_show_residuals` does, running this on the fitted GG field tabulated over
+`gg_show_fit_residuals` does, running this on the fitted GG field tabulated over
 the same grid and reporting the table's level as a multiple of it.
 
 `zjump` is the RMS over the plane of `|B[iz-1] - 2B[iz] + B[iz+1]|` [T], the
@@ -388,15 +388,15 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    gg_fit_show_residuals(results::GGCoefs, field::FieldGridTable;
-                          planes = eachindex(results.z_base), detail = Int[],
+    gg_show_fit_residuals(gg_fit::GGCoefs, field::FieldGridTable;
+                          planes = eachindex(gg_fit.z_base), detail = Int[],
                           mmax::Integer = 8)
 
 Print what each plane's residual is made of, to separate a fit that is too small
 from a field table a GG expansion cannot represent.
 
 The residual is `field table - GG fit` over the transverse grid of a base plane
-(`gg_fit_residual_map`). `planes` selects which base planes to report and
+(`gg_make_fit_residual_table`). `planes` selects which base planes to report and
 `detail` those to additionally print a full harmonic table for. `mmax` is the
 highest azimuthal harmonic examined.
 
@@ -465,8 +465,8 @@ and see whether the plane's residual actually falls. A residual that is missing
 GG terms drops; one that is not saturates, and the saturated level is the honest
 floor for that plane.
 """
-function gg_fit_show_residuals(results::GGCoefs, field::FieldGridTable;
-                               planes = eachindex(results.z_base), detail = Int[],
+function gg_show_fit_residuals(gg_fit::GGCoefs, field::FieldGridTable;
+                               planes = eachindex(gg_fit.z_base), detail = Int[],
                                mmax::Integer = 8)
   kinds = ("B_r", "B_th", "B_s")
   println("="^108)
@@ -498,8 +498,8 @@ function gg_fit_show_residuals(results::GGCoefs, field::FieldGridTable;
 
   # The Maxwell columns difference across the neighbouring planes, so every map
   # is needed; build them once rather than three times per reported plane.
-  nplane = length(results.z_base)
-  maps   = [gg_fit_residual_map(results, field, p) for p in 1:nplane]
+  nplane = length(gg_fit.z_base)
+  maps   = [gg_make_fit_residual_table(gg_fit, field, p) for p in 1:nplane]
   for p in planes
     map = maps[p]
     r_in, rms, rms_in, out_frac = _radial_split(map)

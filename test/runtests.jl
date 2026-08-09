@@ -5,7 +5,7 @@ using HDF5
 using KernelAbstractions
 using Adapt: adapt
 
-# Self-contained test fixture (HDF5 gg_fit result).
+# Self-contained test fixture (HDF5 gg_calc_fit result).
 const EXAMPLE = joinpath(@__DIR__, "data", "gg_fit_result.h5")
 
 # Run `f` with stdout suppressed (the writer/converter functions print a banner).
@@ -259,18 +259,18 @@ end
     @test abs(a2 - a1) < 4096
   end
 
-  @testset "gg_fit + show + write round-trip" begin
+  @testset "gg_calc_fit + show + write round-trip" begin
     field = make_field()
     p = GGFitInputParams()
     p.n_planes_add = 1
-    res = gg_fit(field, p)
+    res = gg_calc_fit(field, p)
     @test res isa GGCoefs
     @test length(res.z_base) == size(field.magnetic, 3)
     @test res.nd_max == 2
     @test length(res.rms_weighted_plane) == length(res.z_base)
     @test all(isfinite, res.rms_weighted_plane)
     @test !isempty(res.params)
-    quiet(() -> gg_fit_show_results(res, field, p))
+    quiet(() -> gg_show_fit_results(res, field, p))
 
     mktempdir() do dir
       p.output_file = joinpath(dir, "fit.h5")
@@ -289,33 +289,33 @@ end
     end
   end
 
-  @testset "gg_fit weighting and n_planes_add=0 branches" begin
+  @testset "gg_calc_fit weighting and n_planes_add=0 branches" begin
     field = make_field()
     # Non-default core/outer weights exercise the weighting branches.
     p = GGFitInputParams()
     p.n_planes_add = 1
     p.core_weight = 2
     p.outer_plane_weight = 2
-    res = gg_fit(field, p)
+    res = gg_calc_fit(field, p)
     @test all(isfinite, res.rms_weighted_plane)
     # n_planes_add = 0 (single-plane, nd_max = 0) exercises the dzmax == 0 branch.
     p0 = GGFitInputParams()
     p0.n_planes_add = 0
-    res0 = gg_fit(field, p0)
+    res0 = gg_calc_fit(field, p0)
     @test res0.nd_max == 0
     @test all(isfinite, res0.rms_weighted_plane)
   end
 
-  @testset "gg_fit exclude_functions" begin
+  @testset "gg_calc_fit exclude_functions" begin
     field = make_field()
     base() = (p = GGFitInputParams(); p.n_planes_add = 1; p.m_max = 4; p.nd_max = 2; p)
 
-    full = gg_fit(field, base())
+    full = gg_calc_fit(field, base())
     @test !isempty(full.bs)
 
     p = base()
     p.exclude_functions = [(:a, 2), (:b, 3), (:bs, 0)]
-    res = gg_fit(field, p)
+    res = gg_calc_fit(field, p)
     # An excluded function is never fitted: absent from the dicts, from the
     # unknown list, and not reported as pruned (nothing was measured and dropped).
     @test !any(k -> k[1] == 2, keys(res.a))
@@ -331,19 +331,19 @@ end
     # The m of a :bs entry is ignored, and naming something the model does not
     # contain is a no-op.
     p2 = base(); p2.exclude_functions = [(:bs, 7)]
-    @test isempty(gg_fit(field, p2).bs)
+    @test isempty(gg_calc_fit(field, p2).bs)
     p3 = base(); p3.exclude_functions = [(:a, 99)]
-    @test Set(keys(gg_fit(field, p3).a)) == Set(keys(full.a))
+    @test Set(keys(gg_calc_fit(field, p3).a)) == Set(keys(full.a))
 
     # Excluding the top orders lowers the reported m_max/nd_max.
     p4 = base(); p4.exclude_functions = [(:a, 4), (:b, 4)]
-    @test gg_fit(field, p4).m_max == 3
+    @test gg_calc_fit(field, p4).m_max == 3
 
     # Excluding a function and pruning it away must land on the same fit: both
     # solve the same column set, so the coefficients agree exactly.
     p5 = base(); p5.exclude_functions = [(:a, 3), (:b, 3)]
     p6 = base(); p6.prune_max_limit = 1e-3        # drops exactly a_3 and b_3 here
-    ex, pr = gg_fit(field, p5), gg_fit(field, p6)
+    ex, pr = gg_calc_fit(field, p5), gg_calc_fit(field, p6)
     @test pr.pruned == [(:a, 3), (:b, 3)] && isempty(ex.pruned)
     @test Set(keys(ex.a)) == Set(keys(pr.a)) && Set(keys(ex.b)) == Set(keys(pr.b))
     for (k, v) in ex.a; @test v ≈ pr.a[k]; end
@@ -353,25 +353,25 @@ end
     # Typos and a list that leaves nothing to fit are errors, not silent fits.
     for bad in ([(:x, 1)], [(:a, -2)])
       p7 = base(); p7.exclude_functions = bad
-      @test_throws ErrorException gg_fit(field, p7)
+      @test_throws ErrorException gg_calc_fit(field, p7)
     end
     p8 = base()
     p8.exclude_functions = vcat([(:a, m) for m in 0:4], [(:b, m) for m in 0:4], [(:bs, 0)])
-    @test_throws ErrorException gg_fit(field, p8)
+    @test_throws ErrorException gg_calc_fit(field, p8)
 
-    quiet(() -> gg_fit_show_results(res, field, p))
+    quiet(() -> gg_show_fit_results(res, field, p))
   end
 
-  @testset "gg_fit nd_max_for_m" begin
+  @testset "gg_calc_fit nd_max_for_m" begin
     field = make_field()
     base() = (p = GGFitInputParams(); p.n_planes_add = 2; p.m_max = 4; p.nd_max = 4; p)
 
-    full = gg_fit(field, base())
+    full = gg_calc_fit(field, base())
     @test maximum(k[2] for k in keys(full.a)) == 4
 
     p = base()
     p.nd_max_for_m = Dict(3 => 2, 4 => 0, 0 => 1)
-    res = gg_fit(field, p)
+    res = gg_calc_fit(field, p)
     # Each listed order is cut to its own limit; the unlisted ones keep nd_max.
     # Nothing below the limit is lost: the retained top order is the highest the
     # coefficient table offers for that m at or under the limit.
@@ -392,17 +392,17 @@ end
     # A limit above nd_max cannot raise the order, and an m the table does not
     # have is a no-op.
     p2 = base(); p2.nd_max_for_m = Dict(2 => 99, 77 => 0)
-    @test Set(keys(gg_fit(field, p2).a)) == Set(keys(full.a))
+    @test Set(keys(gg_calc_fit(field, p2).a)) == Set(keys(full.a))
 
     # Capping the top order lowers the reported nd_max.
     p3 = base(); p3.nd_max_for_m = Dict(m => 1 for m in 0:4)
-    @test gg_fit(field, p3).nd_max == 1
+    @test gg_calc_fit(field, p3).nd_max == 1
 
     # Same limit on every order is the global cut, exactly: same unknowns, and
     # the same fit to the last digit.
     p4 = base(); p4.nd_max_for_m = Dict(m => 2 for m in 0:4)
     p5 = base(); p5.nd_max = 2
-    r4, r5 = gg_fit(field, p4), gg_fit(field, p5)
+    r4, r5 = gg_calc_fit(field, p4), gg_calc_fit(field, p5)
     @test Set(keys(r4.a)) == Set(keys(r5.a)) && Set(keys(r4.b)) == Set(keys(r5.b))
     for (k, v) in r4.a; @test v ≈ r5.a[k]; end
     for (k, v) in r4.b; @test v ≈ r5.b[k]; end
@@ -411,13 +411,13 @@ end
     # A scan whose larger nd_max candidates the caps make redundant is run once
     # per distinct model, not once per candidate.
     p6 = base(); p6.nd_max = 2:4; p6.nd_max_for_m = Dict(m => 2 for m in 0:4)
-    scan6 = gg_fit(field, p6).scan
+    scan6 = gg_calc_fit(field, p6).scan
     @test length(scan6) == 1 && scan6[1].nd_max == 2
 
     # Negative orders and negative limits are mistakes, not silent fits.
     for bad in (Dict(-1 => 2), Dict(3 => -1))
       p7 = base(); p7.nd_max_for_m = bad
-      @test_throws ErrorException gg_fit(field, p7)
+      @test_throws ErrorException gg_calc_fit(field, p7)
     end
 
     # Ragged nd -- towers of different heights from one m to the next -- is a
@@ -441,23 +441,23 @@ end
       @test B1 ≈ B2
     end
 
-    quiet(() -> gg_fit_show_results(res, field, p))
+    quiet(() -> gg_show_fit_results(res, field, p))
   end
 
-  @testset "gg_fit prunes GG functions with negligible field contribution" begin
+  @testset "gg_calc_fit prunes GG functions with negligible field contribution" begin
     field = make_field()
     base() = (p = GGFitInputParams(); p.n_planes_add = 1; p.m_max = 4; p.nd_max = 2; p)
 
     # On this field a_3 and b_3 produce ~1e-4 of <|B|> while every other function
     # is at 5e-3 or above, so the two are the ones any sane limit removes.
-    full = gg_fit(field, base())
+    full = gg_calc_fit(field, base())
     @test isempty(full.pruned)                    # both limits default to 0 = off
 
     for (ave_lim, max_lim) in ((0.0, 1e-3), (1e-4, 0.0), (1e-4, 1e-3))
       p = base()
       p.prune_ave_limit = ave_lim
       p.prune_max_limit = max_lim
-      res = gg_fit(field, p)
+      res = gg_calc_fit(field, p)
       @test res.pruned == [(:a, 3), (:b, 3)]
       # A pruned function is gone from the coefficient dicts and the unknown list.
       @test !any(k -> k[1] == 3, keys(res.a)) && !any(k -> k[1] == 3, keys(res.b))
@@ -473,19 +473,19 @@ end
     # ave limit of 2e-3 also drops a_4 (ave 1.2e-3 of <|B|>); adding a max limit
     # of 1e-3 saves it, since a_4 reaches 3.7e-3 somewhere on the grid.
     p = base(); p.prune_ave_limit = 2e-3
-    @test gg_fit(field, p).pruned == [(:a, 3), (:a, 4), (:b, 3)]
+    @test gg_calc_fit(field, p).pruned == [(:a, 3), (:a, 4), (:b, 3)]
     p.prune_max_limit = 1e-3
-    @test gg_fit(field, p).pruned == [(:a, 3), (:b, 3)]
+    @test gg_calc_fit(field, p).pruned == [(:a, 3), (:b, 3)]
 
     # Limits that would leave nothing to fit are a mis-set parameter, not a fit.
     p = base(); p.prune_max_limit = 10.0
-    @test_throws ErrorException gg_fit(field, p)
+    @test_throws ErrorException gg_calc_fit(field, p)
 
     # The sparse fit must survive both evaluation paths -- the plan builder groups
     # towers by the m actually present, so a gap at m = 3 is the case to check --
     # and an HDF5 round trip.
     p = base(); p.prune_max_limit = 1e-3
-    res  = gg_fit(field, p)
+    res  = gg_calc_fit(field, p)
     plan = eval_plan(res)
     for ip in eachindex(res.z_base), (x, y) in PTS
       Bref, Aref, _ = field_and_potential_evaluate(res, ip, x, y)
@@ -505,10 +505,10 @@ end
       @test B1 ≈ B2
     end
 
-    quiet(() -> gg_fit_show_results(res, field, p))
+    quiet(() -> gg_show_fit_results(res, field, p))
   end
 
-  @testset "gg_fit fit_radius_max" begin
+  @testset "gg_calc_fit fit_radius_max" begin
     field = make_field()
     base() = (p = GGFitInputParams(); p.n_planes_add = 1; p.m_max = 4; p.nd_max = 2; p)
     r0, dr = field.r0, field.dr
@@ -516,12 +516,12 @@ end
     iys = first(axes(field.magnetic, 2)):last(axes(field.magnetic, 2))
     rad(ix, iy) = hypot(r0[1] + dr[1] * ix, r0[2] + dr[2] * iy)
 
-    full = gg_fit(field, base())
+    full = gg_calc_fit(field, base())
     @test full.fit_radius_max == 0.0
 
     # A radius beyond the grid corner changes nothing: the same points are fitted.
     p = base(); p.fit_radius_max = 10.0
-    big = gg_fit(field, p)
+    big = gg_calc_fit(field, p)
     @test big.rms_weighted_plane ≈ full.rms_weighted_plane
     for (k, v) in big.a; @test v ≈ full.a[k]; end
 
@@ -529,14 +529,14 @@ end
     # over the kept points only -- checked against the residual map, which is
     # computed independently of the fit's own row bookkeeping.
     p = base(); p.fit_radius_max = 0.02
-    res = gg_fit(field, p)
+    res = gg_calc_fit(field, p)
     @test res.fit_radius_max == 0.02
     @test !(res.rms_weighted_plane ≈ full.rms_weighted_plane)
     for pl in eachindex(res.z_base)
       s = 0.0; n = 0
       for d in -1:1
         1 <= pl + d <= length(res.z_base) || continue
-        m = gg_fit_residual_map(res, field, pl; dplane = d)
+        m = gg_make_fit_residual_table(res, field, pl; dplane = d)
         for (i, ix) in enumerate(ixs), (j, iy) in enumerate(iys)
           rad(ix, iy) <= 0.02 * (1 + 1e-12) || continue
           s += sum(abs2, view(m.dB, i, j, :)); n += 3
@@ -558,7 +558,7 @@ end
     sub = make_field(ixr = -1:1, iyr = -1:1)
     ps = base(); ps.fit_radius_max = 0.0
     pm = base(); pm.fit_radius_max = 0.01 * sqrt(2)
-    rs, rm = gg_fit(sub, ps), gg_fit(field, pm)
+    rs, rm = gg_calc_fit(sub, ps), gg_calc_fit(field, pm)
     @test Set(keys(rs.a)) == Set(keys(rm.a))
     for (k, v) in rs.a; @test v ≈ rm.a[k]; end
     for (k, v) in rs.b; @test v ≈ rm.b[k]; end
@@ -567,46 +567,46 @@ end
     # core_weight normalizes to the outermost fitted point, so a uniform-weight
     # fit is unaffected by the radius but a core-weighted one is re-scaled.
     pw = base(); pw.core_weight = 5.0; pw.fit_radius_max = 0.02
-    @test all(isfinite, gg_fit(field, pw).rms_weighted_plane)
+    @test all(isfinite, gg_calc_fit(field, pw).rms_weighted_plane)
 
     # A radius that keeps only the axis point is legal, if not useful: the grid
     # has a point at r = 0 exactly.
     pt = base(); pt.fit_radius_max = 1e-9
-    @test length(gg_fit(field, pt).z_base) == length(full.z_base)
+    @test length(gg_calc_fit(field, pt).z_base) == length(full.z_base)
 
     # An empty or negative region is a mis-set parameter, not a fit. Offsetting
     # the axis off the grid points is what makes the region genuinely empty.
     pz = base(); pz.fit_radius_max = 1e-6; pz.origin = [0.0025, 0.0025]
-    @test_throws ErrorException gg_fit(field, pz)
+    @test_throws ErrorException gg_calc_fit(field, pz)
     pn = base(); pn.fit_radius_max = -1.0
-    @test_throws ErrorException gg_fit(field, pn)
+    @test_throws ErrorException gg_calc_fit(field, pn)
 
     # The radius travels with the result, through the file and the diagnostics.
     mktempdir() do dir
       p2 = base(); p2.fit_radius_max = 0.02; p2.output_file = joinpath(dir, "r.h5")
-      rr = gg_fit(field, p2)
+      rr = gg_calc_fit(field, p2)
       quiet(() -> write_gg_fit(rr, field, p2))
       back, _ = read_gg_fit(p2.output_file)
       @test back.fit_radius_max == 0.02
-      @test gg_fit_residual_map(rr, field, 2).r_fit == 0.02
-      quiet(() -> gg_fit_show_results(rr, field, p2))
-      quiet(() -> gg_fit_show_residuals(rr, field; detail = [2]))
+      @test gg_make_fit_residual_table(rr, field, 2).r_fit == 0.02
+      quiet(() -> gg_show_fit_results(rr, field, p2))
+      quiet(() -> gg_show_fit_residuals(rr, field; detail = [2]))
     end
   end
 
-  @testset "gg_fit residual map" begin
+  @testset "gg_calc_fit residual map" begin
     field = make_field()
     # The map has to reproduce the fit's own arithmetic exactly, offset planes
     # included: its Taylor extrapolation is the design matrix's, or the residual
     # it shows is not the residual that was minimized.
     for npa in (0, 1, 2)
       p = GGFitInputParams(); p.n_planes_add = npa; p.m_max = 4; p.nd_max = 2
-      r = gg_fit(field, p)
+      r = gg_calc_fit(field, p)
       for pl in eachindex(r.z_base)
         s = 0.0; n = 0
         for d in -npa:npa
           1 <= pl + d <= length(r.z_base) || continue
-          m = gg_fit_residual_map(r, field, pl; dplane = d)
+          m = gg_make_fit_residual_table(r, field, pl; dplane = d)
           @test m.dB ≈ m.B_table .- m.B_fit
           @test m.z ≈ r.z_base[pl] + d * r.dz_grid
           s += sum(abs2, m.dB); n += length(m.dB)
@@ -616,8 +616,8 @@ end
     end
 
     p = GGFitInputParams(); p.n_planes_add = 1
-    r = gg_fit(field, p)
-    m = gg_fit_residual_map(r, field, 3)
+    r = gg_calc_fit(field, p)
+    m = gg_make_fit_residual_table(r, field, 3)
     # On the base plane the fitted field is just the evaluator's, and the table
     # side is the grid itself.
     for (i, x) in enumerate(m.x), (j, y) in enumerate(m.y)
@@ -627,11 +627,11 @@ end
                                                 first(axes(field.magnetic, 2)) + j - 1,
                                                 first(axes(field.magnetic, 3)) + 2]
     end
-    @test_throws ErrorException gg_fit_residual_map(r, field, 0)
-    @test_throws ErrorException gg_fit_residual_map(r, field, 1; dplane = -1)
+    @test_throws ErrorException gg_make_fit_residual_table(r, field, 0)
+    @test_throws ErrorException gg_make_fit_residual_table(r, field, 1; dplane = -1)
 
-    quiet(() -> gg_fit_show_residuals(r, field; detail = [2]))
-    quiet(() -> gg_fit_show_residuals(r, field; planes = [1, 3]))
+    quiet(() -> gg_show_fit_residuals(r, field; detail = [2]))
+    quiet(() -> gg_show_fit_residuals(r, field; planes = [1, 3]))
   end
 
   @testset "residual diagnostics" begin
@@ -728,10 +728,10 @@ end
     @test !undocumented(@doc GGFitInputParams)
     @test !undocumented(@doc GGCoefs)
     @test !undocumented(@doc GGFitScanPoint)
-    @test !undocumented(@doc gg_fit)
-    @test !undocumented(@doc gg_fit_residual_map)
-    @test !undocumented(@doc gg_fit_show_residuals)
-    @test !undocumented(@doc gg_fit_show_results)
+    @test !undocumented(@doc gg_calc_fit)
+    @test !undocumented(@doc gg_make_fit_residual_table)
+    @test !undocumented(@doc gg_show_fit_residuals)
+    @test !undocumented(@doc gg_show_fit_results)
     @test !undocumented(@doc read_gg_fit)
     @test !undocumented(@doc write_gg_fit)
     # The three fit criteria must be spelled out where a user will look for them.
@@ -740,7 +740,7 @@ end
     end
   end
 
-  @testset "gg_fit m_max/nd_max scan" begin
+  @testset "gg_calc_fit m_max/nd_max scan" begin
     field = make_field()
 
     # Scalar m_max/nd_max pin the model exactly and run no scan.
@@ -748,7 +748,7 @@ end
     p.n_planes_add = 1
     p.m_max  = 4
     p.nd_max = 3
-    res = gg_fit(field, p)
+    res = gg_calc_fit(field, p)
     @test isempty(res.scan)
     @test res.m_max == 4 && res.nd_max == 3
     @test maximum(k[1] for k in keys(res.b)) <= 4
@@ -759,7 +759,7 @@ end
     # A vector on either cutoff scans the full grid of combinations.
     p.m_max  = 2:4
     p.nd_max = [1, 2]
-    res = gg_fit(field, p)
+    res = gg_calc_fit(field, p)
     @test length(res.scan) == 6
     @test Set((s.m_max, s.nd_max) for s in res.scan) ==
           Set([(m, nd) for m in 2:4 for nd in 1:2])
@@ -775,7 +775,7 @@ end
     @test length(res.params) == best.n_coef
     @test length(res.rms_weighted_plane) == length(res.z_base)
     @test all(isfinite, res.rms_weighted_plane)
-    quiet(() -> gg_fit_show_results(res, field, p))
+    quiet(() -> gg_show_fit_results(res, field, p))
 
     # Field contribution of each GG function: one row per a_m / b_m actually
     # fitted, plus b_s, each a magnitude with ave no larger than max.
@@ -789,22 +789,22 @@ end
 
     # More coefficients can only reduce the residual, so :rms takes the top model.
     p.fit_criterion = :rms
-    res_rms = gg_fit(field, p)
+    res_rms = gg_calc_fit(field, p)
     @test (res_rms.m_max, res_rms.nd_max) == (4, 2)
     p.fit_criterion = :aic
-    @test gg_fit(field, p) isa GGCoefs
+    @test gg_calc_fit(field, p) isa GGCoefs
 
     # Candidates beyond what the table holds are clamped and deduplicated.
     p.fit_criterion = :bic
     p.m_max  = 11:40
     p.nd_max = 0:1
-    res = gg_fit(field, p)
+    res = gg_calc_fit(field, p)
     @test length(res.scan) == 6            # m_max 11,12,13 x nd_max 0,1
     @test maximum(s.m_max for s in res.scan) == 13
 
-    @test_throws ErrorException (p.nd_max = Int[]; gg_fit(field, p))
+    @test_throws ErrorException (p.nd_max = Int[]; gg_calc_fit(field, p))
     p.nd_max = 0:1
-    @test_throws ErrorException (p.fit_criterion = :bogus; gg_fit(field, p))
+    @test_throws ErrorException (p.fit_criterion = :bogus; gg_calc_fit(field, p))
   end
 
   @testset "field grid HDF5 round-trip (mag + elec, curvature, RF)" begin
@@ -906,7 +906,7 @@ end
       p = GGFitInputParams()
       p.n_planes_add = 1
       p.output_file = joinpath(dir, "curved_fit.h5")
-      res = gg_fit(field, p)
+      res = gg_calc_fit(field, p)
       quiet(() -> write_gg_fit(res, field, p))
       base2 = joinpath(dir, "gg_bend")
       ele2 = quiet(() -> write_bmad_gg_fit(p.output_file; output_base = base2, cutoff = 1e-6))

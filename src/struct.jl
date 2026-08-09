@@ -93,7 +93,7 @@ merit function.
 
 Maximum multipole order `m` of the `a_m`/`b_m` functions retained in the fit. A
 single `Int` fixes it. A vector or range (for example `m_max = 1:8`) makes
-`gg_fit` try each value in turn and keep the one that fits best (see
+`gg_calc_fit` try each value in turn and keep the one that fits best (see
 `fit_criterion`). The default `-1` means "use every `m` present in the
 coefficient table", which is the historical behavior. The `bs(nd)` (that is,
 `a_0` derivative) unknowns carry no `m` and are never removed by `m_max`.
@@ -108,7 +108,7 @@ structure of the field also carries derivative information — but become
 progressively worse conditioned, which is what the scan is for.
 
 `m_max` and `nd_max` apply to every base plane; they never vary plane to plane.
-If either is given as a vector, `gg_fit` scans the full grid of combinations and
+If either is given as a vector, `gg_calc_fit` scans the full grid of combinations and
 records the outcome of each in the `scan` field of the returned `GGCoefs`.
 
   nd_max_for_m = Dict{Int,Int}
@@ -165,7 +165,7 @@ the axis to `1` at the outermost *fitted* point — with a radius set, that is t
 radius rather than the grid corner. `field_ave_plane` and the field contributions
 that drive `prune_ave_limit`/`prune_max_limit` likewise cover the fit region
 only, so pruning judges a GG function by the field it produces where the fit
-applies. `gg_fit_show_residuals` reports the residual split at this radius.
+applies. `gg_show_fit_residuals` reports the residual split at this radius.
 
   fit_criterion = Symbol
 
@@ -191,7 +191,7 @@ what one coefficient costs: `2` versus `ln(N)`. `ln(N) > 2` for any `N > 7`, so
 larger model. `:rms` charges nothing and so will pick the largest model offered;
 it is useful for inspecting the raw residual ranking, not for choosing a model.
 
-See the "Choosing between models" section of the `gg_fit` docstring for how to
+See the "Choosing between models" section of the `gg_calc_fit` docstring for how to
 read the trade-off quantitatively and for why, on a field grid, these criteria
 are better treated as a ranking heuristic than as a probability statement.
 
@@ -271,9 +271,9 @@ end
 """
     struct GGFitScanPoint
 
-One row of a `gg_fit` `(m_max, nd_max)` scan: the model tried and how it scored.
+One row of a `gg_calc_fit` `(m_max, nd_max)` scan: the model tried and how it scored.
 Collected in the `scan` field of the returned `GGCoefs` and printed by
-`gg_fit_show_results`.
+`gg_show_fit_results`.
 
 Fields:
 - `m_max`, `nd_max` — the model this row is for.
@@ -287,7 +287,7 @@ Fields:
   bad in only one component shows up here and nowhere else.
 - `rms_unweighted` — the same residual with all point weights set to 1.
 - `score` — value of the selection criterion; the scanned model with the lowest
-  score is the one `gg_fit` returns. For `:rms` this is just `rms_weighted`. For `:aic`
+  score is the one `gg_calc_fit` returns. For `:rms` this is just `rms_weighted`. For `:aic`
   and `:bic` it is `N*ln(RSS/N)` plus a penalty of `2` or `ln(N)` per fitted
   coefficient, where `RSS` is the pooled weighted sum of squared residuals and
   `N` the number of fitted field-component values. Only differences between
@@ -391,9 +391,9 @@ Adapt.@adapt_structure GGEvalPlan
 """
     mutable struct GGCoefs
 
-Holds the result of a `gg_fit` fit: the fitted generalized-gradient (GG)
+Holds the result of a `gg_calc_fit` fit: the fitted generalized-gradient (GG)
 coefficient functions sampled at the base planes plus per-plane diagnostics.
-Returned by `gg_fit` and consumed by `gg_fit_show_results` and
+Returned by `gg_calc_fit` and consumed by `gg_show_fit_results` and
 `write_gg_fit`.
 
 Fields:

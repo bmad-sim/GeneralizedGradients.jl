@@ -1,43 +1,42 @@
 using Symbolics
 
 # ---------------------------------------------------------------------------
-# Create a gg_coef_table.jl data file.
+# Create the two data files in the GeneralizedGradients/tables dir.
 #
-# The data arrays from this file are incorporated in the GeneralizedGradients package and are
-#   used by the gg_calc_fit function.
-# Nominally this file lives in the GeneralizedGradients/tables dir.
-# This file is similar to the monomial_functions.jl data file but structured to be
-#   easier to use by the gg_calc_fit code.
-# The data arrays never have to be recomputed unless higher a_m and b_m order is wanted.
-#
-# For each field component (Bx, By, Bs), and for each function a, b, bs and derivatives,
-# output a vector of coefficients that contribute.
+# Both are the same Taylor expansion of the magnetic field and the vector
+# potential -- reproducing and extending Table 1 of Van der Schueren et al.,
+# IPAC'24 -- written in two forms, so the expansion is computed once here and
+# written out twice.  Neither file has to be recomputed unless higher a_m and
+# b_m order or higher derivative order is wanted.
 #
 # Notation:
 #  b(m,nd) = (d/ds)^nd (b_m), a(m,nd) = (d/ds)^nd a_m, and bs(nd) = (d/ds)^nd bs
 #
-# Output: There are 9 Dicts labeled:
-#   Bx_a[(m,nd)], Bx_b[(m,nd)], Bx_bs[(m,nd)], 
-#   By_a[(m,nd)], By_b[(m,nd)], By_bs[(m,nd)],
-#   Bs_a[(m,nd)], Bs_b[(m,nd)], Bs_bs[(m,nd)]
+# Output 1: tables/monomial_functions.jl -- one section per monomial x^p y^q,
+#   giving the six coefficients as readable symbolic expressions in a(m,nd),
+#   b(m,nd), bs(nd) and g_ref.  For reading, and for checking against the
+#   paper; the package does not use it.
 #
-# Example: By_b[(m,nd)] = [(coef, p, q, r), ...]
-# means contribution by b(m,nd) is:
-#   By += coef * g_ref^r * x^p * y^q * b(m,nd)
+# Output 2: tables/gg_coef_table.jl -- the same content inverted, keyed by GG
+#   function instead of by monomial, as numeric tuples.  This one is included
+#   by the package and used by gg_calc_fit.  For each field component (Bx, By,
+#   Bs) and vector potential component (Ax, Ay, As), and for each function a,
+#   b, bs and derivative, it holds a vector of the coefficients that
+#   contribute, in 18 Dicts:
+#
+#     Bx_a[(m,nd)], Bx_b[(m,nd)], Bx_bs[nd],   ... and likewise By, Bs,
+#     Ax_a[(m,nd)], Ax_b[(m,nd)], Ax_bs[nd],   ... and likewise Ay, As
+#
+#   Example: By_b[(m,nd)] = [(coef, p, q, r), ...]
+#   means contribution by b(m,nd) is:
+#     By += coef * g_ref^r * x^p * y^q * b(m,nd)
 # ---------------------------------------------------------------------------
 
 # --- Input parameters (override from the environment) ------------------------
-# These two, and nothing else, determine the contents of the output file.
-#
-# This program is not part of the package, so a docstring written here would
-# never reach a REPL.  MAXTOT and MMAX are therefore documented where they are
-# visible: _MAXTOT_DOC and _MMAX_DOC, at the writer below, are emitted into
-# tables/gg_coef_table.jl as docstrings on the constants it defines, and that
-# file is included by the package -- so `?MAXTOT` and `?MMAX` answer with the
-# parameters of the table actually in use.
+# See the documentation below.
 
-const MAXTOT = parse(Int, get(ENV, "MAXTOT", "12"))
-const MMAX   = parse(Int, get(ENV, "MMAX", "13"))
+const MAXTOT = parse(Int, get(ENV, "MAXTOT", "13"))
+const MMAX   = parse(Int, get(ENV, "MMAX", "14"))
 
 # --- Derived sizes -----------------------------------------------------------
 # Internal to this program (they are recorded in the output header, but the
@@ -278,6 +277,101 @@ end
 
 println("vector potential coefficients computed")
 
+# ---------------------------------------------------------------------------
+# Output 1: tables/monomial_functions.jl -- the expansion in symbolic form,
+# keyed by monomial.  Written first because it needs nothing beyond the
+# coefficients computed above.
+# ---------------------------------------------------------------------------
+
+# Rewrite a Symbolics expression into the a(m,nd) / b(m,nd) / bs(nd) notation.
+function rewrite_notation(expr)
+  str = string(expr)
+
+  # a_0(s) derivatives: D^nd(a0(s)) -> bs(nd-1)
+  str = replace(str, r"Differential\(s, (\d+)\)\(a0\(s\)\)" => function(mt)
+    mm = match(r"Differential\(s, (\d+)\)\(a0\(s\)\)", mt)
+    k = parse(Int, mm.captures[1]) - 1
+    "bs($k)"
+  end)
+
+  # general D^nd(a_m(s)) -> a(m,nd), D^nd(b_m(s)) -> b(m,nd)
+  str = replace(str, r"Differential\(s, (\d+)\)\(a(\d+)\(s\)\)" => SubstitutionString("a(\\2,\\1)"))
+  str = replace(str, r"Differential\(s, (\d+)\)\(b(\d+)\(s\)\)" => SubstitutionString("b(\\2,\\1)"))
+
+  # plain (order 0) occurrences
+  str = replace(str, r"a(\d+)\(s\)" => SubstitutionString("a(\\1,0)"))
+  str = replace(str, r"b(\d+)\(s\)" => SubstitutionString("b(\\1,0)"))
+
+  # sanity check: a0 should never appear undifferentiated
+  if occursin("a(0,0)", str)
+    @warn "a(0,0) found in expression!" str
+  end
+
+  return str
+end
+
+monofile = joinpath(@__DIR__, "..", "tables", "monomial_functions.jl")
+open(monofile, "w") do io
+  println(io, "# Extended Table 1: Taylor expansion of the magnetic field and the")
+  println(io, "# vector potential (constant g_ref)")
+  println(io, "")
+  println(io, "# Coefficients of the monomials x^p y^q in B_x, B_y, B_s and in the")
+  println(io, "# vector potential A_x, A_y, A_s (B = curl A), for total degree")
+  println(io, "# p+q <= $MAXTOT, assuming the curvature g_ref is constant (g_ref' = 0).")
+  println(io, "# Notation: a(m,nd) = d^nd a_m/ds^nd, b(m,nd) = d^nd b_m/ds^nd,")
+  println(io, "# bs(nd) = d^nd b_s/ds^nd.")
+  println(io, "")
+  println(io, "# ---------------------------------------------------------------------------")
+  println(io, "# GENERATED FILE -- do not edit by hand.")
+  println(io, "#")
+  println(io, "# Written by programs/create_field_to_gg_coef_tables.jl, which writes gg_coef_table.jl from the")
+  println(io, "# same computation, with the input parameters below.  These are the only")
+  println(io, "# inputs: the same two values always reproduce this file exactly.  To")
+  println(io, "# regenerate:")
+  println(io, "#")
+  println(io, "#   MAXTOT=$MAXTOT MMAX=$MMAX julia programs/create_field_to_gg_coef_tables.jl")
+  println(io, "#")
+  println(io, "# Input parameters (documented in tables/gg_coef_table.jl, whose docstrings")
+  println(io, "# the package includes: `?MAXTOT` and `?MMAX` in the REPL)")
+  println(io, "#   MAXTOT = $MAXTOT   max total degree p+q of the x^p y^q monomials kept")
+  println(io, "#   MMAX   = $MMAX   max multipole order m of the a_m and b_m functions")
+  println(io, "#")
+  println(io, "# Derived sizes")
+  println(io, "#   N      = $N   truncation order in x (degrees 0 .. N-1) = MAXTOT + 2")
+  println(io, "#   MDER   = $MDER   max s-derivative order carried in the symbolic")
+  println(io, "#                projections = MAXTOT + 4")
+  println(io, "#")
+  println(io, "# Sections below: one per monomial x^p y^q with p + q <= $MAXTOT, each giving")
+  println(io, "# the six coefficients as expressions in a(m,nd), b(m,nd), bs(nd) and g_ref.")
+  println(io, "# ---------------------------------------------------------------------------")
+  println(io, "")
+  for q in 0:MAXTOT
+    for p in 0:(MAXTOT-q)
+      println(io, "## x^$p y^$q")
+      println(io, "")
+      println(io, "Bx_coef[($p,$q)] = ", rewrite_notation(TBx[(p,q)]))
+      println(io, "")
+      println(io, "By_coef[($p,$q)] = ", rewrite_notation(TBy[(p,q)]))
+      println(io, "")
+      println(io, "Bs_coef[($p,$q)] = ", rewrite_notation(TBs[(p,q)]))
+      println(io, "")
+      println(io, "Ax_coef[($p,$q)] = ", rewrite_notation(TAx[(p,q)]))
+      println(io, "")
+      println(io, "Ay_coef[($p,$q)] = ", rewrite_notation(TAy[(p,q)]))
+      println(io, "")
+      println(io, "As_coef[($p,$q)] = ", rewrite_notation(TAs[(p,q)]))
+      println(io, "")
+    end
+  end
+end
+
+println("done, written to $monofile")
+
+# ---------------------------------------------------------------------------
+# Output 2: tables/gg_coef_table.jl -- the same expansion inverted, keyed by GG
+# function instead of by monomial, as numeric (coef, p, q, k) tuples.
+# ---------------------------------------------------------------------------
+
 Dh = Differential(g_ref)
 
 # Build the zero-substitution dictionary once: every symbolic function and
@@ -345,16 +439,12 @@ function fmt_terms(terms)
   return "[" * join(parts, ", ") * "]"
 end
 
-# ---------------------------------------------------------------------------
-# Collect contributions and write output
-# ---------------------------------------------------------------------------
-
 # Docstrings for the two input parameters, emitted into the table on the
 # constants that record them.  They describe the table as built, so the values
 # are interpolated in; keep them free of the triple-quote delimiter.
 
 const _MAXTOT_DOC = """
-    MAXTOT
+    const MAXTOT
 
 Maximum total degree `p + q` of the monomials `x^p y^q` tabulated in
 `tables/gg_coef_table.jl`, and the highest derivative order `nd` the table
@@ -365,9 +455,10 @@ It is a property of the table rather than a fit setting: it is the ceiling on
 `GGFitInputParams.nd_max`, which selects from what is tabulated here.
 
 Covering a higher order means rebuilding the table, which is what
-`programs/create_gg_coef_table.jl` is for:
+`programs/create_field_to_gg_coef_tables.jl` is for -- it writes both of the files in `tables/`
+from one computation of the expansion:
 
-    MAXTOT=16 MMAX=17 julia programs/create_gg_coef_table.jl
+    MAXTOT=16 MMAX=17 julia programs/create_field_to_gg_coef_tables.jl
 
 `MAXTOT` and `MMAX` are that program's only inputs. It reads each from the
 environment variable of the same name, falling back to the default built into
@@ -383,7 +474,7 @@ what the field grid supports long before it is limited by the table.
 """
 
 const _MMAX_DOC = """
-    MMAX
+    const MMAX
 
 Maximum multipole order `m` of the `a_m` and `b_m` functions in
 `tables/gg_coef_table.jl`: the largest `m` appearing in a tabulated `a(m,nd)` or
@@ -399,8 +490,8 @@ Changing it means rebuilding the table; see `MAXTOT` for the command and for
 what the rebuild costs. `MMAX` may not exceed `MAXTOT + 1`: the seed series
 `phi_0` and `phi_1` are truncated at `x^(MAXTOT+1)`, so a higher order would be
 dropped as the table was built, leaving it quietly incomplete rather than
-visibly wrong. `create_gg_coef_table.jl` rejects that combination instead of
-writing such a table, so raising `MMAX` usually means raising `MAXTOT` with it.
+visibly wrong. `create_field_to_gg_coef_tables.jl` rejects that combination instead of writing
+such a table, so raising `MMAX` usually means raising `MAXTOT` with it.
 """
 
 """
@@ -416,8 +507,8 @@ function write_docstring(io, doc::AbstractString, definition::AbstractString)
   println(io)
 end
 
-outfile = joinpath(@__DIR__, "..", "tables", "gg_coef_table.jl")
-open(outfile, "w") do io
+coeffile = joinpath(@__DIR__, "..", "tables", "gg_coef_table.jl")
+open(coeffile, "w") do io
   println(io, "# Inverse field and vector-potential coefficient table (full g_ref dependence)")
   println(io, "#")
   println(io, "# By_b[(m,nd)] = [(c, p, q, k), ...]  means  By += c * g_ref^k * x^p * y^q * b(m,nd)")
@@ -430,11 +521,12 @@ open(outfile, "w") do io
   println(io, "# ---------------------------------------------------------------------------")
   println(io, "# GENERATED FILE -- do not edit by hand.")
   println(io, "#")
-  println(io, "# Written by programs/create_gg_coef_table.jl with the input parameters")
-  println(io, "# below.  These are the only inputs: the same two values always reproduce")
-  println(io, "# this file exactly.  To regenerate:")
+  println(io, "# Written by programs/create_field_to_gg_coef_tables.jl, which writes monomial_functions.jl")
+  println(io, "# from the same computation, with the input parameters below.  These are the")
+  println(io, "# only inputs: the same two values always reproduce this file exactly.  To")
+  println(io, "# regenerate:")
   println(io, "#")
-  println(io, "#   MAXTOT=$MAXTOT MMAX=$MMAX julia programs/create_gg_coef_table.jl")
+  println(io, "#   MAXTOT=$MAXTOT MMAX=$MMAX julia programs/create_field_to_gg_coef_tables.jl")
   println(io, "#")
   println(io, "# Input parameters (documented in the docstrings just below)")
   println(io, "#   MAXTOT = $MAXTOT   max total degree p+q of the x^p y^q monomials kept")
@@ -531,4 +623,4 @@ open(outfile, "w") do io
   end
 end
 
-println("done, written to $outfile")
+println("done, written to $coeffile")

@@ -5,21 +5,23 @@ module GeneralizedGradients
   using StaticArrays: SVector, SMatrix
   using Adapt
 
+  # GG coefficient tables: Bx_a … Bs_bs (field) and Ax_a … As_bs (vector
+  # potential), plus the MAXTOT and MMAX the table was built with.
+  const _TABLE_FILE = joinpath(@__DIR__, "..", "tables", "gg_coef_table.jl")
+  include(_TABLE_FILE)
+
   # Package-wide constants (referenced by the helpers in low_level.jl and the
   # evaluation / field-grid code).
 
-  # Working size for the truncated (x,y) coefficient arrays.  The gg_coef table
-  # is built to total monomial degree MAXTOT (see the table's own docstring for
-  # that constant, included below), so 20 leaves ample headroom.
-  const _NMAX = 20
+  # Working size for the truncated (x,y) coefficient arrays: K[p+1,q+1] holds
+  # the coefficient of x^p y^q, and the table tabulates p + q <= MAXTOT, so the
+  # largest index either p or q can reach is MAXTOT.  Derived from the table
+  # rather than fixed, so a table built at a different MAXTOT still fits.
+  const _NMAX = MAXTOT + 1
 
   # openPMD SI base-unit exponents (L, M, T, I, Theta, N, J) for Tesla and V/m.
   const _DIM_TESLA = [0.0, 1, -2, -1, 0, 0, 0]
   const _DIM_VPERM = [1.0, 1, -3, -1, 0, 0, 0]
-
-  # GG coefficient tables: Bx_a … Bs_bs (field) and Ax_a … As_bs (vector potential).
-  const _TABLE_FILE = joinpath(@__DIR__, "..", "tables", "gg_coef_table.jl")
-  include(_TABLE_FILE)
 
   include("struct.jl")
   include("low_level.jl")

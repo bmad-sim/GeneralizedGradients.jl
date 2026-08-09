@@ -799,8 +799,8 @@ end
     p.m_max  = 11:40
     p.nd_max = 0:1
     res = gg_calc_fit(field, p)
-    @test length(res.scan) == 6            # m_max 11,12,13 x nd_max 0,1
-    @test maximum(s.m_max for s in res.scan) == 13
+    @test length(res.scan) == 2 * (MMAX - 10)   # m_max 11 .. MMAX x nd_max 0,1
+    @test maximum(s.m_max for s in res.scan) == MMAX
 
     @test_throws ErrorException (p.nd_max = Int[]; gg_calc_fit(field, p))
     p.nd_max = 0:1

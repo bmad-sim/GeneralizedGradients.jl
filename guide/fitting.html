@@ -247,7 +247,7 @@
         <article role="main" id="furo-main-content">
           <section class="tex2jax_ignore mathjax_ignore" id="fitting-a-field-grid-to-generalized-gradients">
 <h1>Fitting a field grid to generalized gradients<a class="headerlink" href="#fitting-a-field-grid-to-generalized-gradients" title="Link to this heading">¶</a></h1>
-<p>The central operation is <code class="docutils literal notranslate"><span class="pre">gg_fit</span></code>, which fits a 3D magnetic field grid to
+<p>The central operation is <code class="docutils literal notranslate"><span class="pre">gg_calc_fit</span></code>, which fits a 3D magnetic field grid to
 generalized-gradient functions <code class="docutils literal notranslate"><span class="pre">a_m(s)</span></code>, <code class="docutils literal notranslate"><span class="pre">b_m(s)</span></code>, <code class="docutils literal notranslate"><span class="pre">b_s(s)</span></code> and their
 <code class="docutils literal notranslate"><span class="pre">s</span></code>-derivatives, <strong>plane by plane</strong>.</p>
 <section id="read-a-field-grid">
@@ -308,15 +308,15 @@ refitting what is left. Both are fractions of the field table’s mean <code cla
 <code class="docutils literal notranslate"><span class="pre">0</span></code> switches a test off.</p></li>
 </ul>
 <p>Either way the surviving coefficients are stored sparsely in <code class="docutils literal notranslate"><span class="pre">m</span></code>, and every
-consumer treats a missing key as an identically zero function. See the <code class="docutils literal notranslate"><span class="pre">gg_fit</span></code>
+consumer treats a missing key as an identically zero function. See the <code class="docutils literal notranslate"><span class="pre">gg_calc_fit</span></code>
 docstring for the full rules.</p>
 </section>
 <section id="run-the-fit">
 <h2>3. Run the fit<a class="headerlink" href="#run-the-fit" title="Link to this heading">¶</a></h2>
-<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">results</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gg_fit</span><span class="p">(</span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span>
+<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">gg_fit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gg_calc_fit</span><span class="p">(</span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">results</span></code> is a <code class="docutils literal notranslate"><span class="pre">GGCoefs</span></code> holding the fitted coefficient functions
+<p><code class="docutils literal notranslate"><span class="pre">gg_fit</span></code> is a <code class="docutils literal notranslate"><span class="pre">GGCoefs</span></code> holding the fitted coefficient functions
 (<code class="docutils literal notranslate"><span class="pre">a</span></code>, <code class="docutils literal notranslate"><span class="pre">b</span></code>, <code class="docutils literal notranslate"><span class="pre">bs</span></code>) sampled at every base plane (<code class="docutils literal notranslate"><span class="pre">z_base</span></code>), along with
 the per-plane weighted-RMS residuals (<code class="docutils literal notranslate"><span class="pre">rms_weighted_plane</span></code>), <code class="docutils literal notranslate"><span class="pre">m_max</span></code>, <code class="docutils literal notranslate"><span class="pre">nd_max</span></code>, and the
 reference-frame bending strength <code class="docutils literal notranslate"><span class="pre">g_ref</span></code>.</p>
@@ -325,12 +325,12 @@ reference-frame bending strength <code class="docutils literal notranslate"><spa
 <h2>4. Inspect and save<a class="headerlink" href="#inspect-and-save" title="Link to this heading">¶</a></h2>
 <p>Print a human-readable summary (fit settings, per-plane residuals, leading
 multipoles at the central plane):</p>
-<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">gg_fit_show_results</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span>
+<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">gg_show_fit_results</span><span class="p">(</span><span class="n">gg_fit</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Write the result to an HDF5 file (readable later by <code class="docutils literal notranslate"><span class="pre">read_gg_fit</span></code>, and the input
 to the Bmad exporters):</p>
-<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">write_gg_fit</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span><span class="w">   </span><span class="c"># writes params.output_file</span>
+<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">write_gg_fit</span><span class="p">(</span><span class="n">gg_fit</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span><span class="w">   </span><span class="c"># writes params.output_file</span>
 </pre></div>
 </div>
 </section>
@@ -338,8 +338,8 @@ to the Bmad exporters):</p>
 <h2>5. Diagnose a bad fit<a class="headerlink" href="#diagnose-a-bad-fit" title="Link to this heading">¶</a></h2>
 <p>A large RMS residual on some plane does not say what to do about it. Adding GG
 terms helps only if the residual is something the expansion can represent, and
-that is what <code class="docutils literal notranslate"><span class="pre">gg_fit_show_residuals</span></code> measures:</p>
-<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">gg_fit_show_residuals</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">;</span><span class="w"> </span><span class="n">detail</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="mi">12</span><span class="p">])</span>
+that is what <code class="docutils literal notranslate"><span class="pre">gg_show_fit_residuals</span></code> measures:</p>
+<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">gg_show_fit_residuals</span><span class="p">(</span><span class="n">gg_fit</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">;</span><span class="w"> </span><span class="n">detail</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="mi">12</span><span class="p">])</span>
 </pre></div>
 </div>
 <p>Per base plane it reports</p>
@@ -367,9 +367,9 @@ magnitude above its neighbours is a seam or a bad plane in the map.</p></li>
 <p>The check none of this replaces is the direct one: refit with a larger <code class="docutils literal notranslate"><span class="pre">m_max</span></code>
 and see whether the plane’s residual actually falls. A residual made of missing
 GG terms drops; one that is not saturates.</p>
-<p>To see the residual rather than summarize it, <code class="docutils literal notranslate"><span class="pre">gg_fit_residual_map</span></code> returns it
+<p>To see the residual rather than summarize it, <code class="docutils literal notranslate"><span class="pre">gg_make_fit_residual_table</span></code> returns it
 over one plane’s grid:</p>
-<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gg_fit_residual_map</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="mi">12</span><span class="p">)</span>
+<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gg_make_fit_residual_table</span><span class="p">(</span><span class="n">gg_fit</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="mi">12</span><span class="p">)</span>
 <span class="n">r</span><span class="o">.</span><span class="n">dB</span><span class="p">[</span><span class="o">:</span><span class="p">,</span><span class="w"> </span><span class="o">:</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">]</span><span class="w">        </span><span class="c"># Bx residual, indexed [ix, iy]; 2 and 3 are By and Bs</span>
 </pre></div>
 </div>
@@ -388,15 +388,15 @@ corner-dominated residual is unmistakable.</p>
 <span class="n">params</span><span class="o">.</span><span class="n">n_planes_add</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span>
 <span class="n">params</span><span class="o">.</span><span class="n">output_file</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;gg_fit_result.h5&quot;</span>
 
-<span class="n">results</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gg_fit</span><span class="p">(</span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span>
-<span class="n">gg_fit_show_results</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span>
-<span class="n">write_gg_fit</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span>
+<span class="n">gg_fit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gg_calc_fit</span><span class="p">(</span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span>
+<span class="n">gg_show_fit_results</span><span class="p">(</span><span class="n">gg_fit</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span>
+<span class="n">write_gg_fit</span><span class="p">(</span><span class="n">gg_fit</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">)</span>
 </pre></div>
 </div>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
 <p>The fit does not strictly require a rectangular, evenly spaced grid — the merit
-function is a sum over field points — but the current <code class="docutils literal notranslate"><span class="pre">gg_fit</span></code> assumes the GG
+function is a sum over field points — but the current <code class="docutils literal notranslate"><span class="pre">gg_calc_fit</span></code> assumes the GG
 functions are sampled on the grid’s own <code class="docutils literal notranslate"><span class="pre">z</span></code>-planes.</p>
 </div>
 <p>Next: <a class="reference internal" href="evaluation.html"><span class="std std-doc">evaluate the fitted field</span></a> or

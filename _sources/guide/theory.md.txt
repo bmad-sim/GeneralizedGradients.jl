@@ -1,6 +1,6 @@
 # How the GG calculation works
 
-This page summarizes the mathematics behind `gg_fit`. The field-expansion table
+This page summarizes the mathematics behind `gg_calc_fit`. The field-expansion table
 is linear in the GG functions and their `s`-derivatives, which makes the fit a
 (weighted) linear least-squares problem.
 

@@ -113,16 +113,15 @@ residual broken out by field component (`Bx`, `By`, `Bs` separately).
 A fit with larger `m_max` and/or `nd_max` will always have a lower RMS residual
 at the cost of more coefficients.
 A scan therefore cannot pick its winner by residual alone — it needs a rule that charges for coefficients.
-The input `fit_criterion` parameter selects that rule. 
+The input `fit_criterion` parameter selects that rule.
 Each scanned fit gets a score and the lowest score wins.
 
-All three rules are built from two numbers:
+Both rules are built from these numbers:
 
 ```
 RSS = Σ_planes Σ_points  weight · (field_from_table - field_from_GG_coefs)^2
 N   = total number of fitted field-component values, summed over base planes
       = Σ_planes · 3 · (points in that plane's fit region)
-W   = Σ_planes Σ_points  weight, over those same values
 k   = total number of fitted coefficients
       = (coefficients per plane) · (number of principal planes)
 ```
@@ -130,23 +129,8 @@ k   = total number of fitted coefficients
 `RSS` is the weighted residual — the merit function the fit actually minimized,
 pooled over every base plane. `N` counts `Bx`, `By` and `Bs` at each field point
 of each plane's fit region, so a point used by several base planes is counted
-once per base plane. `W` is the weight total over that same set, and equals `N`
-when `core_weight = outer_plane_weight = 1`. `k` likewise counts the whole fit,
+once per base plane. `k` likewise counts the whole fit,
 since each base plane is solved for its own copy of the coefficients.
-
-    fit_criterion = :rms
-
-```
-score = sqrt(RSS / W)
-```
-
-The pooled weighted RMS residual, which is also the `rms_weighted` column of the
-scan table. Normalizing by `W` rather than `N` keeps it a weighted mean of the
-squared deviations, so it can be compared directly against the unweighted
-residual and against `<|B|>`.
-This is a pure goodness-of-fit measure with no charge for coefficients, so
-by the argument above it will select the largest fit offered. Use it to see the
-raw residual ranking, not to choose a fit.
 
     fit_criterion = :aic          # Akaike information criterion
 
@@ -160,7 +144,7 @@ score = N · ln(RSS / N) + 2·k
 score = N · ln(RSS / N) + k·ln(N)
 ```
 
-Both are the standard information criteria for a least-squares fit with unknown
+These are the standard information criteria for a least-squares fit with unknown
 error variance. The first term, `N·ln(RSS/N)`, is (up to an additive constant
 that is the same for every candidate, and so cannot affect the ranking) minus
 twice the maximized Gaussian log-likelihood; it rewards a smaller residual. The
@@ -235,17 +219,16 @@ planes.
   Default `[0.0, 0.0]`.
 - `n_planes_add` — number of `z`-planes added to either side of the base plane
   used to resolve derivatives.
-- `m_max` — highest multipole order `m` kept. `-1` (the default) keeps every `m`
-  in the coefficient table. A vector or range scans (see "Scanning" below).
-- `nd_max` — highest derivative order `nd` kept. `-1` (the default) means
-  `2*n_planes_add`. A vector or range scans.
+- `m_max` — highest multipole order `m` kept. A vector or range scans (see
+  "Scanning" below). Default `4:8`.
+- `nd_max` — highest derivative order `nd` kept. A vector or range scans.
+  Default `3:7`.
 - `nd_max_for_m` — per-multipole override of `nd_max`, as a `Dict` mapping `m` to
   its own derivative limit (see "Derivative order per multipole" below).
   Default `Dict()` (`nd_max` alone).
 - `fit_radius_max` — fit only the field points within this radius of the GG axis
   (see "The fit region" below). Default `0` (every grid point).
-- `fit_criterion` — how a scan picks its winner: `:bic` (default), `:aic`, or
-  `:rms`.
+- `fit_criterion` — how a scan picks its winner: `:bic` (default) or `:aic`.
 - `core_weight` — merit-function weight for "core" (near-axis) points.
   Default `1` (uniform).
 - `outer_plane_weight` — merit-function weight for the outer `z`-planes.
@@ -400,12 +383,12 @@ function gg_calc_fit(field::FieldGridTable, params::GGFitInputParams)
   # not fit the same top fit over and over.
   m_table_max  = maximum(k[1] for d in (a_dicts..., b_dicts...) for k in keys(d))
   nd_table_max = maximum(k[2] for d in (a_dicts..., b_dicts...) for k in keys(d))
-  m_cands  = _fit_candidates(params.m_max, m_table_max, m_table_max)
-  nd_cands = _fit_candidates(params.nd_max, 2 * npa, nd_table_max)
+  m_cands  = _fit_candidates(params.m_max, m_table_max)
+  nd_cands = _fit_candidates(params.nd_max, nd_table_max)
   scanning = !(params.m_max isa Int && params.nd_max isa Int)
 
-  params.fit_criterion in (:bic, :aic, :rms) ||
-      error("Unknown fit_criterion: $(params.fit_criterion). Expecting :bic, :aic, or :rms.")
+  params.fit_criterion in (:bic, :aic) ||
+      error("Unknown fit_criterion: $(params.fit_criterion). Expecting :bic or :aic.")
 
   # The master fit is the union of every candidate: the design matrix is built
   # once at this size and each candidate then uses a subset of its columns.
@@ -533,7 +516,7 @@ function gg_calc_fit(field::FieldGridTable, params::GGFitInputParams)
                                  rms_weighted = sqrt(rss / wdata),
                                  rms_weighted_comp = rmswc,
                                  rms_unweighted = sqrt(rssu / ndata),
-                                 score = _fit_score(params.fit_criterion, rss, ndata, wdata,
+                                 score = _fit_score(params.fit_criterion, rss, ndata,
                                                     ncoef * nplanes),
                                  criterion = params.fit_criterion))
   end
@@ -793,40 +776,36 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    _fit_candidates(spec, default, table_max) -> Vector{Int}
+    _fit_candidates(spec, table_max) -> Vector{Int}
 
 Resolve an `m_max`/`nd_max` input-parameter setting into the list of values
-`gg_calc_fit` should try. `-1` means "use `default`"; any other `Int` pins that value;
-a vector or range is taken as-is. Values are clamped to `table_max` (the largest
-the coefficient table supports) and deduplicated, so an over-wide request such as
-`0:100` does not refit the same top fit repeatedly.
+`gg_calc_fit` should try. An `Int` pins that value; a vector or range is taken
+as-is. Values are clamped to `table_max` (the largest the coefficient table
+supports) and deduplicated, so an over-wide request such as `0:100` does not
+refit the same top fit repeatedly.
 """
-function _fit_candidates(spec::Union{Int,AbstractVector{Int}}, default::Int, table_max::Int)
-  vals = spec isa Int ? [spec == -1 ? default : spec] : collect(spec)
+function _fit_candidates(spec::Union{Int,AbstractVector{Int}}, table_max::Int)
+  vals = spec isa Int ? [spec] : collect(spec)
   isempty(vals) && error("Empty m_max/nd_max candidate list.")
   any(v -> v < 0, vals) && error("Negative m_max/nd_max candidate in $spec.")
   return sort!(unique!([min(v, table_max) for v in vals]))
 end
 
 """
-    _fit_score(criterion, rss, ndata, wdata, nparam) -> Float64
+    _fit_score(criterion, rss, ndata, nparam) -> Float64
 
 Selection score for one scanned fit; the lowest score wins. `rss` is the pooled
-weighted sum of squared residuals over `ndata` field-component values, `wdata`
-the sum of the weights of those same values, and `nparam` the total number of
-fitted coefficients (per-plane count times the number of base planes). With
-`RSS = rss`, `N = ndata`, `W = wdata` and `k = nparam`:
+weighted sum of squared residuals over `ndata` field-component values, and
+`nparam` the total number of fitted coefficients (per-plane count times the
+number of base planes). With `RSS = rss`, `N = ndata` and `k = nparam`:
 
 ```
-:rms    sqrt(RSS / W)                  goodness of fit only, no charge for k
 :aic    N*log(RSS/N) + 2k              Akaike information criterion
 :bic    N*log(RSS/N) + k*log(N)        Bayesian information criterion
 ```
 
-`:rms` divides by `W` so the score is exactly the `rms_weighted` column of the
-scan table; `W` is the same for every candidate, so this is only a rescaling of
-the ranking. `:aic`/`:bic` keep `N` in the log term, where it is the count of
-data values entering the Gaussian log-likelihood, not a weight total.
+`N` in the log term is the count of data values entering the Gaussian
+log-likelihood, not a weight total.
 
 `:aic` and `:bic` share the leading term — minus twice the maximized Gaussian
 log-likelihood, dropping an additive constant that is common to every candidate
@@ -835,8 +814,7 @@ coefficient, `2` versus `log(N)`. See the `gg_calc_fit` docstring for how to rea
 trade-off and for the caveats that apply when the residual is dominated by
 systematic truncation error rather than by noise.
 """
-function _fit_score(criterion::Symbol, rss::Float64, ndata::Int, wdata::Float64, nparam::Int)
-  criterion == :rms && return sqrt(rss / wdata)
+function _fit_score(criterion::Symbol, rss::Float64, ndata::Int, nparam::Int)
   # Guard the log against an (effectively) exact fit, which a fit with as many
   # coefficients as data points can produce.
   ll = ndata * log(max(rss, floatmin(Float64)) / ndata)

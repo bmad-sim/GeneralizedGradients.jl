@@ -102,6 +102,54 @@ to the Bmad exporters):
 write_gg_fit(results, field, params)   # writes params.output_file
 ```
 
+## 5. Diagnose a bad fit
+
+A large RMS residual on some plane does not say what to do about it. Adding GG
+terms helps only if the residual is something the expansion can represent, and
+that is what `gg_fit_show_residuals` measures:
+
+```julia
+gg_fit_show_residuals(results, field; detail = [12])
+```
+
+Per base plane it reports
+
+- **`out%`** — the share of the squared residual coming from the corners of the
+  grid, outside the largest circle the expansion is well posed on. On a square
+  grid the corners sit `√2` further out than the inscribed radius, where every
+  multipole is largest and the series least convergent, so a plane's RMS can be
+  almost entirely made of them while the fit is good everywhere it is meant to be
+  used. Read this column first.
+- **`rough%`** — how much of the residual inside that circle is point-to-point
+  irregular rather than smooth. Rough is noise in the field table and will not
+  improve however many terms are added; smooth is model error and will.
+- **`top harmonic`** — the largest azimuthal harmonic `m` of the residual and its
+  measured radial exponent `p`. A missing multipole of order `m` gives `p = m-1`
+  in `B_r`/`B_θ` and `p = m` in `B_s`; when they match, raising `m_max` (or
+  lifting an `nd_max_for_m` cap) removes it.
+- **`divB`, `curlB`** — the field table's own violation of Maxwell's equations,
+  as a multiple of what the fitted GG field shows under the same finite
+  differences. A GG expansion is Maxwellian by construction, so anything the
+  table violates by is a floor no fit reaches below.
+- **`d²B/dz²`** — the second difference of the table along `z`. A plane orders of
+  magnitude above its neighbours is a seam or a bad plane in the map.
+
+The check none of this replaces is the direct one: refit with a larger `m_max`
+and see whether the plane's residual actually falls. A residual made of missing
+GG terms drops; one that is not saturates.
+
+To see the residual rather than summarize it, `gg_fit_residual_map` returns it
+over one plane's grid:
+
+```julia
+r = gg_fit_residual_map(results, field, 12)
+r.dB[:, :, 1]        # Bx residual, indexed [ix, iy]; 2 and 3 are By and Bs
+```
+
+`programs/plot_gg_residuals.jl` draws these as 3D surfaces with Makie — a missing
+multipole of order `m` appears as `2m` alternating lobes around the axis, and a
+corner-dominated residual is unmistakable.
+
 ## Putting it together
 
 The complete script lives at `examples/run_gg_fit.jl`:

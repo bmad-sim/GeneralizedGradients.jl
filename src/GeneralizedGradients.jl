@@ -24,6 +24,7 @@ module GeneralizedGradients
   include("low_level.jl")
   include("gg_eval.jl")
   include("gg_fit.jl")
+  include("gg_diagnostics.jl")
   include("gg_utils.jl")
   include("field_grid_utils.jl")
 
@@ -35,6 +36,8 @@ module GeneralizedGradients
        GGFitScanPoint,
        gg_fit,
        gg_fit_show_results,
+       gg_fit_residual_map,
+       gg_fit_show_residuals,
        write_gg_fit,
        read_gg_fit,
        write_bmad_field_grid_element,

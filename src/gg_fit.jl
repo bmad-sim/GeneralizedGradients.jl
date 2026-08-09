@@ -243,6 +243,8 @@ planes.
 - `nd_max_for_m` — per-multipole override of `nd_max`, as a `Dict` mapping `m` to
   its own derivative limit (see "Derivative order per multipole" below).
   Default `Dict()` (`nd_max` alone).
+- `fit_radius_max` — fit only the field points within this radius of the GG axis
+  (see "The fit region" below). Default `0` (every grid point).
 - `fit_criterion` — how a scan picks its winner: `:bic` (default), `:aic`, or
   `:rms`.
 - `core_weight` — merit-function weight for "core" (near-axis) points.
@@ -257,6 +259,34 @@ planes.
   (no pruning).
 - `output_file` — name of the output HDF5 file written by
   `write_gg_fit`. Default `"gg_fit_results.h5"`.
+
+## The fit region
+
+By default every point of the field table is fitted. A field grid is
+rectangular and the GG expansion is a series in `r`, so the two disagree about
+where the fit region ends, and the disagreement is not a detail: the corners of a
+square grid sit `√2` beyond the largest circle inside it, and on a 29x29 grid
+27% of the points are out there. That is the worst place to spend the merit
+function — every multipole is at its largest, the series is at its least
+convergent, and a term of order `m` counts `2^(m/2)` more at a corner than at the
+inscribed radius. A fit can be excellent everywhere it is meant to be used and
+still report a large RMS made almost entirely of corners.
+
+    fit_radius_max = 0.07      # inscribed radius of a grid spanning ±0.07 in x and y
+
+drops the points beyond that radius of the expansion axis (`origin`, not the grid
+centre) from the design matrix. They are not fitted and enter no residual.
+
+Setting it also moves three things onto the fit region, so that they keep
+describing the same set of points the residuals do: `core_weight`, whose profile
+runs from `core_weight` on the axis to `1` at the outermost *fitted* point;
+`field_ave_plane`; and the field contributions that `prune_ave_limit` /
+`prune_max_limit` act on, so a GG function is pruned on the field it produces
+where the fit applies rather than at a corner it was never fitted to.
+
+Note that `fit_radius_max` bounds the merit function, not the model. The fitted
+GG functions still evaluate anywhere — including out at the corners, where they
+are now an extrapolation rather than a fit.
 
 ## Derivative order per multipole
 
@@ -393,7 +423,22 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
   # Transverse coordinates relative to the GG origin (the expansion axis).
   xs = [r0[1] + dr[1] * ix - origin[1] for ix in ixs]
   ys = [r0[2] + dr[2] * iy - origin[2] for iy in iys]
-  rmax2 = maximum(xs[i]^2 + ys[j]^2 for i in eachindex(xs), j in eachindex(ys))
+
+  # The transverse points the fit runs over: every grid point, or only those
+  # within fit_radius_max of the expansion axis. Held as a list of
+  # (grid index, coordinate index) pairs, since a radial cut does not leave a
+  # rectangle behind. It is the same for every plane, so it is built once here.
+  params.fit_radius_max >= 0 ||
+      error("Negative fit_radius_max = $(params.fit_radius_max). Use 0 to fit every grid point.")
+  rfit2 = params.fit_radius_max^2
+  xy_pts = [(iix, iiy, ix, iy) for (iix, ix) in enumerate(ixs), (iiy, iy) in enumerate(iys)
+            if rfit2 == 0 || xs[iix]^2 + ys[iiy]^2 <= rfit2 * (1 + 1e-12)]
+  isempty(xy_pts) && error("fit_radius_max = $(params.fit_radius_max) leaves no field points " *
+      "to fit. The nearest grid point to the GG axis is at r = " *
+      "$(sqrt(minimum(xs[i]^2 + ys[j]^2 for i in eachindex(xs), j in eachindex(ys)))).")
+  # The core weight runs from core_weight on the axis to 1 at the outermost
+  # fitted point, so this follows the fit region rather than the grid.
+  rmax2 = maximum(xs[p[1]]^2 + ys[p[2]]^2 for p in xy_pts)
 
   # ---- Assemble the master parameter (unknown) list from the table keys --
   # a/b indexed by (m,nd); bs indexed by nd (stored as (0,nd)). Functions the
@@ -467,7 +512,7 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
   # Everything the per-plane solve needs that does not depend on which columns
   # are being fitted, so that the pruning pass below can re-solve a reduced
   # column set without rebuilding any of it.
-  geom = (; mag, ixs, iys, izs_grid, xs, ys, rmax2, npa, dz_grid, nd_max_all,
+  geom = (; mag, xy_pts, izs_grid, xs, ys, rmax2, npa, dz_grid, nd_max_all,
             core_weight, outer_plane_weight, master_list, col_terms, ncols_all)
   sol = _fit_over_planes(cand_cols, geom)
   (; nrow_pl, wsum_pl, wsum_comp_pl, field_ave_plane) = sol
@@ -507,6 +552,7 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
   pruned    = Tuple{Symbol,Int}[]
   if params.prune_ave_limit > 0 || params.prune_max_limit > 0
     trial = GGCoefs(; z_base, _expand_coefs(master_list[keep_cols], theta)...,
+                      fit_radius_max = params.fit_radius_max,
                       g_ref = field.g_ref, origin, dz_grid)
     rows, b_ave = _gg_field_contributions(trial, field)
     # A function has to fall below every limit that is in force; a limit of 0 is
@@ -541,7 +587,8 @@ function gg_fit(field::FieldGridTable, params::GGFitInputParams)
 
   return GGCoefs(; z_base, params = params_list, a, b, bs,
                     rms_weighted_plane = rmsw_pl, rms_unweighted_plane = rmsu_pl,
-                    field_ave_plane, m_max, nd_max, pruned,
+                    field_ave_plane, fit_radius_max = params.fit_radius_max,
+                    m_max, nd_max, pruned,
                     scan = scanning ? scan : GGFitScanPoint[],
                     g_ref = field.g_ref, origin, dz_grid)
 end
@@ -648,7 +695,7 @@ per-plane residuals, and the weighted residual split by field component; then th
 per-plane row counts and weight sums, and the average `|B|` of each base plane.
 """
 function _fit_over_planes(cand_cols, geom)
-  (; mag, ixs, iys, izs_grid, xs, ys, rmax2, npa, dz_grid, nd_max_all,
+  (; mag, xy_pts, izs_grid, xs, ys, rmax2, npa, dz_grid, nd_max_all,
      core_weight, outer_plane_weight, master_list, col_terms, ncols_all) = geom
 
   nplanes = length(izs_grid)
@@ -670,7 +717,7 @@ function _fit_over_planes(cand_cols, geom)
     dzs   = [(iz - iz0) * dz_grid for iz in izs]
     dzmax = maximum(abs, dzs)
 
-    npts  = length(ixs) * length(iys) * length(izs)
+    npts  = length(xy_pts) * length(izs)
     nrows = 3 * npts
     nrow_pl[pidx] = nrows
     A     = zeros(nrows, ncols_all)
@@ -684,7 +731,7 @@ function _fit_over_planes(cand_cols, geom)
             1 + (outer_plane_weight - 1) * abs(dz) / dzmax
       # Taylor-extrapolation factors dz^k/k! for this plane offset, k = 0 … nd_max_all.
       dzfac = [dz^k / factorial(k) for k in 0:nd_max_all]
-      for (iix, ix) in enumerate(ixs), (iiy, iy) in enumerate(iys)
+      for (iix, iiy, ix, iy) in xy_pts
         r2  = xs[iix]^2 + ys[iiy]^2
         wco = core_weight == 1 ? 1.0 :
               core_weight * rmax2 / (rmax2 + r2 * (core_weight - 1))
@@ -735,9 +782,9 @@ function _fit_over_planes(cand_cols, geom)
     end
 
     # Average |B| over the base plane alone (unweighted): the field scale against
-    # which the residuals above are to be judged.
-    field_ave_plane[pidx] = sum(norm(mag[ix, iy, iz0]) for ix in ixs, iy in iys) /
-                            (length(ixs) * length(iys))
+    # which the residuals above are to be judged. Over the fitted points only, so
+    # that it stays comparable with them when a fit radius is set.
+    field_ave_plane[pidx] = sum(norm(mag[p[3], p[4], iz0]) for p in xy_pts) / length(xy_pts)
   end
 
   return (; thetas, rmsw_c, rmsu_c, rmsw_comp_c, nrow_pl, wsum_pl, wsum_comp_pl,
@@ -804,7 +851,8 @@ end
     _gg_field_contributions(results::GGCoefs, field::FieldGridTable) -> (rows, b_ave)
 
 How much field each fitted GG function actually produces, measured over every
-transverse grid point of every base plane.
+fitted transverse grid point of every base plane — that is, over
+`results.fit_radius_max` when one is set, and over the whole grid otherwise.
 
 `rows` holds one `(typ, m, ave, max)` per GG function — `(:a, m)` and `(:b, m)`
 for each multipole order `m` present in the fit, plus `(:bs, 0)` — where `ave`
@@ -829,8 +877,14 @@ function _gg_field_contributions(results::GGCoefs, field::FieldGridTable)
   # Coordinates relative to the GG expansion axis, as the coefficient tables want.
   xs  = [field.r0[1] + field.dr[1] * ix - results.origin[1] for ix in ixs]
   ys  = [field.r0[2] + field.dr[2] * iy - results.origin[2] for iy in iys]
+  # Restricted to the fit region: a function's field outside it is not something
+  # the fit ever tried to produce, and at the grid corners it is large enough to
+  # decide the pruning on its own.
+  rfit2 = results.fit_radius_max^2
+  pts   = [(i, j) for i in eachindex(xs), j in eachindex(ys)
+           if rfit2 == 0 || xs[i]^2 + ys[j]^2 <= rfit2 * (1 + 1e-12)]
   nplanes = length(results.z_base)
-  npts    = nplanes * length(xs) * length(ys)
+  npts    = nplanes * length(pts)
 
   groups = vcat([(:a, m) for m in sort!(unique(k[1] for k in keys(results.a)))],
                 [(:b, m) for m in sort!(unique(k[1] for k in keys(results.b)))],
@@ -853,7 +907,8 @@ function _gg_field_contributions(results::GGCoefs, field::FieldGridTable)
                         (mm, nd) -> at(bval(mm, nd)), nd -> at(bsval(nd)), results.g_ref)
       KBs = _comp_array(Bs_a, Bs_b, Bs_bs, (mm, nd) -> at(aval(mm, nd)),
                         (mm, nd) -> at(bval(mm, nd)), nd -> at(bsval(nd)), results.g_ref)
-      for x in xs, y in ys
+      for (i, j) in pts
+        x, y = xs[i], ys[j]
         nb = sqrt(_polyval(KBx, x, y)[1]^2 + _polyval(KBy, x, y)[1]^2 +
                   _polyval(KBs, x, y)[1]^2)
         tot += nb
@@ -863,7 +918,12 @@ function _gg_field_contributions(results::GGCoefs, field::FieldGridTable)
     push!(rows, (typ, m, npts == 0 ? NaN : tot / npts, mx))
   end
 
-  b_ave = length(mag) == 0 ? NaN : sum(norm, mag) / length(mag)
+  # The scale the rows are read against, over the same points they cover.
+  bsum = 0.0
+  for iz in axes(mag, 3), (i, j) in pts
+    bsum += norm(mag[ixs[i], iys[j], iz])
+  end
+  b_ave = npts == 0 ? NaN : bsum / (length(pts) * size(mag, 3))
   return rows, b_ave
 end
 
@@ -907,6 +967,9 @@ function gg_fit_show_results(results::GGCoefs, field::FieldGridTable, params::GG
                   for (m, nd) in sort!(collect(params.nd_max_for_m))), ", "),
             "   (overrides nd_max)")
   end
+  println("  fit_radius_max    : ", params.fit_radius_max,
+          params.fit_radius_max > 0 ? "   (points beyond this radius are not fitted)" :
+                                      "   (0 = every grid point is fitted)")
   println("  core_weight       : ", params.core_weight)
   println("  outer_plane_weight: ", params.outer_plane_weight)
   if !isempty(params.exclude_functions)
@@ -986,7 +1049,7 @@ is written to `params.output_file` and its path is returned.
     root datasets   : z_base, rms_weighted_plane, rms_unweighted_plane,
                       field_ave_plane, origin                     (Float64[])
     root attributes : g_ref, dz_grid (Float64); m_max, nd_max, n_planes_add (Int);
-                      core_weight, outer_plane_weight (Float64)
+                      fit_radius_max, core_weight, outer_plane_weight (Float64)
     groups a, b     : m (Int[]), nd (Int[]), values (Float64[nkeys, nplanes])
                       -- reconstruct Dict{(m,nd) => values[i,:]}
     group  bs       : nd (Int[]), values (Float64[nkeys, nplanes])
@@ -1002,6 +1065,7 @@ function write_gg_fit(results::GGCoefs, field::FieldGridTable, params::GGFitInpu
     f["origin"]    = collect(Float64, params.origin)
     attributes(f)["m_max"]              = Int(results.m_max)
     attributes(f)["nd_max"]             = Int(results.nd_max)
+    attributes(f)["fit_radius_max"]     = Float64(results.fit_radius_max)
     attributes(f)["g_ref"]              = Float64(results.g_ref)
     attributes(f)["dz_grid"]            = Float64(field.dr[3])
     # Fit-control parameters, retained for later reference / reproducibility.

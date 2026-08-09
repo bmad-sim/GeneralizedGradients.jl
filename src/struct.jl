@@ -137,6 +137,36 @@ conditioned unknowns in the fit and are often fitting little more than
 interpolation error. Cutting them here removes those columns while leaving the
 low-`m` functions at full derivative order, where the data supports them.
 
+  fit_radius_max = Float64
+
+Fit only the field points within this radius of the GG expansion axis. `0` (the
+default) uses every point of the field table.
+
+A field grid is rectangular and the GG expansion is a series in `r`, so the two
+do not agree about where the fit region ends. The corners of a square grid sit
+`√2` beyond the largest circle inside it, and they are the *majority* of its
+area: on a 29x29 grid, 27% of the points lie outside the inscribed circle. That
+is the worst possible place to be spending the merit function. Every multipole
+is at its largest there, the series is at its least convergent, and a term of
+order `m` is weighted `2^(m/2)` more heavily at a corner than at the inscribed
+radius. A fit can be excellent everywhere it is meant to be used and still report
+a large RMS made almost entirely of corners.
+
+```
+fit_radius_max = 0.07     # the inscribed radius of a grid spanning +-0.07 in x and y
+```
+
+Points outside the radius are dropped from the design matrix: they are not fitted
+and do not enter any residual. The radius is measured from `origin`, the axis the
+expansion is written about, not from the grid centre.
+
+Setting it also re-scales `core_weight`, whose profile runs from `core_weight` on
+the axis to `1` at the outermost *fitted* point — with a radius set, that is the
+radius rather than the grid corner. `field_ave_plane` and the field contributions
+that drive `prune_ave_limit`/`prune_max_limit` likewise cover the fit region
+only, so pruning judges a GG function by the field it produces where the fit
+applies. `gg_fit_show_residuals` reports the residual split at this radius.
+
   fit_criterion = Symbol
 
 How a scan picks its winner. Each candidate model is given a score and the lowest
@@ -228,6 +258,7 @@ Name of the output file.
   nd_max::Union{Int,AbstractVector{Int}} = -1  # Max derivative order nd. -1 = 2*n_planes_add. Vector => scan.
   nd_max_for_m::Dict{Int,Int} = Dict{Int,Int}()  # Per-order override of nd_max: m => nd_max for a_m and b_m (m = 0 => b_s).
   fit_criterion::Symbol = :bic           # Scan selection criterion: :bic, :aic, or :rms.
+  fit_radius_max::Float64 = 0.0          # Only fit field points within this radius of the GG axis. 0 = use every point.
   core_weight::Float64 = 1.0             # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
   outer_plane_weight::Float64 = 1.0      # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).
   exclude_functions::Vector{Tuple{Symbol,Int}} = Tuple{Symbol,Int}[]  # GG functions to leave out of the fit: (:a,m), (:b,m), (:bs,0).
@@ -377,10 +408,14 @@ Fields:
 - `rms_unweighted_plane` — RMS fit residual at each base plane over the same
   points as `rms_weighted_plane` but with all point weights set to 1. Equal to
   `rms_weighted_plane` when `core_weight = outer_plane_weight = 1`.
-- `field_ave_plane` — average field magnitude `|B|` over the grid points of each
-  base plane [T]. Unweighted, and taken from the base plane alone (not the added
-  planes), so it gives the field profile along `z` and a scale against which
-  `rms_weighted_plane` can be judged.
+- `field_ave_plane` — average field magnitude `|B|` over the fitted grid points
+  of each base plane [T]. Unweighted, and taken from the base plane alone (not
+  the added planes), so it gives the field profile along `z` and a scale against
+  which `rms_weighted_plane` can be judged.
+- `fit_radius_max` — radius about `origin` the fit was restricted to [m], or `0`
+  if every grid point was used. Recorded because the residuals and the field
+  contributions above cover that region only, so reading them, or measuring
+  anything else against the fit, needs to know where the fit applies.
 - `m_max` — highest multipole order `m` retained by the fit. Lower than the
   cutoff the scan chose if pruning removed every function at the top orders.
 - `nd_max` — highest derivative order `nd` retained by the fit.
@@ -410,6 +445,7 @@ Fields:
   rms_weighted_plane::Vector{Float64} = Float64[]
   rms_unweighted_plane::Vector{Float64} = Float64[]
   field_ave_plane::Vector{Float64} = Float64[]
+  fit_radius_max::Float64 = 0.0          # radius the fit was restricted to [m]. 0 = every grid point.
   m_max::Int = 0
   nd_max::Int = 0
   scan::Vector{GGFitScanPoint} = GGFitScanPoint[]

@@ -37,6 +37,28 @@ julia> include("run_gg_fit.jl")
 See the `run_gg_fit.jl` and `src/gg_fit.jl` for documentation on the fit.
 The data file produced is `gg_fit_result.h5` (HDF5 format). 
 
+## Diagnose a fit with a large residual
+
+`gg_fit_show_residuals` says what a plane's residual is made of — whether it is
+smooth (a GG term the fit does not have) or irregular (noise in the field table,
+which no model removes), whether it is concentrated in the corners of the grid
+where the expansion converges worst, and whether the table itself satisfies
+Maxwell's equations:
+```
+julia> results = gg_fit(field, params)
+julia> gg_fit_show_residuals(results, field; detail = [12])
+```
+
+To look at the residual instead of summarizing it, `programs/plot_gg_residuals.jl`
+plots `field table - GG fit` over a plane as a 3D surface. It needs a Makie
+backend, which is why it is a program rather than part of the package:
+```
+julia> ] add GLMakie          # or CairoMakie, to write files
+julia> include("../programs/plot_gg_residuals.jl")
+julia> plot_residual_surfaces(results, field, 12)    # Bx, By, Bs of one plane
+julia> plot_residual_component(results, field, 1)    # Bx across all planes
+```
+
 ## Read in fit parameters.
 
 To load the fit use

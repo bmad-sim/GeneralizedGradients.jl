@@ -7,8 +7,8 @@
 Load a `gg_fit` result HDF5 file (written by `write_gg_fit`). Returns a
 two-tuple whose first component is a `GGCoefs` struct holding the GG
 coefficient dictionaries `a`, `b`, `bs` (and `z_base`, `m_max`, `nd_max`,
-`rms_weighted_plane`, `rms_unweighted_plane`, `field_ave_plane`, `g_ref`, `origin`,
-`dz_grid`), and whose second component is a NamedTuple of the
+`rms_weighted_plane`, `rms_unweighted_plane`, `field_ave_plane`, `fit_radius_max`,
+`g_ref`, `origin`, `dz_grid`), and whose second component is a NamedTuple of the
 associated fit-control metadata (`n_planes_add`, `core_weight`,
 `outer_plane_weight`). The `params` field of the returned struct is empty (the
 unknown list is not stored in the file).
@@ -30,6 +30,7 @@ function read_gg_fit(path::AbstractString)
                          rms_weighted_plane   = read(f["rms_weighted_plane"]),
                          rms_unweighted_plane = read(f["rms_unweighted_plane"]),
                          field_ave_plane      = read(f["field_ave_plane"]),
+                         fit_radius_max       = read_attribute(f, "fit_radius_max"),
                          g_ref     = read_attribute(f, "g_ref"),
                          origin    = read(f["origin"]),
                          dz_grid   = read_attribute(f, "dz_grid"))

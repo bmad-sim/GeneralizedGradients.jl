@@ -508,6 +508,219 @@ end
     quiet(() -> gg_fit_show_results(res, field, p))
   end
 
+  @testset "gg_fit fit_radius_max" begin
+    field = make_field()
+    base() = (p = GGFitInputParams(); p.n_planes_add = 1; p.m_max = 4; p.nd_max = 2; p)
+    r0, dr = field.r0, field.dr
+    ixs = first(axes(field.magnetic, 1)):last(axes(field.magnetic, 1))
+    iys = first(axes(field.magnetic, 2)):last(axes(field.magnetic, 2))
+    rad(ix, iy) = hypot(r0[1] + dr[1] * ix, r0[2] + dr[2] * iy)
+
+    full = gg_fit(field, base())
+    @test full.fit_radius_max == 0.0
+
+    # A radius beyond the grid corner changes nothing: the same points are fitted.
+    p = base(); p.fit_radius_max = 10.0
+    big = gg_fit(field, p)
+    @test big.rms_weighted_plane ≈ full.rms_weighted_plane
+    for (k, v) in big.a; @test v ≈ full.a[k]; end
+
+    # A real cut changes the fit, and the residual it reports must be the residual
+    # over the kept points only -- checked against the residual map, which is
+    # computed independently of the fit's own row bookkeeping.
+    p = base(); p.fit_radius_max = 0.02
+    res = gg_fit(field, p)
+    @test res.fit_radius_max == 0.02
+    @test !(res.rms_weighted_plane ≈ full.rms_weighted_plane)
+    for pl in eachindex(res.z_base)
+      s = 0.0; n = 0
+      for d in -1:1
+        1 <= pl + d <= length(res.z_base) || continue
+        m = gg_fit_residual_map(res, field, pl; dplane = d)
+        for (i, ix) in enumerate(ixs), (j, iy) in enumerate(iys)
+          rad(ix, iy) <= 0.02 * (1 + 1e-12) || continue
+          s += sum(abs2, view(m.dB, i, j, :)); n += 3
+        end
+      end
+      @test sqrt(s / n) ≈ res.rms_unweighted_plane[pl]
+    end
+    # field_ave_plane follows the same points.
+    for pl in eachindex(res.z_base)
+      iz = first(axes(field.magnetic, 3)) + pl - 1
+      vals = [sqrt(sum(abs2, field.magnetic[ix, iy, iz])) for ix in ixs, iy in iys
+              if rad(ix, iy) <= 0.02 * (1 + 1e-12)]
+      @test res.field_ave_plane[pl] ≈ sum(vals) / length(vals)
+    end
+
+    # Equivalent statement of the same cut: fitting the sub-grid that the radius
+    # keeps must give the same answer as masking the full grid to it. Here the
+    # radius keeps exactly the |ix|,|iy| <= 1 block.
+    sub = make_field(ixr = -1:1, iyr = -1:1)
+    ps = base(); ps.fit_radius_max = 0.0
+    pm = base(); pm.fit_radius_max = 0.01 * sqrt(2)
+    rs, rm = gg_fit(sub, ps), gg_fit(field, pm)
+    @test Set(keys(rs.a)) == Set(keys(rm.a))
+    for (k, v) in rs.a; @test v ≈ rm.a[k]; end
+    for (k, v) in rs.b; @test v ≈ rm.b[k]; end
+    @test rs.rms_weighted_plane ≈ rm.rms_weighted_plane
+
+    # core_weight normalizes to the outermost fitted point, so a uniform-weight
+    # fit is unaffected by the radius but a core-weighted one is re-scaled.
+    pw = base(); pw.core_weight = 5.0; pw.fit_radius_max = 0.02
+    @test all(isfinite, gg_fit(field, pw).rms_weighted_plane)
+
+    # A radius that keeps only the axis point is legal, if not useful: the grid
+    # has a point at r = 0 exactly.
+    pt = base(); pt.fit_radius_max = 1e-9
+    @test length(gg_fit(field, pt).z_base) == length(full.z_base)
+
+    # An empty or negative region is a mis-set parameter, not a fit. Offsetting
+    # the axis off the grid points is what makes the region genuinely empty.
+    pz = base(); pz.fit_radius_max = 1e-6; pz.origin = [0.0025, 0.0025]
+    @test_throws ErrorException gg_fit(field, pz)
+    pn = base(); pn.fit_radius_max = -1.0
+    @test_throws ErrorException gg_fit(field, pn)
+
+    # The radius travels with the result, through the file and the diagnostics.
+    mktempdir() do dir
+      p2 = base(); p2.fit_radius_max = 0.02; p2.output_file = joinpath(dir, "r.h5")
+      rr = gg_fit(field, p2)
+      quiet(() -> write_gg_fit(rr, field, p2))
+      back, _ = read_gg_fit(p2.output_file)
+      @test back.fit_radius_max == 0.02
+      @test gg_fit_residual_map(rr, field, 2).r_fit == 0.02
+      quiet(() -> gg_fit_show_results(rr, field, p2))
+      quiet(() -> gg_fit_show_residuals(rr, field; detail = [2]))
+    end
+  end
+
+  @testset "gg_fit residual map" begin
+    field = make_field()
+    # The map has to reproduce the fit's own arithmetic exactly, offset planes
+    # included: its Taylor extrapolation is the design matrix's, or the residual
+    # it shows is not the residual that was minimized.
+    for npa in (0, 1, 2)
+      p = GGFitInputParams(); p.n_planes_add = npa; p.m_max = 4; p.nd_max = 2
+      r = gg_fit(field, p)
+      for pl in eachindex(r.z_base)
+        s = 0.0; n = 0
+        for d in -npa:npa
+          1 <= pl + d <= length(r.z_base) || continue
+          m = gg_fit_residual_map(r, field, pl; dplane = d)
+          @test m.dB ≈ m.B_table .- m.B_fit
+          @test m.z ≈ r.z_base[pl] + d * r.dz_grid
+          s += sum(abs2, m.dB); n += length(m.dB)
+        end
+        @test sqrt(s / n) ≈ r.rms_unweighted_plane[pl]
+      end
+    end
+
+    p = GGFitInputParams(); p.n_planes_add = 1
+    r = gg_fit(field, p)
+    m = gg_fit_residual_map(r, field, 3)
+    # On the base plane the fitted field is just the evaluator's, and the table
+    # side is the grid itself.
+    for (i, x) in enumerate(m.x), (j, y) in enumerate(m.y)
+      B, _, _ = field_and_potential_evaluate(r, 3, x, y)
+      @test m.B_fit[i, j, :] ≈ B
+      @test m.B_table[i, j, :] ≈ field.magnetic[first(axes(field.magnetic, 1)) + i - 1,
+                                                first(axes(field.magnetic, 2)) + j - 1,
+                                                first(axes(field.magnetic, 3)) + 2]
+    end
+    @test_throws ErrorException gg_fit_residual_map(r, field, 0)
+    @test_throws ErrorException gg_fit_residual_map(r, field, 1; dplane = -1)
+
+    quiet(() -> gg_fit_show_residuals(r, field; detail = [2]))
+    quiet(() -> gg_fit_show_residuals(r, field; planes = [1, 3]))
+  end
+
+  @testset "residual diagnostics" begin
+    G = GeneralizedGradients
+    xs = collect(-0.06:0.005:0.06)
+    ys = collect(-0.06:0.005:0.06)
+    mkmap(f) = (; x = xs, y = ys, z = 0.0, plane = 1, dplane = 0, origin = [0.0, 0.0],
+                  r_fit = minimum(abs, extrema(xs)),
+                  B_table = zeros(length(xs), length(ys), 3),
+                  B_fit = zeros(length(xs), length(ys), 3),
+                  dB = [f(xs[i], ys[j])[k] for i in eachindex(xs), j in eachindex(ys), k in 1:3])
+
+    # A deterministic uncorrelated sequence, so the "noise" cases below really
+    # are noise. A smooth closed form is not good enough here: sampled on a grid
+    # it has radial structure of its own, which is exactly what these tests are
+    # trying to distinguish noise from.
+    seed = Ref(UInt64(12345))
+    function nextr()
+      seed[] = 6364136223846793005 * seed[] + 1442695040888963407
+      return Float64(seed[] >> 11) / 2.0^53 - 0.5
+    end
+
+    # --- rough vs smooth ---------------------------------------------------
+    # White noise: the second-difference estimator must recover its sigma. A
+    # smooth field of the same size must come back near zero.
+    rng_vals = [nextr() for _ in 1:25, _ in 1:25]
+    sigma = sqrt(sum(abs2, rng_vals) / length(rng_vals))
+    @test G._resid_rough(rng_vals) ≈ sigma rtol = 0.15
+    smooth = [0.3 * (x^2 - y^2) for x in xs, y in ys]
+    @test G._resid_rough(smooth) < 0.02 * sqrt(sum(abs2, smooth) / length(smooth))
+
+    # --- azimuthal harmonics ------------------------------------------------
+    # A pure multipole of order m: B_r and B_theta must show harmonic m alone,
+    # growing as r^(m-1), which is the signature the diagnostic reports.
+    for m in (2, 3, 5)
+      map = mkmap() do x, y
+        r, th = hypot(x, y), atan(y, x)
+        br, bt = m * r^(m-1) * sin(m*th), m * r^(m-1) * cos(m*th)
+        (br * cos(th) - bt * sin(th), br * sin(th) + bt * cos(th), 0.0)
+      end
+      har = G._azimuthal_harmonics(map, 8)
+      for k in 1:2
+        @test argmax(har.amp[k][:, end]) == m + 1          # harmonic m dominates
+        @test har.expo[k][m+1] ≈ m - 1 rtol = 0.02         # and grows as r^(m-1)
+      end
+      # B_s of the same multipole goes as r^m; check that convention too.
+      maps = mkmap((x, y) -> (0.0, 0.0, hypot(x, y)^m * sin(m * atan(y, x))))
+      hars = G._azimuthal_harmonics(maps, 8)
+      @test argmax(hars.amp[3][:, end]) == m + 1
+      @test hars.expo[3][m+1] ≈ m rtol = 0.02
+    end
+    # Noise has no preferred harmonic and no systematic radial growth. Individual
+    # harmonics of one realization scatter, so test the median exponent rather
+    # than every one of them.
+    noise = mkmap((x, y) -> (nextr(), nextr(), nextr()))
+    hn = G._azimuthal_harmonics(noise, 8)
+    exps = [abs(hn.expo[k][m+1]) for k in 1:3, m in 0:8 if isfinite(hn.expo[k][m+1])]
+    @test sort(exps)[cld(length(exps), 2)] < 1.5
+    # And no harmonic stands out the way a multipole does.
+    @test maximum(maximum(hn.amp[k][:, end]) for k in 1:3) <
+          8 * minimum(maximum(hn.amp[k][:, end]) for k in 1:3)
+
+    # --- radial split -------------------------------------------------------
+    # A residual that lives only outside the inscribed circle must be reported
+    # as entirely outside it, and one that lives only inside as entirely inside.
+    r_in = minimum(abs, extrema(xs))
+    out = mkmap((x, y) -> hypot(x, y) > r_in ? (1.0, 0.0, 0.0) : (0.0, 0.0, 0.0))
+    @test G._radial_split(out)[4] == 1.0
+    @test G._radial_split(out)[3] == 0.0
+    inn = mkmap((x, y) -> hypot(x, y) <= r_in ? (1.0, 0.0, 0.0) : (0.0, 0.0, 0.0))
+    @test G._radial_split(inn)[4] == 0.0
+
+    # --- Maxwell check ------------------------------------------------------
+    # Fields the centred differences represent exactly must show exactly zero
+    # violation; the ratio the diagnostic reports is then 1 by construction.
+    dr = [0.01, 0.01, 0.01]
+    stack(f) = ([f(0.01*(i-7), 0.01*(j-7), 0.01*(k-1))[c]
+                 for i in 1:13, j in 1:13, c in 1:3] for k in 1:3)
+    for f in ((x, y, z) -> (y*z, x*z, x*y),            # B = grad(xyz)
+              (x, y, z) -> (3x^2 - 3y^2, -6x*y, 0.0))  # a sextupole
+      Bm, B0, Bp = stack(f)
+      dv, cl, _ = G._maxwell_stats(Bm, B0, Bp, [-0.07, -0.07, 0.0], dr, 0.0)
+      @test dv < 1e-12 && cl < 1e-12
+    end
+    # A field that violates both is caught: B = (0, 0, x) has curl (0, -1, 0).
+    Bm, B0, Bp = stack((x, y, z) -> (0.0, 0.0, x))
+    @test G._maxwell_stats(Bm, B0, Bp, [-0.07, -0.07, 0.0], dr, 0.0)[2] > 0.5
+  end
+
   @testset "public docstrings are attached" begin
     # A blank line between a docstring and its definition silently detaches it,
     # which once dropped the whole GGFitInputParams parameter reference.
@@ -516,6 +729,8 @@ end
     @test !undocumented(@doc GGCoefs)
     @test !undocumented(@doc GGFitScanPoint)
     @test !undocumented(@doc gg_fit)
+    @test !undocumented(@doc gg_fit_residual_map)
+    @test !undocumented(@doc gg_fit_show_residuals)
     @test !undocumented(@doc gg_fit_show_results)
     @test !undocumented(@doc read_gg_fit)
     @test !undocumented(@doc write_gg_fit)

@@ -9,7 +9,7 @@ using GeneralizedGradients
 fit, meta = read_gg_fit("gg_fit_result.h5")
 ```
 
-`read_gg_fit` returns a two-tuple. `fit` is a `GGCoefs` struct with the GG
+`read_gg_fit` returns a two-tuple. `fit` is a `GGFit` struct with the GG
 coefficient dictionaries `a`, `b`, `bs` (plus `z_base`, `m_max`, `nd_max`, `rms_weighted_plane`,
 `g_ref`, `origin`, `dz_grid`), and `meta` is a NamedTuple of the associated
 fit-control metadata `n_planes_add`, `core_weight`, `outer_plane_weight`. Both

@@ -334,6 +334,49 @@ to the Bmad exporters):</p>
 </pre></div>
 </div>
 </section>
+<section id="diagnose-a-bad-fit">
+<h2>5. Diagnose a bad fit<a class="headerlink" href="#diagnose-a-bad-fit" title="Link to this heading">¶</a></h2>
+<p>A large RMS residual on some plane does not say what to do about it. Adding GG
+terms helps only if the residual is something the expansion can represent, and
+that is what <code class="docutils literal notranslate"><span class="pre">gg_fit_show_residuals</span></code> measures:</p>
+<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">gg_fit_show_residuals</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">;</span><span class="w"> </span><span class="n">detail</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="mi">12</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>Per base plane it reports</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">out%</span></code></strong> — the share of the squared residual coming from the corners of the
+grid, outside the largest circle the expansion is well posed on. On a square
+grid the corners sit <code class="docutils literal notranslate"><span class="pre">√2</span></code> further out than the inscribed radius, where every
+multipole is largest and the series least convergent, so a plane’s RMS can be
+almost entirely made of them while the fit is good everywhere it is meant to be
+used. Read this column first.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">rough%</span></code></strong> — how much of the residual inside that circle is point-to-point
+irregular rather than smooth. Rough is noise in the field table and will not
+improve however many terms are added; smooth is model error and will.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">top</span> <span class="pre">harmonic</span></code></strong> — the largest azimuthal harmonic <code class="docutils literal notranslate"><span class="pre">m</span></code> of the residual and its
+measured radial exponent <code class="docutils literal notranslate"><span class="pre">p</span></code>. A missing multipole of order <code class="docutils literal notranslate"><span class="pre">m</span></code> gives <code class="docutils literal notranslate"><span class="pre">p</span> <span class="pre">=</span> <span class="pre">m-1</span></code>
+in <code class="docutils literal notranslate"><span class="pre">B_r</span></code>/<code class="docutils literal notranslate"><span class="pre">B_θ</span></code> and <code class="docutils literal notranslate"><span class="pre">p</span> <span class="pre">=</span> <span class="pre">m</span></code> in <code class="docutils literal notranslate"><span class="pre">B_s</span></code>; when they match, raising <code class="docutils literal notranslate"><span class="pre">m_max</span></code> (or
+lifting an <code class="docutils literal notranslate"><span class="pre">nd_max_for_m</span></code> cap) removes it.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">divB</span></code>, <code class="docutils literal notranslate"><span class="pre">curlB</span></code></strong> — the field table’s own violation of Maxwell’s equations,
+as a multiple of what the fitted GG field shows under the same finite
+differences. A GG expansion is Maxwellian by construction, so anything the
+table violates by is a floor no fit reaches below.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">d²B/dz²</span></code></strong> — the second difference of the table along <code class="docutils literal notranslate"><span class="pre">z</span></code>. A plane orders of
+magnitude above its neighbours is a seam or a bad plane in the map.</p></li>
+</ul>
+<p>The check none of this replaces is the direct one: refit with a larger <code class="docutils literal notranslate"><span class="pre">m_max</span></code>
+and see whether the plane’s residual actually falls. A residual made of missing
+GG terms drops; one that is not saturates.</p>
+<p>To see the residual rather than summarize it, <code class="docutils literal notranslate"><span class="pre">gg_fit_residual_map</span></code> returns it
+over one plane’s grid:</p>
+<div class="highlight-julia notranslate"><div class="highlight"><pre><span></span><span class="n">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gg_fit_residual_map</span><span class="p">(</span><span class="n">results</span><span class="p">,</span><span class="w"> </span><span class="n">field</span><span class="p">,</span><span class="w"> </span><span class="mi">12</span><span class="p">)</span>
+<span class="n">r</span><span class="o">.</span><span class="n">dB</span><span class="p">[</span><span class="o">:</span><span class="p">,</span><span class="w"> </span><span class="o">:</span><span class="p">,</span><span class="w"> </span><span class="mi">1</span><span class="p">]</span><span class="w">        </span><span class="c"># Bx residual, indexed [ix, iy]; 2 and 3 are By and Bs</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">programs/plot_gg_residuals.jl</span></code> draws these as 3D surfaces with Makie — a missing
+multipole of order <code class="docutils literal notranslate"><span class="pre">m</span></code> appears as <code class="docutils literal notranslate"><span class="pre">2m</span></code> alternating lobes around the axis, and a
+corner-dominated residual is unmistakable.</p>
+</section>
 <section id="putting-it-together">
 <h2>Putting it together<a class="headerlink" href="#putting-it-together" title="Link to this heading">¶</a></h2>
 <p>The complete script lives at <code class="docutils literal notranslate"><span class="pre">examples/run_gg_fit.jl</span></code>:</p>
@@ -421,6 +464,7 @@ functions are sampled on the grid’s own <code class="docutils literal notransl
 <li><a class="reference internal" href="#set-the-fit-parameters">2. Set the fit parameters</a></li>
 <li><a class="reference internal" href="#run-the-fit">3. Run the fit</a></li>
 <li><a class="reference internal" href="#inspect-and-save">4. Inspect and save</a></li>
+<li><a class="reference internal" href="#diagnose-a-bad-fit">5. Diagnose a bad fit</a></li>
 <li><a class="reference internal" href="#putting-it-together">Putting it together</a></li>
 </ul>
 </li>

@@ -2,10 +2,10 @@
 # read_gg_fit
 
 """
-    read_gg_fit(path::AbstractString) -> (fit::GGCoefs, meta::NamedTuple)
+    read_gg_fit(path::AbstractString) -> (fit::GGFit, meta::NamedTuple)
 
 Load a `gg_calc_fit` result HDF5 file (written by `write_gg_fit`). Returns a
-two-tuple whose first component is a `GGCoefs` struct holding the GG
+two-tuple whose first component is a `GGFit` struct holding the GG
 coefficient dictionaries `a`, `b`, `bs` (and `z_base`, `m_max`, `nd_max`,
 `rms_weighted_plane`, `rms_unweighted_plane`, `field_ave_plane`, `fit_radius_max`,
 `g_ref`, `origin`, `dz_grid`), and whose second component is a NamedTuple of the
@@ -21,19 +21,19 @@ fit.g_ref        # reference curvature
 """
 function read_gg_fit(path::AbstractString)
   h5open(path, "r") do f
-    fit = GGCoefs(; z_base    = read(f["z_base"]),
-                         a         = _read_coef_group(f, "a"),
-                         b         = _read_coef_group(f, "b"),
-                         bs        = _read_coef_group(f, "bs"; single = true),
-                         m_max     = Int(read_attribute(f, "m_max")),
-                         nd_max    = Int(read_attribute(f, "nd_max")),
-                         rms_weighted_plane   = read(f["rms_weighted_plane"]),
-                         rms_unweighted_plane = read(f["rms_unweighted_plane"]),
-                         field_ave_plane      = read(f["field_ave_plane"]),
-                         fit_radius_max       = read_attribute(f, "fit_radius_max"),
-                         g_ref     = read_attribute(f, "g_ref"),
-                         origin    = read(f["origin"]),
-                         dz_grid   = read_attribute(f, "dz_grid"))
+    fit = GGFit(; z_base    = read(f["z_base"]),
+                       a         = _read_coef_group(f, "a"),
+                       b         = _read_coef_group(f, "b"),
+                       bs        = _read_coef_group(f, "bs"; single = true),
+                       m_max     = Int(read_attribute(f, "m_max")),
+                       nd_max    = Int(read_attribute(f, "nd_max")),
+                       rms_weighted_plane   = read(f["rms_weighted_plane"]),
+                       rms_unweighted_plane = read(f["rms_unweighted_plane"]),
+                       field_ave_plane      = read(f["field_ave_plane"]),
+                       fit_radius_max       = read_attribute(f, "fit_radius_max"),
+                       g_ref     = read_attribute(f, "g_ref"),
+                       origin    = read(f["origin"]),
+                       dz_grid   = read_attribute(f, "dz_grid"))
     meta = (; # Fit-control metadata, retained for reference / reproducibility.
               n_planes_add       = read_attribute(f, "n_planes_add"),
               core_weight        = read_attribute(f, "core_weight"),
@@ -45,14 +45,14 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    write_bmad_gg_fit(fit::GGCoefs; ele_name, output_base, cutoff) -> lattice_file_path
+    write_bmad_gg_fit(fit::GGFit; ele_name, output_base, cutoff) -> lattice_file_path
     write_bmad_gg_fit(input::AbstractString; output_base, cutoff) -> lattice_file_path
 
 Convert generalized-gradient (GG) coefficients produced by `gg_calc_fit` into Bmad
 `gen_grad_map` format, producing a Bmad lattice element with the GG map attached.
 Returns the path of the lattice-element file.
 
-The GG fit is supplied either as a loaded `GGCoefs` struct (`fit`, as returned by
+The GG fit is supplied either as a loaded `GGFit` struct (`fit`, as returned by
 `read_gg_fit`) or as the path to a gg_calc_fit HDF5 file (output of `write_gg_fit`),
 which is read with `read_gg_fit`.
 
@@ -142,7 +142,7 @@ function write_bmad_gg_fit(input::AbstractString;
   return write_bmad_gg_fit(fit; ele_name = basename(output_base), output_base, cutoff)
 end
 
-function write_bmad_gg_fit(fit::GGCoefs;
+function write_bmad_gg_fit(fit::GGFit;
                 ele_name::AbstractString = "gen_grad_ele",
                 output_base::AbstractString = ele_name,
                 cutoff::Real = 0.0)
@@ -228,7 +228,7 @@ end
     gg_to_bmad_curves(fit) -> (cs, cc, c0c, nplanes, nd_max, kmax)
 
 Compute the Bmad azimuthal-harmonic GG derivative towers from a loaded
-`gg_calc_fit` result (`fit`, the `GGCoefs` struct returned by `read_gg_fit`). Returns
+`gg_calc_fit` result (`fit`, the `GGFit` struct returned by `read_gg_fit`). Returns
 
 ```
 cs[(m,j)]  :: Vector  -- C^{[j]}_{m,sin}(plane)  (normal multipole m)

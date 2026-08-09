@@ -28,7 +28,7 @@ This is the same Taylor extrapolation the `gg_calc_fit` design matrix uses to ca
 base plane's coefficients onto its neighbouring planes, so a residual built from
 these getters is the residual the fit actually minimized.
 """
-function _gg_taylor_getters(gg_fit::GGCoefs, ip::Integer, dz::Real)
+function _gg_taylor_getters(gg_fit::GGFit, ip::Integer, dz::Real)
   ndtop = max(gg_fit.nd_max,
               maximum((k[2] for k in keys(gg_fit.a)), init = 0),
               maximum((k[2] for k in keys(gg_fit.b)), init = 0),
@@ -56,7 +56,7 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    gg_make_fit_residual_table(gg_fit::GGCoefs, field::FieldGridTable, plane::Integer;
+    gg_make_fit_residual_table(gg_fit::GGFit, field::FieldGridTable, plane::Integer;
                                dplane::Integer = 0) -> NamedTuple
 
 Field table minus GG fit over the transverse grid of one plane — the data behind
@@ -87,7 +87,7 @@ surface(r.x, r.y, r.dB[:, :, 1])       # Bx residual over the plane
 Note that with `n_planes_add > 0` a base plane's stored `rms_weighted_plane`
 covers its neighbouring planes too, so it will not equal the RMS of this one table.
 """
-function gg_make_fit_residual_table(gg_fit::GGCoefs, field::FieldGridTable, plane::Integer;
+function gg_make_fit_residual_table(gg_fit::GGFit, field::FieldGridTable, plane::Integer;
                                     dplane::Integer = 0)
   mag  = field.magnetic
   izs  = first(axes(mag, 3)):last(axes(mag, 3))
@@ -388,7 +388,7 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    gg_show_fit_residuals(gg_fit::GGCoefs, field::FieldGridTable;
+    gg_show_fit_residuals(gg_fit::GGFit, field::FieldGridTable;
                           planes = eachindex(gg_fit.z_base), detail = Int[],
                           mmax::Integer = 8)
 
@@ -465,7 +465,7 @@ and see whether the plane's residual actually falls. A residual that is missing
 GG terms drops; one that is not saturates, and the saturated level is the honest
 floor for that plane.
 """
-function gg_show_fit_residuals(gg_fit::GGCoefs, field::FieldGridTable;
+function gg_show_fit_residuals(gg_fit::GGFit, field::FieldGridTable;
                                planes = eachindex(gg_fit.z_base), detail = Int[],
                                mmax::Integer = 8)
   kinds = ("B_r", "B_th", "B_s")

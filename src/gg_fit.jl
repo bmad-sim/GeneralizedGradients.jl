@@ -36,15 +36,14 @@
 # ```
 
 
-
 """
-    gg_calc_fit(field::FieldGridTable, params::GGFitInputParams) -> GGCoefs
+    gg_calc_fit(field::FieldGridTable, params::GGFitInputParams) -> GGFit
 
 Fit a 3D magnetic field grid to generalized-gradient (GG) coefficients
 `a_m(z)`, `b_m(z)`, `b_s(z)` and their `z`-derivatives, plane by plane.
 A "plane" here  is always a plane at constant z. 
 
-The returned `GGCoefs` holds the fitted coefficients and per-plane diagnostics.
+The returned `GGFit` holds the fitted coefficients and per-plane diagnostics.
 Use `gg_show_fit_results` to print a summary and
 `write_gg_fit` to save the result to an HDF5 file (readable by `read_gg_fit`).
 
@@ -89,7 +88,7 @@ at the principal planes worse. So adding more planes can give a worse fit.
 Convention: `m` denotes the multipole order for GG functions `a_m` and `b_m` while
 for `a(m, nd)`, `b(m, nd)`, and `bs(nd)`, the `nd` here denotes the derivative order.
 
-A fit to the field are done up to some maximum multipole order `m_max` and some maximum
+A fit to the field is done up to some maximum multipole order `m_max` and some maximum
 derivative order `nd_max`. 
 The "size" of a fit is the number of GG coefficients per plane that is needed.
 To optimize for the best fit with the lowest number of GG coefficients,
@@ -551,9 +550,9 @@ function gg_calc_fit(field::FieldGridTable, params::GGFitInputParams)
   rmsu_pl   = sol.rmsu_c[best]
   pruned    = Tuple{Symbol,Int}[]
   if params.prune_ave_limit > 0 || params.prune_max_limit > 0
-    trial = GGCoefs(; z_base, _expand_coefs(master_list[keep_cols], theta)...,
-                      fit_radius_max = params.fit_radius_max,
-                      g_ref = field.g_ref, origin, dz_grid)
+    trial = GGFit(; z_base, _expand_coefs(master_list[keep_cols], theta)...,
+                    fit_radius_max = params.fit_radius_max,
+                    g_ref = field.g_ref, origin, dz_grid)
     rows, b_ave = _gg_field_contributions(trial, field)
     # A function has to fall below every limit that is in force; a limit of 0 is
     # switched off and so cannot by itself keep a function alive.
@@ -585,12 +584,12 @@ function gg_calc_fit(field::FieldGridTable, params::GGFitInputParams)
   m_max  = maximum((m for (typ, m, _) in params_list if typ !== :bs), init = 0)
   nd_max = maximum((nd for (_, _, nd) in params_list), init = 0)
 
-  return GGCoefs(; z_base, params = params_list, a, b, bs,
-                    rms_weighted_plane = rmsw_pl, rms_unweighted_plane = rmsu_pl,
-                    field_ave_plane, fit_radius_max = params.fit_radius_max,
-                    m_max, nd_max, pruned,
-                    scan = scanning ? scan : GGFitScanPoint[],
-                    g_ref = field.g_ref, origin, dz_grid)
+  return GGFit(; z_base, params = params_list, a, b, bs,
+                  rms_weighted_plane = rmsw_pl, rms_unweighted_plane = rmsu_pl,
+                  field_ave_plane, fit_radius_max = params.fit_radius_max,
+                  m_max, nd_max, pruned,
+                  scan = scanning ? scan : GGFitScanPoint[],
+                  g_ref = field.g_ref, origin, dz_grid)
 end
 
 #---------------------------------------------------------------------------------------------------
@@ -662,7 +661,7 @@ end
     _expand_coefs(params_list, theta) -> (a, b, bs)
 
 Scatter a solved coefficient matrix (`theta[col, plane]`, rows following
-`params_list`) into the `a`, `b` and `bs` dictionaries of a `GGCoefs`. Only the
+`params_list`) into the `a`, `b` and `bs` dictionaries of a `GGFit`. Only the
 unknowns in `params_list` get keys, so a pruned function is simply absent.
 """
 function _expand_coefs(params_list, theta)
@@ -848,7 +847,7 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    _gg_field_contributions(gg_fit::GGCoefs, field::FieldGridTable) -> (rows, b_ave)
+    _gg_field_contributions(gg_fit::GGFit, field::FieldGridTable) -> (rows, b_ave)
 
 How much field each fitted GG function actually produces, measured over every
 fitted transverse grid point of every base plane — that is, over
@@ -870,7 +869,7 @@ This is the useful form of "how big is this coefficient": the raw `a`/`b` values
 are not comparable across `m`, since the basis function each multiplies carries a
 different power of `r` and so a different size over the grid.
 """
-function _gg_field_contributions(gg_fit::GGCoefs, field::FieldGridTable)
+function _gg_field_contributions(gg_fit::GGFit, field::FieldGridTable)
   mag = field.magnetic
   ixs = first(axes(mag, 1)):last(axes(mag, 1))
   iys = first(axes(mag, 2)):last(axes(mag, 2))
@@ -930,7 +929,7 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    gg_show_fit_results(gg_fit::GGCoefs, field::FieldGridTable, params::GGFitInputParams)
+    gg_show_fit_results(gg_fit::GGFit, field::FieldGridTable, params::GGFitInputParams)
 
 Print a human-readable summary of a `gg_calc_fit` result `gg_fit`: the fit settings, the
 `(m_max, nd_max)` scan table if a scan was run, a per-plane table of the weighted
@@ -943,7 +942,7 @@ split says whether all three components are equally bad — pointing at a model
 too small, or at a grid the GG expansion cannot represent — or whether one
 component alone carries the error.
 """
-function gg_show_fit_results(gg_fit::GGCoefs, field::FieldGridTable, params::GGFitInputParams)
+function gg_show_fit_results(gg_fit::GGFit, field::FieldGridTable, params::GGFitInputParams)
   println("="^72)
   println("GG fit:")
   println("  field grid        : ", join(size(field.magnetic), " x "), "  (ix, iy, iz)")
@@ -1009,7 +1008,7 @@ function gg_show_fit_results(gg_fit::GGCoefs, field::FieldGridTable, params::GGF
   println("-"^72)
   @printf("%-6s  %-12s  %-12s  %-12s  %-12s\n",
           "plane", "z [m]", "wRMS resid", "RMS resid", "<|B|> [T]")
-  # A `GGCoefs` built by hand may leave these diagnostics unset; blank the column.
+  # A `GGFit` built by hand may leave these diagnostics unset; blank the column.
   cell(v, i) = length(v) == length(gg_fit.z_base) ? @sprintf("%-12.4e", v[i]) :
                                                      @sprintf("%-12s", "-")
   for i in eachindex(gg_fit.z_base)
@@ -1036,7 +1035,7 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    write_gg_fit(gg_fit::GGCoefs, field::FieldGridTable, params::GGFitInputParams) -> output_file_path
+    write_gg_fit(gg_fit::GGFit, field::FieldGridTable, params::GGFitInputParams) -> output_file_path
 
 Write a `gg_calc_fit` result `gg_fit` to an HDF5 file (readable by `read_gg_fit`).
 
@@ -1055,7 +1054,7 @@ is written to `params.output_file` and its path is returned.
     group  bs       : nd (Int[]), values (Float64[nkeys, nplanes])
                       -- reconstruct Dict{nd => values[i,:]}
 """
-function write_gg_fit(gg_fit::GGCoefs, field::FieldGridTable, params::GGFitInputParams)
+function write_gg_fit(gg_fit::GGFit, field::FieldGridTable, params::GGFitInputParams)
   outfile = params.output_file
   h5open(outfile, "w") do f
     f["z_base"]    = collect(Float64, gg_fit.z_base)

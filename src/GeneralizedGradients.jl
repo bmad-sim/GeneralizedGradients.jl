@@ -32,7 +32,7 @@ module GeneralizedGradients
        GridAnchorPt,
        GridGeometry,
        GGFitInputParams,
-       GGCoefs,
+       GGFit,
        GGFitScanPoint,
        gg_calc_fit,
        gg_show_fit_results,

@@ -66,7 +66,7 @@ To load the fit use
 julia> fit, meta = read_gg_fit("gg_fit_result.h5")
 ```
 
-which returns a two-tuple. `fit` is a `GGCoefs` struct with the fields:
+which returns a two-tuple. `fit` is a `GGFit` struct with the fields:
 ```
   rms_weighted_plane   [4.17469e-6, 6.421e-6,  …                     # Per plane weighted fit RMS
   a                    Dict((1, 2) => [-0.0046122, -0.00615161, …    # a function fit values

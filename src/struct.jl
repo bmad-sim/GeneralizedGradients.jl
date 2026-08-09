@@ -73,62 +73,34 @@ See the documentation of `gg_calc_fit` for more documentation.
   the base z-plane when `n_planes_add` is non-zero.
 
 - `m_max::Union{Int,AbstractVector{Int}}` — Maximum multipole order `m` of the
-  `a_m`/`b_m` functions used in a fit. `m_max can be a single integer or a
-  range. For example, `m_max = 1:8` makes `gg_calc_fit` try each value in turn
+  `a_m`/`b_m` functions used in a fit. `m_max` can be a single integer or a
+  range. For example, `m_max = 2:8` makes `gg_calc_fit` try each value in turn
   and keep the one that fits best (see `fit_criterion`). The default is `4:8`.
   The `bs(nd)` (that is, `a_0` derivative) unknowns carry no `m` and
   are never removed by `m_max`.
 
 - `nd_max::Union{Int,AbstractVector{Int}}` — Maximum derivative order `nd`
-  used in the fit. `nd_max` can be a single integer or a range. The default is `3:7`
+  used in the fit. `nd_max` can be a single integer or a range. 
+  For example, `nd_max = 2:8` makes `gg_calc_fit` try each value in turn
+  and keep the one that fits best (see `fit_criterion`). The default is `3:7`
 
-- `nd_max_for_m::Dict{Int,Int}` — Per-multipole override of `nd_max`, mapping a
+- `nd_max_for_m::Dict{Int,Int}` — Per-multipole order override of `nd_max`, mapping a
   multipole order `m` to the highest derivative order kept for `a_m` and `b_m`.
-  Key `0` sets the limit for `b_s`, which carries no multipole order.
+  Key `0` sets the limit for `b_s`, which carries no multipole order. This is used
+  to speed up fitting.
 
-  ```
-  nd_max = 4
-  nd_max_for_m = Dict(4 => 2, 5 => 1, 0 => 0)   # a_4/b_4 to nd = 2, a_5/b_5 to 1, b_s to 0
-  ```
+  Example: `nd_max_for_m = Dict(4 => 2, 5 => 1)` maps `a_4`/`b_4` to max `nd` = 2 and 
+  `a_5`/`b_5` to max `nd` = 1. Generally a good rule of thumb is that `m` + max `nd`
+  should be roughly constant.
 
-  An `m` absent from the dictionary is limited by `nd_max` alone, and a limit
-  above `nd_max` does not raise the order above it: the effective cut for order
-  `m` is always `min(nd_max, nd_max_for_m[m])`. Naming an `m` the coefficient
-  table does not contain is a harmless no-op. The limits apply to every value of
-  `nd_max` a scan tries, so a scan's `nd_max` column is the cut for the
-  *unlisted* orders; the `# coefs` column shows what the overrides actually
-  removed. Candidate models that the limits make identical to one another are
-  scanned once.
+- `fit_radius_max::Float64` — Fit only the field points that are within this radius
+  transversely of the GG expansion axis origin (not necessarily `(0, 0)`). 
+  `0` meters (the default) uses every point of the field table.
+  Vetoing points outside of some radius is useful if the field table is inaccurate 
+  at large radius or a fit at large radius is not needed since this is outside of where
+  particles will travel.
 
-  The transverse falloff of a multipole goes as `r^m`, so the high-`m` functions
-  are only sampled meaningfully near the aperture, over a small part of the grid
-  and with a small dynamic range. Their high derivative orders are the worst
-  conditioned unknowns in the fit and are often fitting little more than
-  interpolation error. Cutting them here removes those columns while leaving the
-  low-`m` functions at full derivative order, where the data supports them.
-
-- `fit_radius_max::Float64` — Fit only the field points within this radius of the
-  GG expansion axis. `0` (the default) uses every point of the field table.
-
-  A field grid is rectangular and the GG expansion is a series in `r`, so the two
-  do not agree about where the fit region ends. The corners of a square grid sit
-  `√2` beyond the largest circle inside it, and they are the *majority* of its
-  area: on a 29x29 grid, 27% of the points lie outside the inscribed circle. That
-  is the worst possible place to be spending the merit function. Every multipole
-  is at its largest there, the series is at its least convergent, and a term of
-  order `m` is weighted `2^(m/2)` more heavily at a corner than at the inscribed
-  radius. A fit can be excellent everywhere it is meant to be used and still
-  report a large RMS made almost entirely of corners.
-
-  ```
-  fit_radius_max = 0.07     # the inscribed radius of a grid spanning +-0.07 in x and y
-  ```
-
-  Points outside the radius are dropped from the design matrix: they are not
-  fitted and do not enter any residual. The radius is measured from `origin`, the
-  axis the expansion is written about, not from the grid centre.
-
-  Setting it also re-scales `core_weight`, whose profile runs from `core_weight`
+  Setting ``fit_radius_max` also re-scales `core_weight`, whose profile runs from `core_weight`
   on the axis to `1` at the outermost *fitted* point — with a radius set, that is
   the radius rather than the grid corner. `field_ave_plane` and the field
   contributions that drive `prune_ave_limit`/`prune_max_limit` likewise cover the
@@ -141,12 +113,10 @@ See the documentation of `gg_calc_fit` for more documentation.
   residual (the smaller model's unknowns are a subset of the larger one's), so a
   usable criterion has to charge for coefficients. Writing `RSS` for the weighted
   sum of squared residuals pooled over all base planes, `N` for the number of
-  fitted field-component values, `W` for the sum of the weights of those values
-  (`W = N` for uniform weighting), and `k` for the total number of fitted
+  fitted field-component values, and `k` for the total number of fitted
   coefficients (per-plane count times the number of base planes):
 
   ```
-  :rms    score = sqrt(RSS / W)          # goodness of fit only, no charge for k
   :aic    score = N * ln(RSS/N) + 2 * k         # Akaike information criterion
   :bic    score = N * ln(RSS/N) + k * ln(N)     # Bayesian, and the default
   ```
@@ -155,9 +125,7 @@ See the documentation of `gg_calc_fit` for more documentation.
   Gaussian log-likelihood, up to a constant common to all candidates — and differ
   only in what one coefficient costs: `2` versus `ln(N)`. `ln(N) > 2` for any
   `N > 7`, so `:bic` always penalizes size at least as hard as `:aic` and never
-  selects a larger model. `:rms` charges nothing and so will pick the largest
-  model offered; it is useful for inspecting the raw residual ranking, not for
-  choosing a model.
+  selects a larger model.
 
   See the "Choosing between models" section of the `gg_calc_fit` docstring for
   how to read the trade-off quantitatively and for why, on a field grid, these
@@ -219,10 +187,10 @@ See the documentation of `gg_calc_fit` for more documentation.
 @kwdef mutable struct GGFitInputParams
   origin::Vector{Float64} = [0.0, 0.0]   # (x, y) origin about which the generalized gradients coefs are computed
   n_planes_add::Int = 1                  # Number of z-planes added.
-  m_max::Union{Int,AbstractVector{Int}} = -1   # Max multipole order m. -1 = all in table. Vector => scan.
-  nd_max::Union{Int,AbstractVector{Int}} = -1  # Max derivative order nd. -1 = 2*n_planes_add. Vector => scan.
+  m_max::Union{Int,AbstractVector{Int}} =  4:8  # Max multipole order m.
+  nd_max::Union{Int,AbstractVector{Int}} = 3:7  # Max derivative order nd. 
   nd_max_for_m::Dict{Int,Int} = Dict{Int,Int}()  # Per-order override of nd_max: m => nd_max for a_m and b_m (m = 0 => b_s).
-  fit_criterion::Symbol = :bic           # Scan selection criterion: :bic, :aic, or :rms.
+  fit_criterion::Symbol = :bic           # Scan selection criterion: :bic or :aic.
   fit_radius_max::Float64 = 0.0          # Only fit field points within this radius of the GG axis. 0 = use every point.
   core_weight::Float64 = 1.0             # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
   outer_plane_weight::Float64 = 1.0      # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).
@@ -254,14 +222,14 @@ Collected in the `scan` field of the returned `GGFit` and printed by
   nowhere else.
 - `rms_unweighted::Float64` — the same residual with all point weights set to 1.
 - `score::Float64` — value of the selection criterion; the scanned model with the lowest
-  score is the one `gg_calc_fit` returns. For `:rms` this is just `rms_weighted`. For `:aic`
-  and `:bic` it is `N*ln(RSS/N)` plus a penalty of `2` or `ln(N)` per fitted
+  score is the one `gg_calc_fit` returns. It is `N*ln(RSS/N)` plus a penalty of
+  `2` (`:aic`) or `ln(N)` (`:bic`) per fitted
   coefficient, where `RSS` is the pooled weighted sum of squared residuals and
   `N` the number of fitted field-component values. Only differences between
   candidates are meaningful — the absolute value is not. See the `fit_criterion`
   entry of `GGFitInputParams`.
-- `criterion::Symbol` — which criterion `score` was computed with: `:bic`,
-  `:aic`, or `:rms`. Scores from different criteria are not comparable.
+- `criterion::Symbol` — which criterion `score` was computed with: `:bic` or
+  `:aic`. Scores from different criteria are not comparable.
 """
 @kwdef struct GGFitScanPoint
   m_max::Int = 0

@@ -73,8 +73,8 @@ Maximum multipole order `m` of the `a_m` and `b_m` functions in
 `tables/gg_coef_table.jl`: the largest `m` appearing in a tabulated `a(m,nd)` or
 `b(m,nd)` key. This table was built with `MMAX = 14`.
 
-It is the ceiling on `GGFitInputParams.m_max`, whose default of `-1` keeps every
-multipole order the table has, that is `1:MMAX`.
+It is the ceiling on `GGFitInputParams.m_max`: a larger `m_max` is clamped to
+`MMAX`, since that is the highest order the table can supply.
 
 `bs(nd)` carries no multipole order -- it is the derivative tower of `a_0` -- so
 it is unaffected by this limit.

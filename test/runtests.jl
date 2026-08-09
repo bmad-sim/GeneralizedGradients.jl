@@ -263,6 +263,7 @@ end
     field = make_field()
     p = GGFitInputParams()
     p.n_planes_add = 1
+    p.nd_max = 2
     res = gg_calc_fit(field, p)
     @test res isa GGFit
     @test length(res.z_base) == size(field.magnetic, 3)
@@ -301,6 +302,7 @@ end
     # n_planes_add = 0 (single-plane, nd_max = 0) exercises the dzmax == 0 branch.
     p0 = GGFitInputParams()
     p0.n_planes_add = 0
+    p0.nd_max = 0
     res0 = gg_calc_fit(field, p0)
     @test res0.nd_max == 0
     @test all(isfinite, res0.rms_weighted_plane)
@@ -734,8 +736,8 @@ end
     @test !undocumented(@doc gg_show_fit_results)
     @test !undocumented(@doc read_gg_fit)
     @test !undocumented(@doc write_gg_fit)
-    # The three fit criteria must be spelled out where a user will look for them.
-    for probe in ("fit_criterion", ":rms", ":aic", ":bic", "sqrt(RSS / W)")
+    # Both fit criteria must be spelled out where a user will look for them.
+    for probe in ("fit_criterion", ":aic", ":bic", "ln(RSS/N)")
       @test occursin(probe, string(@doc GGFitInputParams))
     end
   end
@@ -787,10 +789,10 @@ end
     @test all(r -> 0 <= r[3] <= r[4], rows)
     @test isfinite(b_ave) && b_ave > 0
 
-    # More coefficients can only reduce the residual, so :rms takes the top model.
-    p.fit_criterion = :rms
-    res_rms = gg_calc_fit(field, p)
-    @test (res_rms.m_max, res_rms.nd_max) == (4, 2)
+    # More coefficients can only reduce the residual, so the largest model
+    # scanned has the lowest residual even though it need not win on score.
+    @test argmin([s.rms_weighted for s in res.scan]) ==
+          argmax([s.n_coef for s in res.scan])
     p.fit_criterion = :aic
     @test gg_calc_fit(field, p) isa GGFit
 
@@ -803,8 +805,11 @@ end
     @test maximum(s.m_max for s in res.scan) == MMAX
 
     @test_throws ErrorException (p.nd_max = Int[]; gg_calc_fit(field, p))
+    # -1 is no longer a "use the default" sentinel: it is just a negative cutoff.
+    @test_throws ErrorException (p.nd_max = -1; gg_calc_fit(field, p))
     p.nd_max = 0:1
     @test_throws ErrorException (p.fit_criterion = :bogus; gg_calc_fit(field, p))
+    @test_throws ErrorException (p.fit_criterion = :rms; gg_calc_fit(field, p))
   end
 
   @testset "field grid HDF5 round-trip (mag + elec, curvature, RF)" begin

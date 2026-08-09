@@ -38,10 +38,10 @@ p = GGFitInputParams()
 p.origin = [0.0, 0.0]      # (x, y) origin about which the generalized gradients coefs are computed
 p.n_planes_add = 1            # Number of z-planes added.
 # Size of the fitted model. A single number pins the cutoff; a range makes gg_calc_fit try
-# every combination and keep the best by p.fit_criterion (:bic, :aic, or :rms), with
+# every combination and keep the best by p.fit_criterion (:bic or :aic), with
 # the coefficient count and RMS of each combination reported by gg_show_fit_results.
-p.m_max  = 2:6                 # Max multipole order m.  -1 = every m in the table. E.g. 1:10 to scan.
-p.nd_max = 2:6                 # Max derivative order nd. -1 = 2 * n_planes_add.    E.g. 0:6 to scan.
+p.m_max  = 2:6                 # Max multipole order m.  A single Int pins it. E.g. 1:10 to scan.
+p.nd_max = 2:6                 # Max derivative order nd. A single Int pins it. E.g. 0:6 to scan.
 p.fit_criterion = :bic        # How a scan picks its winner. Ignored if neither cutoff is a range.
 p.core_weight = 1             # Merit function weight on "core" (points with (x,y) near (0,0)) field table points.
 p.outer_plane_weight = 1      # Merit function weight for the "outer" z-planes. Default is 1 (uniform weighting).

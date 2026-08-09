@@ -73,24 +73,14 @@ See the documentation of `gg_calc_fit` for more documentation.
   the base z-plane when `n_planes_add` is non-zero.
 
 - `m_max::Union{Int,AbstractVector{Int}}` — Maximum multipole order `m` of the
-  `a_m`/`b_m` functions retained in the fit. A single `Int` fixes it. A vector or
-  range (for example `m_max = 1:8`) makes `gg_calc_fit` try each value in turn
-  and keep the one that fits best (see `fit_criterion`). The default `-1` means `1:MMAX`. 
+  `a_m`/`b_m` functions used in a fit. `m_max can be a single integer or a
+  range. For example, `m_max = 1:8` makes `gg_calc_fit` try each value in turn
+  and keep the one that fits best (see `fit_criterion`). The default is `4:8`.
   The `bs(nd)` (that is, `a_0` derivative) unknowns carry no `m` and
   are never removed by `m_max`.
 
 - `nd_max::Union{Int,AbstractVector{Int}}` — Maximum derivative order `nd`
-  retained in the fit, with the same `Int`-or-vector meaning as `m_max`. The
-  default `-1` means `2 * n_planes_add`, the number of derivative orders a
-  stencil of `2 * n_planes_add + 1` planes resolves by longitudinal differencing
-  alone. Higher values are legitimate — the transverse structure of the field
-  also carries derivative information — but become progressively worse
-  conditioned, which is what the scan is for.
-
-  `m_max` and `nd_max` apply to every base plane; they never vary plane to plane.
-  If either is given as a vector, `gg_calc_fit` scans the full grid of
-  combinations and records the outcome of each in the `scan` field of the
-  returned `GGFit`.
+  used in the fit. `nd_max` can be a single integer or a range. The default is `3:7`
 
 - `nd_max_for_m::Dict{Int,Int}` — Per-multipole override of `nd_max`, mapping a
   multipole order `m` to the highest derivative order kept for `a_m` and `b_m`.

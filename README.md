@@ -101,50 +101,44 @@ dicts of scalar values as in gg_coefficients_at_plane.
 <!-- ------------------------------------------------------------------------------------------- -->
 # Programs
 
-## programs/create_gg_coef_table.jl
+## programs/create_field_to_gg_coef_tables.jl
 
-Creates the `table/gg_coef_table.jl` table.
-The created table contains the functions needed to calculate the coefficients for the taylor map of the magnetic field and the vector potential from the gg functions.
+Creates both of the tables in the `tables` directory:
 
-This table do not have to be recreated unless you want to extend the derivative range. Currently
-derivatives up to order 12 are tabulated. To run:
+- `tables/gg_coef_table.jl` — the functions needed to calculate the coefficients for the taylor
+  map of the magnetic field and the vector potential from the gg functions. This is the table the
+  package includes and `gg_calc_fit` uses.
+- `tables/monomial_functions.jl` — the same information keyed by monomial instead of by gg
+  function, and written as readable symbolic expressions rather than numeric tuples. Useful for
+  optimization and other calculations, and for checking against the paper. The package does not
+  use it.
+
+Both are the same Taylor expansion, so one program computes it once and writes it out in the two
+forms. That also keeps the two tables from drifting apart: they are always built from the same
+expansion at the same parameters.
+
+The tables do not have to be recreated unless you want to extend the derivative range. Currently
+derivatives up to order 13 are tabulated. To run:
 ```
-julia programs/create_gg_coef_table.jl                    # the tabulated defaults
-MAXTOT=16 MMAX=17 julia programs/create_gg_coef_table.jl   # a larger table
+julia programs/create_field_to_gg_coef_tables.jl                    # the tabulated defaults
+MAXTOT=16 MMAX=17 julia programs/create_field_to_gg_coef_tables.jl   # larger tables
 ```
 The two input parameters are read from the environment:
 
-- `MAXTOT` (default 12) — maximum total degree `p+q` of the `x^p y^q` monomials kept.
-- `MMAX` (default 13) — maximum multipole order `m` of the `a_m` and `b_m` functions.
+- `MAXTOT` (default 13) — maximum total degree `p+q` of the `x^p y^q` monomials kept.
+- `MMAX` (default 14) — maximum multipole order `m` of the `a_m` and `b_m` functions.
 
-The program records both in the table it writes — in the header comment, and as documented
-constants `MAXTOT` and `MMAX`. The package includes that table, so the parameters of the table
-actually in use are available from the REPL:
+The program records both in the header of each table it writes, and in `gg_coef_table.jl` also as
+documented constants `MAXTOT` and `MMAX`. The package includes that table, so the parameters of
+the table actually in use are available from the REPL:
 ```julia
 julia> using GeneralizedGradients
 
 julia> MMAX          # and ?MMAX for the full documentation
-13
+14
 ```
 
 `MMAX` may not exceed `MAXTOT + 1`, since the expansion is truncated at `x^(MAXTOT+1)`; the
 program stops with an error rather than silently dropping the top multipoles. Cost grows steeply
-with `MAXTOT` — the default table takes a while to rebuild.
-
-## programs/create_monomial_functions.jl
-
-Creates the `table/monomial_functions.jl` table.
-This table contains the coefficients needed to calculate the coefficients for the taylor map of the magnetic field and vector potential from the gg functions. 
-The information in this file is the same as the `gg_coef_table.jl` table except in a form that is useful for optimization and other calculations.
-
-This table do not have to be recreated unless you want to extend the derivative range. Currently
-derivatives up to order 12 are tabulated. To run:
-```
-julia programs/create_monomial_functions.jl                    # the tabulated defaults
-MAXTOT=16 MMAX=17 julia programs/create_monomial_functions.jl   # a larger table
-```
-It takes the same `MAXTOT` and `MMAX` environment parameters as
-`create_gg_coef_table.jl` above, under the same `MMAX <= MAXTOT + 1` restriction, and records
-them in the header of the table it writes. They are documented in one place only, the `MAXTOT`
-and `MMAX` docstrings in `tables/gg_coef_table.jl` (`?MAXTOT` in the REPL).
+with `MAXTOT` — the default tables take a while to rebuild.
 

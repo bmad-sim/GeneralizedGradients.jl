@@ -1,11 +1,38 @@
-# Inverse field and vector-potential coefficient table (full h dependence)
+# Inverse field and vector-potential coefficient table (full g_ref dependence)
 #
-# By_b[(m,nd)] = [(c, p, q, k), ...]  means  By += c * h^k * x^p * y^q * b(m,nd)
+# By_b[(m,nd)] = [(c, p, q, k), ...]  means  By += c * g_ref^k * x^p * y^q * b(m,nd)
 # Similarly for Bx_b, Bs_b, By_a, Bx_a, Bs_a, By_bs, Bx_bs, Bs_bs and for
 # the vector potential A (B = curl A):  Ax_a, Ax_b, Ax_bs, Ay_a, Ay_b,
 # Ay_bs, As_a, As_b, As_bs (same meaning, e.g. Ax_b[(m,nd)] -> Ax += ...).
 # Notation: b(m,nd) = d^nd b_m/ds^nd,  a(m,nd) = d^nd a_m/ds^nd,
 #           bs(nd)  = d^{nd+1} a_0/ds^{nd+1}
+#
+# ---------------------------------------------------------------------------
+# GENERATED FILE -- do not edit by hand.
+#
+# Written by programs/create_gg_coef_table.jl with the input parameters
+# below.  These are the only inputs: the same two values always reproduce
+# this file exactly.  To regenerate:
+#
+#   MAXTOT=12 MMAX=13 julia programs/create_gg_coef_table.jl
+#
+# Input parameters
+#   MAXTOT = 12   max total degree p+q of the x^p y^q monomials kept
+#   MMAX   = 13   max multipole order m of the a_m and b_m functions
+#
+# Derived sizes
+#   N      = 14   truncation order in x (degrees 0 .. N-1) = MAXTOT + 2
+#   MDER   = 16   max s-derivative order carried in the symbolic
+#                projections = MAXTOT + 4
+#   MAX_H  = 14   max power k of g_ref a coefficient can carry = MAXTOT + 2
+#
+# Ranges actually tabulated
+#   a(m,nd), b(m,nd):  m = 1 .. 13,  nd = 0 .. 12
+#   bs(nd):            nd = 0 .. 12
+#   monomials x^p y^q: p + q <= 12
+#
+# An (m,nd) or nd key is absent when every one of its coefficients is zero.
+# ---------------------------------------------------------------------------
 
 Bx_a  = Dict{Tuple{Int64, Int64}, Vector{Tuple{Real, Int64, Int64, Int64}}}()
 Bx_b  = Dict{Tuple{Int64, Int64}, Vector{Tuple{Real, Int64, Int64, Int64}}}()

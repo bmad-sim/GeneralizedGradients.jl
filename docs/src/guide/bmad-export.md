@@ -38,7 +38,7 @@ julia programs/run_write_bmad_field_grid_element.jl <field_grid.h5> [output_base
 
 `write_bmad_gg_fit` converts a GG fit into a Bmad `gen_grad_map`. Its input is
 either a GG fit file (the output of `write_gg_fit`) or a loaded fit (the `fit`
-`GGCoefs` struct returned by `read_gg_fit`):
+`GGFit` struct returned by `read_gg_fit`):
 
 ```julia
 using GeneralizedGradients

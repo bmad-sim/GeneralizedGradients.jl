@@ -8,7 +8,7 @@
 # read-write helpers.
 #
 # The `GGEvalPlan`, `_Tower` and `_CompTerms` types are defined in struct.jl (so
-# `GGCoefs` can hold a plan in its `eval_plan` field); the functions below build
+# `GGFit` can hold a plan in its `eval_plan` field); the functions below build
 # and evaluate them (see the "Fast evaluation" section).
 # ---------------------------------------------------------------------------
 
@@ -233,10 +233,10 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    _interp_gg_fit(fit, s::Real) -> fit::GGCoefs
+    _interp_gg_fit(fit, s::Real) -> fit::GGFit
 
 Take GG fit results `fit` which give the GG functions at a set of planes and
-return a similar `GGCoefs` but with one plane: the GG coefficients for that
+return a similar `GGFit` but with one plane: the GG coefficients for that
 plane are the interpolated GG coefficients at the given `s`-position.
 
 - `fit` — GG coefficients for all planes.
@@ -263,11 +263,11 @@ function _interp_gg_fit(fit, s::Real)
   b2  = _interp_mnd_dict(fit.b, iL, iR, zL, zR, sq, single)
   bs2 = _interp_nd_dict(fit.bs, iL, iR, zL, zR, sq, single)
 
-  fit2 = GGCoefs(; z_base = [sq], a = a2, b = b2, bs = bs2,
-                        m_max = fit.m_max, nd_max = fit.nd_max,
-                        rms_weighted_plane = [NaN], g_ref = fit.g_ref,
-                        fit_radius_max = fit.fit_radius_max,
-                        origin = fit.origin, dz_grid = fit.dz_grid)
+  fit2 = GGFit(; z_base = [sq], a = a2, b = b2, bs = bs2,
+                      m_max = fit.m_max, nd_max = fit.nd_max,
+                      rms_weighted_plane = [NaN], g_ref = fit.g_ref,
+                      fit_radius_max = fit.fit_radius_max,
+                      origin = fit.origin, dz_grid = fit.dz_grid)
   return fit2
 end
 
@@ -812,13 +812,13 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    _build_eval_plan(fit::GGCoefs) -> GGEvalPlan
+    _build_eval_plan(fit::GGFit) -> GGEvalPlan
 
 Compile `fit` into a `GGEvalPlan`: assign a dense `gvals` slot to every GG value,
 build the interpolation towers, and flatten the nine output components' monomial
 tables into term lists. Called once per `fit` and cached by `eval_plan`.
 """
-function _build_eval_plan(fit::GGCoefs)
+function _build_eval_plan(fit::GGFit)
   g_ref = fit.g_ref
   z = copy(fit.z_base)
   slot_a  = Dict{Tuple{Int,Int},Int}()
@@ -855,7 +855,7 @@ end
 #---------------------------------------------------------------------------------------------------
 
 """
-    eval_plan(fit::GGCoefs) -> GGEvalPlan
+    eval_plan(fit::GGFit) -> GGEvalPlan
 
 Return `fit`'s compiled [`GGEvalPlan`](@ref), building it and caching it in
 `fit.eval_plan` on first use. Assumes `fit` is not mutated after the first
@@ -863,7 +863,7 @@ evaluation (a stale plan is not detected).
 
 The `plan` is the object every evaluator takes: build it once with `eval_plan`
 and pass it to `field_and_potential_evaluate_at`, `potential_evaluate_at` or
-`field_evaluate_at` (there is no `GGCoefs` method — evaluating from the plan is
+`field_evaluate_at` (there is no `GGFit` method — evaluating from the plan is
 what keeps every call type-stable and allocation-free). The plan is also the
 GPU-ready, `Adapt`-able evaluation object: for GPU tracking pass `eval_plan(fit)`
 (not the `fit` itself, which holds `Dict`s and cannot cross to the device) as the
@@ -874,7 +874,7 @@ plan = eval_plan(fit)
 A, dA = potential_evaluate_at(plan, x, y, s)
 ```
 """
-function eval_plan(fit::GGCoefs)
+function eval_plan(fit::GGFit)
   plan = fit.eval_plan
   plan === nothing || return plan
   plan = _build_eval_plan(fit)

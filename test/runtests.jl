@@ -45,9 +45,9 @@ end
 # Build a synthetic (fit, meta) pair (same shape as read_gg_fit returns) so we
 # can exercise finite curvature g_ref, which the example file (g_ref = 0) does not.
 synth(z_base, a, b, bs, g_ref; nd_max, dz_grid) = (
-  GGCoefs(; z_base = collect(float.(z_base)), a, b, bs,
-                 nd_max, rms_weighted_plane = fill(NaN, length(z_base)), g_ref,
-                 origin = [0.0, 0.0], dz_grid),
+  GGFit(; z_base = collect(float.(z_base)), a, b, bs,
+               nd_max, rms_weighted_plane = fill(NaN, length(z_base)), g_ref,
+               origin = [0.0, 0.0], dz_grid),
   (;))
 
 const PTS = ((0.004, 0.003), (-0.005, 0.002), (0.003, -0.004), (0.0, 0.006), (0.007, 0.0))
@@ -81,7 +81,7 @@ end
 
   @testset "read_gg_fit" begin
     fit, meta = read_gg_fit(EXAMPLE)
-    @test fit isa GGCoefs
+    @test fit isa GGFit
     for k in (:z_base, :a, :b, :bs, :m_max, :nd_max, :rms_weighted_plane, :g_ref, :origin, :dz_grid)
       @test hasproperty(fit, k)
     end
@@ -264,7 +264,7 @@ end
     p = GGFitInputParams()
     p.n_planes_add = 1
     res = gg_calc_fit(field, p)
-    @test res isa GGCoefs
+    @test res isa GGFit
     @test length(res.z_base) == size(field.magnetic, 3)
     @test res.nd_max == 2
     @test length(res.rms_weighted_plane) == length(res.z_base)
@@ -726,7 +726,7 @@ end
     # which once dropped the whole GGFitInputParams parameter reference.
     undocumented(d) = occursin("No documentation found", string(d))
     @test !undocumented(@doc GGFitInputParams)
-    @test !undocumented(@doc GGCoefs)
+    @test !undocumented(@doc GGFit)
     @test !undocumented(@doc GGFitScanPoint)
     @test !undocumented(@doc gg_calc_fit)
     @test !undocumented(@doc gg_make_fit_residual_table)
@@ -792,7 +792,7 @@ end
     res_rms = gg_calc_fit(field, p)
     @test (res_rms.m_max, res_rms.nd_max) == (4, 2)
     p.fit_criterion = :aic
-    @test gg_calc_fit(field, p) isa GGCoefs
+    @test gg_calc_fit(field, p) isa GGFit
 
     # Candidates beyond what the table holds are clamped and deduplicated.
     p.fit_criterion = :bic
@@ -895,7 +895,7 @@ end
       @test ndmax == fit.nd_max
       @test kmax >= 1
 
-      # In-memory GGCoefs method writes the same element.
+      # In-memory GGFit method writes the same element.
       basem = joinpath(dir, "gg_mem")
       elem = write_bmad_gg_fit(fit; output_base = basem)
       @test elem == basem * ".bmad" && isfile(elem) && isfile(basem * "_gg.bmad")

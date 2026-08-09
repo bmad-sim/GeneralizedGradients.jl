@@ -42,7 +42,7 @@
 Main entry point. Evaluate the field, vector potential and the Jacobian of `A`
 at grid plane `ip` and transverse position `(x, y)`.
 
-- `fit` — the `GGCoefs` struct returned by `read_gg_fit`.
+- `fit` — the `GGFit` struct returned by `read_gg_fit`.
 - `ip` — 1-based plane index into `fit.z_base`.
 - `x`, `y` — absolute transverse coordinates. `fit.origin` is subtracted
   internally to obtain the position relative to the GG expansion axis (the
@@ -228,7 +228,7 @@ end
 
 Field-expansion coefficients at a grid plane.
 
-- `fit` — the `GGCoefs` struct from `read_gg_fit`.
+- `fit` — the `GGFit` struct from `read_gg_fit`.
 - `ip` — 1-based plane index into `fit.z_base`.
 
 Returns `(CBx, CBy, CBs)`; each is a matrix with `CB[i+1, j+1] = CB_{c,i,j}`,
@@ -258,7 +258,7 @@ end
 
 Generalized-gradient coefficients at a grid plane.
 
-- `fit` — the `GGCoefs` struct from `read_gg_fit`.
+- `fit` — the `GGFit` struct from `read_gg_fit`.
 - `ip` — 1-based plane index into `fit.z_base`.
 
 Returns the three GG-function dicts of scalar values at the plane: `a` and `b`

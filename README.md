@@ -22,7 +22,7 @@ Here "the gg functions" refer to the functions `a(s)`, `b(s)`, and `bs(s)` and t
 `gg_calc_fit(field, params)` is a function in the `GeneralizedGradients` package that
 calculates values for the gg functions that fit a given field table. It takes a
 `FieldGridTable` (`field`, typically from `read_field_grid_hdf5`) and a `GGFitInputParams`
-(`params`) and returns a `GGCoefs` holding the fitted coefficients and
+(`params`) and returns a `GGFit` holding the fitted coefficients and
 per-plane diagnostics. Use `gg_show_fit_results` to print a summary and
 `write_gg_fit` to write the results to an HDF5 file (readable by
 `read_gg_fit`). See `examples/run_gg_fit.jl` for a runnable example.
@@ -63,7 +63,7 @@ generalized-gradient map attached. It can be run from the shell with
 julia programs/run_write_bmad_gg_fit.jl <gg_fit_result.h5> [output_base] [cutoff]
 ```
 The input is either a gg-fit file (output of `gg_calc_fit`) or a loaded fit
-(the `fit` `GGCoefs` struct returned by `read_gg_fit`, passed as `write_bmad_gg_fit(fit; ...)`).
+(the `fit` `GGFit` struct returned by `read_gg_fit`, passed as `write_bmad_gg_fit(fit; ...)`).
 Two files are written: `<output_base>.bmad` (the lattice element) and
 `<output_base>_gg.bmad` (the attached `gen_grad_map`). `cutoff` is a relative
 magnitude threshold for pruning negligible multipole curves (default 0, keep every

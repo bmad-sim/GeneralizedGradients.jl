@@ -48,5 +48,8 @@ p.outer_plane_weight = 1      # Merit function weight for the "outer" z-planes. 
 p.output_file = "gg_fit_result.h5"
 
 gg_fit = gg_calc_fit(field, p)
+# To refit at one point of the scan above — say the (m_max, nd_max) = (4, 3) row of
+# the scan table — pass it as a third argument, which overrides p.m_max and p.nd_max:
+#   gg_fit = gg_calc_fit(field, p, (4, 3))
 gg_show_fit_results(gg_fit, field, p)
 write_gg_fit(gg_fit, field, p)

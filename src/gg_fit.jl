@@ -37,11 +37,12 @@
 
 
 """
-    gg_calc_fit(field::FieldGridTable, params::GGFitInputParams) -> GGFit
+    gg_calc_fit(field::FieldGridTable, params::GGFitInputParams,
+                fit_at::Union{Nothing,Tuple{Int,Int}} = nothing) -> GGFit
 
-Fit a 3D magnetic field grid to generalized-gradient (GG) coefficients
+Fit a 3D DC magnetic field grid to generalized-gradient (GG) coefficients
 `a_m(z)`, `b_m(z)`, `b_s(z)` and their `z`-derivatives, plane by plane.
-A "plane" here  is always a plane at constant z. 
+A "plane" here is always a plane at constant z. 
 
 The returned `GGFit` holds the fitted coefficients and per-plane diagnostics.
 Use `gg_show_fit_results` to print a summary and
@@ -51,11 +52,14 @@ See `examples/run_gg_fit.jl` for a complete, runnable example.
 
 ## Arguments
 
-- `field` — a `FieldGridTable`.
-  `field.magnetic[ix,iy,iz]` is the `[Bx,By,Bz]` 3-vector at the grid point,
-  whose `(x, y, z)` position is `field.r0 + field.dr .* (ix, iy, iz)`.
-- `params` — a `GGFitInputParams` holding the fit parameters (`origin`,
-  `n_planes_add`, `core_weight`, `outer_plane_weight`, `output_file`).
+- `field::FieldGridTable` — The field grid and associated parameters.
+- `params::GGFitInputParams` - Input fit parameters.
+- `fit_at::Union{Nothing,Tuple{Int,Int}}` — Optional `(m_max, nd_max)` override.
+  When given, `params.m_max` and `params.nd_max` are ignored and the scan is done
+  at this one point only. Everything else in `params` still applies.
+  This is the way to pick a particular fit out of a scan that has already been run:
+  run the scan once, read the scan table printed by `gg_show_fit_results`, then
+  refit at whichever `(m_max, nd_max)` row is wanted without editing `p`.
 
 ## How the fit works
 
@@ -88,36 +92,116 @@ at the principal planes worse. So adding more planes can give a worse fit.
 Convention: `m` denotes the multipole order for GG functions `a_m` and `b_m` while
 for `a(m, nd)`, `b(m, nd)`, and `bs(nd)`, the `nd` here denotes the derivative order.
 
-A fit to the field is done up to some maximum multipole order `m_max` and some maximum
-derivative order `nd_max`. 
-The "size" of a fit is the number of GG coefficients per plane that is needed.
-To optimize for the best fit with the lowest number of GG coefficients,
-The user can specify a range of `m_max` and `nd_max` to use.
+A single fit to the field is done using GG coefficients up to some maximum multipole order
+and some maximum derivative order. A "scan" is a series of fits using differing maximum 
+multipole order and differing maximum derivative order. 
+As discussed below, The "best" fit is chosen based upon the goodness of fit and how many
+GG coefficients are needed for the fit.
+
+The multipole orders used in a scan is set by `p.m_max` which can be an integer if only one order
+is to be used, or can be an integer array where all values of the array will be used in the scan.
+Similary, `p.nd_max` determines the range of maximum derivative orders.
 For example:
 
 ```julia
 p.m_max  = 1:10       # try m_max = 1, 2, … 10
 p.nd_max = 2:6        # crossed with nd_max = 2, 3, … 6
 ```
-This runs 66 fits. Note: a fit is done with a given `m_max`/`nd_max` applied to every base plane.
-That is, `m_max` and `nd_max` do not vary plane to plane within a given fit.
-`nd_max` is a single cut across all multipole orders; to hold the high-`m`
-functions to a lower derivative order than the low-`m` ones, see "Derivative
-order per multipole" below.
-Each fit is recorded as a `GGFitScanPoint` in the `scan` field of the result (and printed
-by `gg_show_fit_results`) with its coefficient count, its pooled RMS residual, and that
-residual broken out by field component (`Bx`, `By`, `Bs` separately).
+This runs 66 fits. Note: For a given fit, the same maximum multipole order
+and same maximum derivative order is used in the GG calculation for all planes.
+
+To save time, the number of fits used in a scan can be fine tuned using `nd_max_for_m` which
+is a per-multipole override of `nd_max`, as a `Dict` mapping `m` to a derivative limit.
+For example: `nd_max_for_m = Dict(4 => 2, 5 => 1)` maps `a_4`/`b_4` to max `nd` = 2 and 
+`a_5`/`b_5` to max `nd` = 1. Generally a good rule of thumb is that `m` + max `nd`
+should be roughly constant.
+
+## Excluding and pruning
+
+A magnet with a symmetry may need only odd numbered multipole orders and not even.
+The `exclude_functions` parameter can be used to exclude GG functions that are not needed.
+Example:
+    exclude_functions = [(:a, 2), (:a, 4), (:b, 2), (:b, 4), (:bs, 0)]
+Note `b_s` has no multipole order, so the `m` of a `:bs` entry is ignored.
+
+```
+prune_ave_limit = 1e-4      # against the function's average contribution
+prune_max_limit = 1e-3      # against its largest contribution
+```
+
+Pruning is applied after a scan has picked its `(m_max, nd_max)` winner, and
+the surviving functions are then **refit**.
+
+## Weighting
+
+The weight of a field point at `(x, y)` and plane offset `dz` (relative to the
+base plane) is the product of a transverse and a longitudinal factor:
+
+```
+weight(x,y,dz) = w_core(x,y) · w_plane(dz)
+```
+
+The transverse factor is determined by `core_weight`:
+```
+w_core(x,y) = core_weight · rmax^2 / (rmax^2 + r^2 · (core_weight - 1))
+```
+
+where `r^2 = x^2 + y^2` and `rmax` is the maximum `r` over all points.
+`core_weight = 1` (the default) makes `w_core` constant; `core_weight > 1`
+favors the core (low-`r`) points at the expense of points farther out. A better
+core fit is usually desired since beam particles spend most of their time near
+the core.
+
+The longitudinal factor is set by `outer_plane_weight`:
+
+```
+w_plane(dz) = 1 + (outer_plane_weight - 1) · |dz| / dz_max
+```
+
+where `dz_max` is the largest `|dz|` at the ends of the fit region. If
+`n_planes_add = 0` (so `dz_max = 0` and the expression is singular) `w_plane` is
+set to 1. `outer_plane_weight = 1` (the default) makes `w_plane` constant; a
+value between 0 and 1 weights planes nearer the base plane more than the outer
+planes.
+
+The `fit_radius_max` parameter is used to veto field points outside of the given radius in the
+transverse plane.
+The origin of the circle is the GG expansion axis origin (not necessarily `(0, 0)`). 
+`0` meters (the default) uses every point of the field table.
+Vetoing points outside of some radius is useful if the field table is inaccurate 
+at large radius or a fit at large radius is not needed since this is outside of where
+particles will travel.
+
+Setting ``fit_radius_max` also re-scales `core_weight`, whose profile runs from `core_weight`
+on the axis to `1` at the outermost *fitted* point — with a radius set, that is
+the radius rather than the grid corner. `field_ave_plane` and the field
+contributions that drive `prune_ave_limit`/`prune_max_limit` likewise cover the
+fit region only, so pruning judges a GG function by the field it produces where
+the fit applies. `gg_show_fit_residuals` reports the residual split at this
+radius.
+
+Setting `fit_radius_max` also moves three things onto the fit region, so that they keep
+describing the same set of points the residuals do: `core_weight`, whose profile
+runs from `core_weight` on the axis to `1` at the outermost *fitted* point;
+`field_ave_plane`; and the field contributions that `prune_ave_limit` /
+`prune_max_limit` act on, so a GG function is pruned on the field it produces
+where the fit applies rather than at a corner it was never fitted to.
+
+Note that `fit_radius_max` bounds the merit function, not the model. The fitted
+GG functions still evaluate anywhere — including out at the corners, where they
+are now an extrapolation rather than a fit.
 
 ## Choosing between fits (`fit_criterion`)
 
-A fit with larger `m_max` and/or `nd_max` will always have a lower RMS residual
-at the cost of more coefficients.
+A fit using more GG coefficients will always have a lower RMS residual.
 A scan therefore cannot pick its winner by residual alone — it needs a rule that charges for coefficients.
 The input `fit_criterion` parameter selects that rule.
 Each scanned fit gets a score and the lowest score wins.
 
-Both rules are built from these numbers:
-
+Possible settings of `fit_criterion` are:
+-  :aic    score = N * ln(RSS/N) + 2 * k         # Akaike information criterion
+-  :bic    score = N * ln(RSS/N) + k * ln(N)     # Bayesian, and the default
+where
 ```
 RSS = Σ_planes Σ_points  weight · (field_from_table - field_from_GG_coefs)^2
 N   = total number of fitted field-component values, summed over base planes
@@ -125,24 +209,11 @@ N   = total number of fitted field-component values, summed over base planes
 k   = total number of fitted coefficients
       = (coefficients per plane) · (number of principal planes)
 ```
-
 `RSS` is the weighted residual — the merit function the fit actually minimized,
 pooled over every base plane. `N` counts `Bx`, `By` and `Bs` at each field point
 of each plane's fit region, so a point used by several base planes is counted
 once per base plane. `k` likewise counts the whole fit,
 since each base plane is solved for its own copy of the coefficients.
-
-    fit_criterion = :aic          # Akaike information criterion
-
-```
-score = N · ln(RSS / N) + 2·k
-```
-
-    fit_criterion = :bic          # Bayesian information criterion, the default
-
-```
-score = N · ln(RSS / N) + k·ln(N)
-```
 
 These are the standard information criteria for a least-squares fit with unknown
 error variance. The first term, `N·ln(RSS/N)`, is (up to an additive constant
@@ -179,177 +250,15 @@ scan table's `# coefs` and RMS columns to make the final call: the honest signal
 is usually the point of diminishing returns, where the residual stops dropping
 appreciably as coefficients are added.
 
-## Weighting
 
-The weight of a field point at `(x, y)` and plane offset `dz` (relative to the
-base plane) is the product of a transverse and a longitudinal factor:
+## Other parameters
 
-```
-weight(x,y,dz) = w_core(x,y) · w_plane(dz)
-```
-
-The transverse factor is
-
-```
-w_core(x,y) = core_weight · rmax^2 / (rmax^2 + r^2 · (core_weight - 1))
-```
-
-where `r^2 = x^2 + y^2` and `rmax` is the maximum `r` over all points.
-`core_weight = 1` (the default) makes `w_core` constant; `core_weight > 1`
-favors the core (low-`r`) points at the expense of points farther out. A better
-core fit is usually desired since beam particles spend most of their time near
-the core.
-
-The longitudinal factor is
-
-```
-w_plane(dz) = 1 + (outer_plane_weight - 1) · |dz| / dz_max
-```
-
-where `dz_max` is the largest `|dz|` at the ends of the fit region. If
-`n_planes_add = 0` (so `dz_max = 0` and the expression is singular) `w_plane` is
-set to 1. `outer_plane_weight = 1` (the default) makes `w_plane` constant; a
-value between 0 and 1 weights planes nearer the base plane more than the outer
-planes.
-
-## Fit input parameters (`GGFitInputParams`)
+Other parameters in `GGFitInputParams`:
 
 - `origin = [x0, y0]` — `(x, y)` line about which the GG coefficients are
   computed. If `field.g_ref` is non-zero, `origin` must be `[0, 0]`.
   Default `[0.0, 0.0]`.
-- `n_planes_add` — number of `z`-planes added to either side of the base plane
-  used to resolve derivatives.
-- `m_max` — highest multipole order `m` kept. A vector or range scans (see
-  "Scanning" below). Default `4:8`.
-- `nd_max` — highest derivative order `nd` kept. A vector or range scans.
-  Default `3:7`.
-- `nd_max_for_m` — per-multipole override of `nd_max`, as a `Dict` mapping `m` to
-  its own derivative limit (see "Derivative order per multipole" below).
-  Default `Dict()` (`nd_max` alone).
-- `fit_radius_max` — fit only the field points within this radius of the GG axis
-  (see "The fit region" below). Default `0` (every grid point).
-- `fit_criterion` — how a scan picks its winner: `:bic` (default) or `:aic`.
-- `core_weight` — merit-function weight for "core" (near-axis) points.
-  Default `1` (uniform).
-- `outer_plane_weight` — merit-function weight for the outer `z`-planes.
-  Default `1`.
-- `exclude_functions` — GG functions to leave out of the fit entirely, as
-  `(:a, m)` / `(:b, m)` / `(:bs, 0)` tuples (see "Excluding and pruning" below).
-  Default `[]`.
-- `prune_ave_limit`, `prune_max_limit` — drop GG functions that produce
-  negligible field (see "Excluding and pruning" below). Default `0`, `0`
-  (no pruning).
-- `output_file` — name of the output HDF5 file written by
-  `write_gg_fit`. Default `"gg_fit_results.h5"`.
-
-## The fit region
-
-By default every point of the field table is fitted. A field grid is
-rectangular and the GG expansion is a series in `r`, so the two disagree about
-where the fit region ends, and the disagreement is not a detail: the corners of a
-square grid sit `√2` beyond the largest circle inside it, and on a 29x29 grid
-27% of the points are out there. That is the worst place to spend the merit
-function — every multipole is at its largest, the series is at its least
-convergent, and a term of order `m` counts `2^(m/2)` more at a corner than at the
-inscribed radius. A fit can be excellent everywhere it is meant to be used and
-still report a large RMS made almost entirely of corners.
-
-    fit_radius_max = 0.07      # inscribed radius of a grid spanning ±0.07 in x and y
-
-drops the points beyond that radius of the expansion axis (`origin`, not the grid
-centre) from the design matrix. They are not fitted and enter no residual.
-
-Setting it also moves three things onto the fit region, so that they keep
-describing the same set of points the residuals do: `core_weight`, whose profile
-runs from `core_weight` on the axis to `1` at the outermost *fitted* point;
-`field_ave_plane`; and the field contributions that `prune_ave_limit` /
-`prune_max_limit` act on, so a GG function is pruned on the field it produces
-where the fit applies rather than at a corner it was never fitted to.
-
-Note that `fit_radius_max` bounds the merit function, not the model. The fitted
-GG functions still evaluate anywhere — including out at the corners, where they
-are now an extrapolation rather than a fit.
-
-## Derivative order per multipole
-
-`nd_max` sets one derivative cut for the whole model, which is more than the
-high-`m` functions can usually support. A multipole falls off transversely as
-`r^m`, so `a_m`/`b_m` for large `m` are sampled meaningfully only near the
-aperture — over a small part of the grid and with a small dynamic range — and
-their high derivative orders are the worst-conditioned columns in the design
-matrix, frequently fitting little beyond interpolation error in the field table.
-
-`nd_max_for_m` gives those orders their own limit, keyed by multipole order, with
-`0` standing for `b_s`:
-
-```julia
-p.nd_max       = 4
-p.nd_max_for_m = Dict(4 => 2, 5 => 1, 0 => 0)
-```
-
-An `m` not listed is cut by `nd_max` alone, and a listed limit can only tighten:
-the effective cut for order `m` is `min(nd_max, nd_max_for_m[m])`, so raising one
-above `nd_max` does nothing. Naming an `m` the coefficient table does not contain
-is a harmless no-op.
-
-The limits apply to every `nd_max` a scan tries, so the scan table's `nd_max`
-column is the cut for the *unlisted* orders and `# coefs` shows what the
-overrides removed. Where the limits make two candidates the same model — the
-overrides can leave nothing for a larger `nd_max` to add — only the first is
-scanned, so the table has no duplicate rows.
-
-## Excluding and pruning
-
-`m_max` and `nd_max` cut the model along the order axes, which is a blunt
-instrument: a magnet with a symmetry may need `m = 1, 3, 5` and have no use at
-all for `m = 2, 4`, yet `m_max = 5` fits and stores all five. Two settings remove
-GG functions from anywhere in the range rather than only off the top — one for
-when the answer is known in advance, one for when it is not.
-
-    exclude_functions = [(:a, 2), (:a, 4), (:b, 2), (:b, 4), (:bs, 0)]
-
-names functions to leave out outright. They are dropped as the list of unknowns
-is assembled, so they never get a design-matrix column: not fitted, unable to
-influence the coefficients that are kept, and absent from the result. `b_s`
-carries no multipole order, so the `m` of a `:bs` entry is ignored, and naming a
-function the model does not contain anyway is a harmless no-op.
-
-Pruning answers the same question from the fit itself, for the cases where the
-negligible functions are not known ahead of time.
-
-The contribution of a function — a whole `a_m`, a whole `b_m`, or `b_s`, all of
-its derivative orders `nd` together — is the `|B|` it alone produces with every
-other GG coefficient set to zero, over every transverse grid point of every base
-plane. Because the field is linear in the GG coefficients, that is exactly what
-dropping the function would remove from the modeled field. It is also the honest
-measure of size: the raw `a`/`b` values are not comparable across `m`, since each
-multiplies a basis function carrying a different power of `r`.
-
-```
-prune_ave_limit = 1e-4      # against the function's average contribution
-prune_max_limit = 1e-3      # against its largest contribution
-```
-
-Both are fractions of the field table's mean `|B|`, so they carry over between
-magnets of different strength. A function is dropped only when it falls below
-**every** limit in force; a limit of `0` (the default for both) switches that
-test off. Setting only `prune_max_limit` is the conservative choice — a function
-survives if it matters anywhere on the grid. Setting only `prune_ave_limit`
-prunes harder and can discard a function that is small on average but significant
-out near the aperture, where its maximum lives.
-
-Pruning runs after a scan has picked its `(m_max, nd_max)` winner, and the
-survivors are then **refit**. Coefficients left over from a larger fit would no
-longer minimize anything — each was fitted in the presence of the ones now gone
-— so the stored values are the least-squares solution of the model that was
-actually kept. The functions removed are listed in the `pruned` field of the
-result and printed by `gg_show_fit_results`; `m_max` and `nd_max` report the
-orders that survived, which can be lower than the ones the scan chose.
-
-A pruned function is simply absent from the `a`/`b`/`bs` dictionaries. They are
-sparse in `m` throughout — the evaluator, the compiled evaluation plan and the
-HDF5 file all treat a missing key as an identically zero function — so nothing
-downstream needs to know that pruning happened.
+- `output_file` — name of the output HDF5 file. Default `"gg_fit_results.h5"`.
 
 ## Side note
 
@@ -359,7 +268,8 @@ Also there is no fundamental requirement that the fit planes be evenly spaced. I
 for convenience that the `gg_calc_fit` function require a regularly spaced field table and that
 the output is at evenly spaced planes.
 """
-function gg_calc_fit(field::FieldGridTable, params::GGFitInputParams)
+function gg_calc_fit(field::FieldGridTable, params::GGFitInputParams,
+                     fit_at::Union{Nothing,Tuple{Int,Int}} = nothing)
   a_dicts  = (Bx_a, By_a, Bs_a)
   b_dicts  = (Bx_b, By_b, Bs_b)
   bs_dicts = (Bx_bs, By_bs, Bs_bs)
@@ -378,14 +288,14 @@ function gg_calc_fit(field::FieldGridTable, params::GGFitInputParams)
   dz_grid = dr[3]
 
   # ---- Resolve the (m_max, nd_max) fits to try -------------------------
-  # A scalar pins the fit; a vector asks for a scan. Candidates are clamped to
-  # what the coefficient table actually holds so that, say, `nd_max = 0:100` does
-  # not fit the same top fit over and over.
+  # The `fit_at` argument, when given, overrides (m_max, nd_max)
+  # a chosen row of a scan already run.
+  m_max_in, nd_max_in = fit_at === nothing ? (params.m_max, params.nd_max) : fit_at
   m_table_max  = maximum(k[1] for d in (a_dicts..., b_dicts...) for k in keys(d))
   nd_table_max = maximum(k[2] for d in (a_dicts..., b_dicts...) for k in keys(d))
-  m_cands  = _fit_candidates(params.m_max, m_table_max)
-  nd_cands = _fit_candidates(params.nd_max, nd_table_max)
-  scanning = !(params.m_max isa Int && params.nd_max isa Int)
+  m_cands  = _fit_candidates(m_max_in, m_table_max)
+  nd_cands = _fit_candidates(nd_max_in, nd_table_max)
+  scanning = !(m_max_in isa Int && nd_max_in isa Int)
 
   params.fit_criterion in (:bic, :aic) ||
       error("Unknown fit_criterion: $(params.fit_criterion). Expecting :bic or :aic.")
@@ -447,7 +357,7 @@ function gg_calc_fit(field::FieldGridTable, params::GGFitInputParams)
   ncols_all   = length(master_list)
   ncols_all == 0 && error("No GG unknowns left to fit: exclude_functions = " *
       "$(params.exclude_functions) and nd_max_for_m = $(params.nd_max_for_m) remove " *
-      "everything m_max = $(params.m_max), nd_max = $(params.nd_max) would otherwise keep.")
+      "everything m_max = $m_max_in, nd_max = $nd_max_in would otherwise keep.")
 
   # Column subset of the master list belonging to each candidate fit. `bs`
   # unknowns describe a_0 and carry no multipole order, so `m_max` never drops them.

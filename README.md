@@ -5,10 +5,12 @@
 
 Julia based code to calculate and manipulate generalized gradients.
 
-Generalized gradients are functions that can be used to describe magnetic or electric fields in particle accelerators or storage rings.
-Currently, this repository is geared towards magnetic fields.
+Generalized gradients are functions that can be used to describe static 
+magnetic or electric fields in particle accelerators or storage rings.
 
-The notation follows that of S. Van der Schueren et al. “Magnetic Field Modelling and Symplectic Integration of Magnetic Fields on Curved Reference Frames for Improved Synchrotron Design: First Steps”
+The notation follows that of S. Van der Schueren et al. 
+“Magnetic Field Modelling and Symplectic Integration of Magnetic Fields on Curved Reference Frames 
+for Improved Synchrotron Design: First Steps”
 A copy of this paper is in the `papers` directory.
 
 Equations for the vector potential are described in papers/vector-potential/vector-potential.tex
@@ -19,7 +21,7 @@ Here "the gg functions" refer to the functions `a(s)`, `b(s)`, and `bs(s)` and t
 
 ## gg_calc_fit (src/gg_fit.jl)
 
-`gg_calc_fit(field, params)` is a function in the `GeneralizedGradients` package that
+`gg_calc_fit(field, params, fit_at)` is a function in the `GeneralizedGradients` package that
 calculates values for the gg functions that fit a given field table. It takes a
 `FieldGridTable` (`field`, typically from `read_field_grid_hdf5`) and a `GGFitInputParams`
 (`params`) and returns a `GGFit` holding the fitted coefficients and

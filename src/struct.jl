@@ -7,9 +7,13 @@
 Holds an electric and/or magnetic field sampled on a 3D grid.
 
 `magnetic` and `electric` are 3D `OffsetArray`s whose elements are field
-3-vectors: `magnetic[ix,iy,iz] == [Bx, By, Bz]` (and likewise `[Ex, Ey, Ez]`).
+3-vectors: `magnetic[ix,iy,iz] * scale == [Bx, By, Bz]` (and likewise `[Ex, Ey, Ez]`).
 The grid indices `(ix, iy, iz)` need not start at 0 or 1; a grid point is at
-position `r0 + dr .* (ix, iy, iz)` relative to the anchor.
+position `r0 + dr .* (ix, iy, iz)` relative to the anchor. 
+
+Eventually this structure may be used for other purposes than generalized gradient modeling.
+For generalized gradients fitting in particular, the field must be static (`RF_frequency` = 0).
+
 
 ## Fields
 
@@ -19,11 +23,11 @@ position `r0 + dr .* (ix, iy, iz)` relative to the anchor.
 - `dr::Vector{T}` — grid spacing `(dx, dy, dz)` [m].
 - `g_ref::T` — curvilinear-coordinate bending strength `1/bending_radius`, in 1/m
   (`0` for a straight reference curve).
-- `scale::T` — overall field scale factor.
+- `scale::T` — Factor to scale the field by. `Actual-field = struct-field * scale`. Default is `1.0`
 - `RF_frequency::T` — RF frequency in Hz (`0` for a static field).
 - `RF_phase::T` — RF phase [rad].
-- `anchor_pt::GridAnchorPt.T` — grid anchor point: `Beginning`, `Center`, or `End`.
-- `geometry::GridGeometry.T` — grid geometry: `XYZ`.
+- `anchor_pt::GridAnchorPt.T` — grid anchor point: `Beginning`, `Center`, or `End`. Default is `GridGeometry.Center`.
+- `geometry::GridGeometry.T` — grid geometry: `GridGeometry.XYZ` (only possibility at present).
 
 `FieldGridTable()` builds an empty table with `T = Float64`; read one from a
 file with `read_field_grid_hdf5`.
@@ -58,7 +62,7 @@ See the documentation of `gg_calc_fit` for more documentation.
 ## Fields
 
 - `origin::Vector{Float64}` — Defines the line `[x0, y0, z]` about which the  generalized gradient 
-  coefficients are computed. If h (1/bending_radius) is non-zero, origin must be `[0, 0]`.
+  coefficients are computed. If `g` (1/bending_radius) is non-zero, origin must be `[0, 0]`.
 
 - `n_planes_add::Int` — Number of z-planes added to either side of the base
   z-plane to be used in the analysis of the derivatives at any given base z-plane.
@@ -89,7 +93,7 @@ See the documentation of `gg_calc_fit` for more documentation.
   Key `0` sets the limit for `b_s`, which carries no multipole order. This is used
   to speed up fitting.
 
-  Example: `nd_max_for_m = Dict(4 => 2, 5 => 1)` maps `a_4`/`b_4` to max `nd` = 2 and 
+  For example: `nd_max_for_m = Dict(4 => 2, 5 => 1)` maps `a_4`/`b_4` to max `nd` = 2 and 
   `a_5`/`b_5` to max `nd` = 1. Generally a good rule of thumb is that `m` + max `nd`
   should be roughly constant.
 
@@ -100,37 +104,13 @@ See the documentation of `gg_calc_fit` for more documentation.
   at large radius or a fit at large radius is not needed since this is outside of where
   particles will travel.
 
-  Setting ``fit_radius_max` also re-scales `core_weight`, whose profile runs from `core_weight`
-  on the axis to `1` at the outermost *fitted* point — with a radius set, that is
-  the radius rather than the grid corner. `field_ave_plane` and the field
-  contributions that drive `prune_ave_limit`/`prune_max_limit` likewise cover the
-  fit region only, so pruning judges a GG function by the field it produces where
-  the fit applies. `gg_show_fit_residuals` reports the residual split at this
-  radius.
-
 - `fit_criterion::Symbol` — How a scan picks its winner. Each candidate model is
-  given a score and the lowest score wins. Enlarging the model can only lower the
-  residual (the smaller model's unknowns are a subset of the larger one's), so a
-  usable criterion has to charge for coefficients. Writing `RSS` for the weighted
-  sum of squared residuals pooled over all base planes, `N` for the number of
-  fitted field-component values, and `k` for the total number of fitted
-  coefficients (per-plane count times the number of base planes):
-
+  given a score and the lowest score wins. Possible settings are:
   ```
-  :aic    score = N * ln(RSS/N) + 2 * k         # Akaike information criterion
-  :bic    score = N * ln(RSS/N) + k * ln(N)     # Bayesian, and the default
+    :aic    # Akaike information criterion
+    :bic    # Bayesian, and the default
   ```
-
-  `:aic` and `:bic` share the same first term — minus twice the maximized
-  Gaussian log-likelihood, up to a constant common to all candidates — and differ
-  only in what one coefficient costs: `2` versus `ln(N)`. `ln(N) > 2` for any
-  `N > 7`, so `:bic` always penalizes size at least as hard as `:aic` and never
-  selects a larger model.
-
-  See the "Choosing between models" section of the `gg_calc_fit` docstring for
-  how to read the trade-off quantitatively and for why, on a field grid, these
-  criteria are better treated as a ranking heuristic than as a probability
-  statement.
+  See the `gg_fit` documentation for more details
 
 - `exclude_functions::Vector{Tuple{Symbol,Int}}` — GG functions to leave out of
   the fit entirely, named as `(:a, m)`, `(:b, m)` or `(:bs, 0)` tuples — the same
@@ -152,35 +132,18 @@ See the documentation of `gg_calc_fit` for more documentation.
   advance, `prune_ave_limit`/`prune_max_limit` below decide the same question
   from the fit itself.
 
-- `prune_ave_limit::Float64`, `prune_max_limit::Float64` — Drop GG functions that
-  produce negligible field, so they are neither fitted nor stored. A function
-  here is a whole `a_m`, a whole `b_m`, or `b_s` — all of its derivative orders
-  `nd` together — and its contribution is the `|B|` it alone produces, every
-  other GG coefficient set to zero, measured over every transverse grid point of
-  every base plane.
+- `prune_ave_limit::Float64`, `prune_max_limit::Float64` 
+  for a given fit, these parameters veto GG functions that produce a negligible field.
+  A function here is a whole `a_m`, a whole `b_m`, or `b_s` with all of the function's derivative orders/
 
-  Both limits are fractions of the field table's mean `|B|`, so they carry over
-  unchanged between magnets of different strength. `prune_ave_limit` is compared
-  against the function's average contribution and `prune_max_limit` against its
-  largest. A function is dropped only when it falls below **every** limit that is
-  in force; a limit of `0` (the default for both) switches that test off, and
-  with both off no pruning is done at all.
-
-  ```
-  prune_ave_limit = 1e-4      # drop if the average contribution is under 0.01% of <|B|>
-  prune_max_limit = 1e-3      # ... and the largest contribution is under 0.1% of <|B|>
-  ```
-
-  Setting only `prune_max_limit` is the conservative choice: a function survives
-  if it matters anywhere on the grid, even if it averages to little. Setting only
-  `prune_ave_limit` prunes harder, and can discard a function that is small on
-  average but significant near the aperture, where the max lives.
-
+  Both limits are fractions of the field table's mean `|B|`. 
+  `prune_ave_limit` is compared against the function's average contribution and `prune_max_limit` 
+  against its largest. A function is vetoed if it fails either test.
+  A limit of `0` (the default for both) switches that test off. Example:
+  - `prune_ave_limit` = 1e-4      # drop if the average contribution is under 0.01% of <|B|>
+  - `prune_max_limit` = 1e-3      # ... and the largest contribution is under 0.1% of <|B|>
   Pruning is applied after a scan has picked its `(m_max, nd_max)` winner, and
-  the surviving functions are then **refit**. The stored coefficients are
-  therefore the least-squares solution of the model that was kept, not the
-  leftovers of a larger fit. The functions removed are listed in the `pruned`
-  field of the result.
+  the surviving functions are then **refit**.
 
 - `output_file::String` — Name of the output file.
 """

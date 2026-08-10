@@ -308,6 +308,42 @@ end
     @test all(isfinite, res0.rms_weighted_plane)
   end
 
+  @testset "gg_calc_fit fit_at override" begin
+    field = make_field()
+    p = GGFitInputParams(); p.n_planes_add = 1; p.m_max = 2:4; p.nd_max = 1:2
+
+    scan = gg_calc_fit(field, p)
+    @test length(scan.scan) == 6
+
+    # Refitting at a point of the scan reproduces that point exactly: same
+    # unknowns, same coefficients, same residuals -- it is the same solve.
+    for row in scan.scan
+      one = gg_calc_fit(field, p, (row.m_max, row.nd_max))
+      @test isempty(one.scan)              # one point is not a scan
+      @test one.m_max == row.m_max && one.nd_max == row.nd_max
+      @test length(one.params) == row.n_coef
+      if (row.m_max, row.nd_max) == (scan.m_max, scan.nd_max)
+        @test one.params == scan.params
+        @test one.rms_weighted_plane == scan.rms_weighted_plane
+        for (k, v) in scan.a; @test one.a[k] == v; end
+        for (k, v) in scan.b; @test one.b[k] == v; end
+        for (k, v) in scan.bs; @test one.bs[k] == v; end
+      end
+    end
+
+    # The override wins over params.m_max/nd_max whatever they hold, and the
+    # rest of params still applies.
+    p2 = GGFitInputParams(); p2.n_planes_add = 1; p2.m_max = 4; p2.nd_max = 2
+    p2.exclude_functions = [(:bs, 0)]
+    one2 = gg_calc_fit(field, p2, (2, 1))
+    @test one2.m_max == 2 && one2.nd_max == 1 && isempty(one2.bs)
+
+    # Same clamping and validation as the params settings get.
+    @test gg_calc_fit(field, p, (99, 99)).m_max == gg_calc_fit(field, p2, (99, 99)).m_max
+    @test_throws ErrorException gg_calc_fit(field, p, (-1, 2))
+    @test_throws ErrorException gg_calc_fit(field, p, (2, -1))
+  end
+
   @testset "gg_calc_fit exclude_functions" begin
     field = make_field()
     base() = (p = GGFitInputParams(); p.n_planes_add = 1; p.m_max = 4; p.nd_max = 2; p)
@@ -736,9 +772,13 @@ end
     @test !undocumented(@doc gg_show_fit_results)
     @test !undocumented(@doc read_gg_fit)
     @test !undocumented(@doc write_gg_fit)
-    # Both fit criteria must be spelled out where a user will look for them.
-    for probe in ("fit_criterion", ":aic", ":bic", "ln(RSS/N)")
+    # Both fit criteria must be spelled out where a user will look for them:
+    # named in the parameter reference, and scored out in full in gg_calc_fit.
+    for probe in ("fit_criterion", ":aic", ":bic")
       @test occursin(probe, string(@doc GGFitInputParams))
+    end
+    for probe in ("fit_criterion", ":aic", ":bic", "ln(RSS/N)")
+      @test occursin(probe, string(@doc gg_calc_fit))
     end
   end
 

@@ -25,7 +25,7 @@
 #   N      = 15   truncation order in x (degrees 0 .. N-1) = MAXTOT + 2
 #   MDER   = 17   max s-derivative order carried in the symbolic
 #                projections = MAXTOT + 4
-#   MAX_H  = 15   max power k of g_ref a coefficient can carry = MAXTOT + 2
+#   MAX_G  = 15   max power k of g_ref a coefficient can carry = MAXTOT + 2
 #
 # Ranges actually tabulated
 #   a(m,nd), b(m,nd):  m = 1 .. 14,  nd = 0 .. 13

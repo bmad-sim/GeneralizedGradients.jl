@@ -55,10 +55,10 @@ const N = MAXTOT + 2
 const MDER = MAXTOT + 4
 
 # Highest power k of g_ref any tabulated coefficient can carry, and so the
-# number of g_ref-derivatives coeff_poly_h takes when it splits a coefficient
+# number of g_ref-derivatives coeff_poly_g takes when it splits a coefficient
 # into its (c, p, q, k) terms.  The bound comes from 1/(1 + g_ref x), expanded
 # to x^(N-1), being the only source of g_ref powers.
-const MAX_H = MAXTOT + 2
+const MAX_G = MAXTOT + 2
 
 # The x-truncation has to reach x^MMAX or the top multipoles are silently
 # dropped from phi_0 / phi_1 (the `m <= N - 1` guards below).
@@ -108,21 +108,21 @@ function dx(p::Vector{Num})
   return q
 end
 
-function mul1phx(p::Vector{Num})
+function mul1pgx(p::Vector{Num})
   q = Vector{Num}(undef, N)
   q[1] = p[1]
   for i in 2:N; q[i] = p[i] + g_ref * p[i-1]; end
   return q
 end
 
-function mulinv1phx(p::Vector{Num})
+function mulinv1pgx(p::Vector{Num})
   q = Vector{Num}(undef, N)
-  hpow = Vector{Num}(undef, N)
-  hpow[1] = Num(1)
-  for j in 2:N; hpow[j] = -g_ref * hpow[j-1]; end
+  gpow = Vector{Num}(undef, N)
+  gpow[1] = Num(1)
+  for j in 2:N; gpow[j] = -g_ref * gpow[j-1]; end
   for i in 1:N
     acc = Num(0)
-    for j in 1:i; acc += hpow[j] * p[i-j+1]; end
+    for j in 1:i; acc += gpow[j] * p[i-j+1]; end
     q[i] = acc
   end
   return q
@@ -133,7 +133,7 @@ function dsarr(p::Vector{Num})
 end
 
 # ---------------------------------------------------------------------------
-# Recurrence: phi_{i+2} = -1/(1+hx)[d_x((1+hx)d_x phi_i) + d_s(1/(1+hx) d_s phi_i)]
+# Recurrence: phi_{i+2} = -1/(1+gx)[d_x((1+gx)d_x phi_i) + d_s(1/(1+gx) d_s phi_i)]
 # ---------------------------------------------------------------------------
 
 phi = Dict{Int,Vector{Num}}()
@@ -143,9 +143,9 @@ phi[1] = phi1
 for i in 0:(MAXTOT-1)
   println("computing phi[$(i+2)] ...")
   p = phi[i]
-  term1 = mul1phx(dx(dx(p))) .+ g_ref .* dx(p)
-  term2 = dsarr(mulinv1phx(dsarr(p)))
-  pnew  = -mulinv1phx(term1 .+ term2)
+  term1 = mul1pgx(dx(dx(p))) .+ g_ref .* dx(p)
+  term2 = dsarr(mulinv1pgx(dsarr(p)))
+  pnew  = -mulinv1pgx(term1 .+ term2)
   phi[i+2] = [expand(x) for x in pnew]
 end
 
@@ -164,9 +164,9 @@ TBx = Dict{Tuple{Int,Int},Num}()
 TBy = Dict{Tuple{Int,Int},Num}()
 TBs = Dict{Tuple{Int,Int},Num}()
 
-hpow_static = Vector{Num}(undef, N)
-hpow_static[1] = Num(1)
-for j in 2:N; hpow_static[j] = -g_ref * hpow_static[j-1]; end
+gpow_static = Vector{Num}(undef, N)
+gpow_static[1] = Num(1)
+for j in 2:N; gpow_static[j] = -g_ref * gpow_static[j-1]; end
 
 for q in 0:MAXTOT
   dphiq = dx(phi[q])
@@ -174,7 +174,7 @@ for q in 0:MAXTOT
     TBx[(p,q)] = expand(-dphiq[p+1] / factorial(q))
     TBy[(p,q)] = expand(-phi[q+1][p+1] / factorial(q))
     acc = Num(0)
-    for j in 0:p; acc += hpow_static[j+1] * g[q][p-j+1]; end
+    for j in 0:p; acc += gpow_static[j+1] * g[q][p-j+1]; end
     TBs[(p,q)] = expand(-acc / factorial(q))
   end
 end
@@ -203,10 +203,10 @@ end
 # derivatives).  Gauge A_y = 0 for alpha/beta, A_s = 0 for gamma:
 #
 #   A_x = - sum 1/(j+1) (alpha+beta)_{s,i,j} x^i y^{j+1}
-#         + (1+hx) sum [int ds gamma_{y,i,j}] x^i y^j
-#   A_y = - (1+hx) sum [int ds gamma_{x,i,j}] x^i y^j
+#         + (1+gx) sum [int ds gamma_{y,i,j}] x^i y^j
+#   A_y = - (1+gx) sum [int ds gamma_{x,i,j}] x^i y^j
 #   A_s =   sum 1/(j+1) (alpha+beta)_{x,i,j} x^i y^{j+1}
-#         - 1/(1+hx) sum_i beta_{y,i,0} ( x^{i+1}/(i+1) + g_ref x^{i+2}/(i+2) )
+#         - 1/(1+gx) sum_i beta_{y,i,0} ( x^{i+1}/(i+1) + g_ref x^{i+2}/(i+2) )
 # ---------------------------------------------------------------------------
 
 println("computing vector potential coefficients ...")
@@ -251,14 +251,14 @@ for q in 0:MAXTOT, p in 0:(MAXTOT-q)
 end
 getD(D, p, q) = (p >= 0 && q >= 0 && haskey(D, (p,q))) ? D[(p,q)] : Num(0)
 
-# Midplane-correction polynomial P(x); As_corr = -P/(1+hx) (length-N x-vector).
+# Midplane-correction polynomial P(x); As_corr = -P/(1+gx) (length-N x-vector).
 Pvec = fill(Num(0), N)
 for i in 0:MAXTOT
   byi0 = b_part(TBy[(i,0)])
   i + 2 <= N && (Pvec[i+2] += byi0 * (1 // (i + 1)))       # x^{i+1}
   i + 3 <= N && (Pvec[i+3] += byi0 * g_ref * (1 // (i + 2)))   # x^{i+2}
 end
-As_corr = (-1) .* mulinv1phx(Pvec)
+As_corr = (-1) .* mulinv1pgx(Pvec)
 
 TAx = Dict{Tuple{Int,Int},Num}()
 TAy = Dict{Tuple{Int,Int},Num}()
@@ -372,7 +372,7 @@ println("done, written to $monofile")
 # function instead of by monomial, as numeric (coef, p, q, k) tuples.
 # ---------------------------------------------------------------------------
 
-Dh = Differential(g_ref)
+Dg = Differential(g_ref)
 
 # Build the zero-substitution dictionary once: every symbolic function and
 # every s-derivative (up to MDER) mapped to 0.  g_ref is NOT zeroed here.
@@ -406,7 +406,7 @@ end
 # Extract the full g_ref-polynomial coefficient of sym in expr with all other
 # symbolic functions zeroed out.  Returns a Dict{Int,Rational{Int}} mapping
 # g_ref-power => coefficient.  Mutates all_zero temporarily.
-function coeff_poly_h(expr, sym, max_h_power)
+function coeff_poly_g(expr, sym, max_g_power)
   all_zero[sym] = Num(1)
   poly = substitute(expr, all_zero)   # polynomial in g_ref
   all_zero[sym] = Num(0)
@@ -414,13 +414,13 @@ function coeff_poly_h(expr, sym, max_h_power)
   result = Dict{Int,Rational{Int}}()
   curr   = poly
   fk     = 1   # factorial(k)
-  h0     = Dict(g_ref => Num(0))
-  for k in 0:max_h_power
+  g0     = Dict(g_ref => Num(0))
+  for k in 0:max_g_power
     k > 0 && (fk *= k)
-    v = Symbolics.value(substitute(curr, h0))
+    v = Symbolics.value(substitute(curr, g0))
     r = to_rat(v)
     r != 0 && (result[k] = r // fk)
-    k < max_h_power && (curr = expand(expand_derivatives(Dh(curr))))
+    k < max_g_power && (curr = expand(expand_derivatives(Dg(curr))))
   end
   return result
 end
@@ -536,7 +536,7 @@ open(coeffile, "w") do io
   println(io, "#   N      = $N   truncation order in x (degrees 0 .. N-1) = MAXTOT + 2")
   println(io, "#   MDER   = $MDER   max s-derivative order carried in the symbolic")
   println(io, "#                projections = MAXTOT + 4")
-  println(io, "#   MAX_H  = $MAX_H   max power k of g_ref a coefficient can carry = MAXTOT + 2")
+  println(io, "#   MAX_G  = $MAX_G   max power k of g_ref a coefficient can carry = MAXTOT + 2")
   println(io, "#")
   println(io, "# Ranges actually tabulated")
   println(io, "#   a(m,nd), b(m,nd):  m = 1 .. $MMAX,  nd = 0 .. $MAXTOT")
@@ -569,9 +569,9 @@ open(coeffile, "w") do io
       sym   = nth_ds_deriv(bvars[m], nd)
       terms = Tuple{Rational{Int},Int,Int,Int}[]
       for q in 0:MAXTOT, p in 0:(MAXTOT-q)
-        hc = coeff_poly_h(T[(p,q)], sym, MAX_H)
-        for k in sort(collect(keys(hc)))
-          push!(terms, (hc[k], p, q, k))
+        gc = coeff_poly_g(T[(p,q)], sym, MAX_G)
+        for k in sort(collect(keys(gc)))
+          push!(terms, (gc[k], p, q, k))
         end
       end
       isempty(terms) || println(io, "$(prefix)[($m,$nd)] = $(fmt_terms(terms))")
@@ -590,9 +590,9 @@ open(coeffile, "w") do io
       sym   = nth_ds_deriv(avars[m+1], nd)   # avars[m+1] = a_m(s)
       terms = Tuple{Rational{Int},Int,Int,Int}[]
       for q in 0:MAXTOT, p in 0:(MAXTOT-q)
-        hc = coeff_poly_h(T[(p,q)], sym, MAX_H)
-        for k in sort(collect(keys(hc)))
-          push!(terms, (hc[k], p, q, k))
+        gc = coeff_poly_g(T[(p,q)], sym, MAX_G)
+        for k in sort(collect(keys(gc)))
+          push!(terms, (gc[k], p, q, k))
         end
       end
       isempty(terms) || println(io, "$(prefix)[($m,$nd)] = $(fmt_terms(terms))")
@@ -611,9 +611,9 @@ open(coeffile, "w") do io
       sym   = nth_ds_deriv(avars[1], nd + 1)  # (nd+1)-th deriv of a_0 = bs(nd)
       terms = Tuple{Rational{Int},Int,Int,Int}[]
       for q in 0:MAXTOT, p in 0:(MAXTOT-q)
-        hc = coeff_poly_h(T[(p,q)], sym, MAX_H)
-        for k in sort(collect(keys(hc)))
-          push!(terms, (hc[k], p, q, k))
+        gc = coeff_poly_g(T[(p,q)], sym, MAX_G)
+        for k in sort(collect(keys(gc)))
+          push!(terms, (gc[k], p, q, k))
         end
       end
       isempty(terms) || println(io, "$(prefix)[$nd] = $(fmt_terms(terms))")

@@ -319,8 +319,8 @@ CB coefficient sum: `Σ coeff·g_ref^k·x^p·y^q` over the table entries for one
 function _coefsum(terms, x::Float64, y::Float64, g_ref)
   s = 0.0
   for (c, p, q, k) in terms
-    hk = k == 0 ? 1.0 : float(g_ref)^k
-    s += float(c) * hk * x^p * y^q
+    gk = k == 0 ? 1.0 : float(g_ref)^k
+    s += float(c) * gk * x^p * y^q
   end
   return s
 end
